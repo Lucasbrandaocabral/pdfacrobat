@@ -20,7 +20,7 @@ Leitor e editor de PDF para desktop (Windows, macOS e Linux), inspirado no Adobe
 Os instaladores são gerados automaticamente pelo GitHub Actions (workflow **Gerar instaladores**):
 
 - **Versão publicada:** na aba **Releases** do repositório, baixe o arquivo do seu sistema. Uma versão nova é publicada sempre que uma tag `v*` é enviada (ex.: `git tag v1.0.0 && git push origin v1.0.0`).
-- **Build manual:** na aba **Actions**, abra *Gerar instaladores*, clique em **Run workflow** e, quando terminar, baixe o artefato do seu sistema no fim da página.
+- **Última versão do código:** todo envio de código gera os instaladores automaticamente. Na aba **Actions**, abra a execução mais recente de *Gerar instaladores* e, no fim da página (em *Artifacts*), baixe o arquivo do seu sistema. Ele vem compactado em `.zip`; descompacte antes de abrir. Também dá para gerar manualmente pelo botão **Run workflow**.
 
 | Sistema | Arquivo |
 |---|---|

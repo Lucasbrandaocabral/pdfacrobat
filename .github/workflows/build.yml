@@ -3,7 +3,12 @@ name: Gerar instaladores
 on:
   workflow_dispatch:
   push:
+    branches: ["**"]
     tags: ["v*"]
+    # Mudanças só de documentação não geram instaladores novos.
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
 
 permissions:
   contents: write
