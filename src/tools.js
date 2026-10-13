@@ -1,15 +1,16 @@
 // Ferramentas de interação com a página: as do próprio PDF.js (destacar,
 // texto, desenho, imagem) e as nossas (sublinhar, tachar, nota, formas,
-// carimbo, assinatura e edição de texto/imagens).
+// carimbo, assinatura, marcas do "Preencher e assinar" e edição de
+// texto/imagens).
 import { AnnotationEditorParamsType, AnnotationEditorType, fontRealName, getTextItems } from "./pdfjs.js";
 import { $, $$, askText, el, hexToRgb, toast } from "./ui.js";
 import { icon } from "./icons.js";
 import * as annotations from "./pdf/annotations.js";
 import { findImages, isolatePage, moveImage, removeImage } from "./pdf/content.js";
 import { drawPngOnPage } from "./pdf/ops.js";
+import { drawMark, today } from "./pdf/fill.js";
 import { fontStyle, replaceText } from "./pdf/textedit.js";
 import { Perm, loadForEdit } from "./pdf/security.js";
-import { openSignatureDialog } from "./signature.js";
 import * as platform from "./platform.js";
 
 const NONE = AnnotationEditorType.NONE;
@@ -31,10 +32,24 @@ const PERMISSIONS = {
   stamp: [Perm.ANNOTATE, "comentar"],
   image: [Perm.ANNOTATE, "adicionar imagens"],
   sign: [Perm.MODIFY, "assinar"],
+  mark: [Perm.MODIFY, "preencher"],
   edit: [Perm.MODIFY, "editar o conteúdo"],
 };
-const ONE_SHOT = new Set(["sign", "stamp"]);
-const SIGNATURE_WIDTH_PT = 160;
+const PLACING = new Set(["sign", "stamp", "mark"]);
+// Tamanhos do "Preencher e assinar" (pequeno, médio, grande), em pontos do PDF:
+// caixa máxima da assinatura e das iniciais, lado das marcas e letra da data.
+const FILL_SIZES = {
+  signature: { small: [125, 36], medium: [180, 50], large: [250, 70] },
+  initials: { small: [45, 24], medium: [65, 34], large: [90, 48] },
+  mark: { small: 10, medium: 14, large: 20 },
+  date: { small: 9, medium: 11, large: 14 },
+};
+const FILL_INKS = { black: [0.07, 0.07, 0.07], blue: [0.04, 0.12, 0.4] };
+const MARK_SVG = {
+  check: '<path d="M-38 0 L-10 30 L40 -36" />',
+  cross: '<path d="M-32 -32 L32 32 M32 -32 L-32 32" />',
+  dot: '<circle r="20" stroke="none" fill="currentColor" />',
+};
 const SHAPE_ICONS = { rect: "rect", ellipse: "ellipse", line: "line", arrow: "arrow" };
 const SHAPE_LABELS = { rect: "Retângulo", ellipse: "Elipse", line: "Linha", arrow: "Seta" };
 
@@ -48,6 +63,9 @@ export class ToolController {
     this.shape = "rect";
     this.stamp = "aprovado";
     this.signature = null;
+    this.mark = "check";
+    this.fillSize = "medium";
+    this.fillInk = "black";
     this.drag = null;
     this.editing = null;
     this.hoverFrame = 0;
@@ -74,15 +92,25 @@ export class ToolController {
     if (!tab?.doc) return;
     const perm = PERMISSIONS[tool];
     if (perm && !(await this.guard(tab, perm[0], perm[1]))) return;
+    if (tool === "sign" && !this.signature) return;
     this.clearEdit();
-    if (tool === "sign") {
-      this.apply("select");
-      const signature = await openSignatureDialog();
-      if (!signature) return;
-      this.signature = signature;
-    }
     this.apply(tool);
     if (tool === "image") this.setEditorParam(AnnotationEditorParamsType.CREATE, null);
+  }
+
+  /** Começa a posicionar a assinatura (ou as iniciais), criada agora ou salva. */
+  async startSignature(signature) {
+    const tab = this.tab;
+    if (!tab?.doc || !(await this.guard(tab, ...PERMISSIONS.sign))) return;
+    this.clearEdit();
+    this.signature = signature;
+    this.apply("sign");
+  }
+
+  /** Marca do "Preencher e assinar": check, cross, dot ou date. */
+  setMark(kind) {
+    this.mark = kind;
+    this.select("mark");
   }
 
   /**
@@ -114,8 +142,12 @@ export class ToolController {
       b.classList.toggle("active", b.dataset.tool === tool);
       b.setAttribute("aria-pressed", String(b.dataset.tool === tool));
     });
+    $$("[data-mark]").forEach((b) => b.classList.toggle("active", tool === "mark" && b.dataset.mark === this.mark));
+    $$('[data-action="sign"], [data-action="sign-initials"]').forEach((b) =>
+      b.classList.toggle("active", tool === "sign" && (this.signature?.kind === "initials") === (b.dataset.action === "sign-initials")),
+    );
     $$("#tool-options .opt").forEach((o) => (o.hidden = !o.dataset.for.split(" ").includes(tool)));
-    this.area.classList.toggle("mode-place", tool === "sign" || tool === "stamp");
+    this.area.classList.toggle("mode-place", PLACING.has(tool));
     this.area.classList.toggle("mode-note", tool === "note");
     this.area.classList.toggle("mode-shape", tool === "shape");
     this.area.classList.toggle("mode-edit", tool === "edit");
@@ -253,6 +285,8 @@ export class ToolController {
     ["#opt-color", "#opt-thickness", "#opt-font-size", "#opt-highlight"].forEach((id) =>
       $(id).addEventListener("input", () => this.applyParams()),
     );
+    $("#opt-fill-size").addEventListener("change", (e) => (this.fillSize = e.target.value));
+    $("#opt-fill-ink").addEventListener("change", (e) => (this.fillInk = e.target.value));
   }
 
   onKeyDown(e) {
@@ -293,7 +327,7 @@ export class ToolController {
       return;
     }
     const tool = this.tool;
-    if (!["note", "shape", "sign", "stamp", "edit"].includes(tool)) return;
+    if (!["note", "shape", "sign", "stamp", "mark", "edit"].includes(tool)) return;
     if (tool === "edit" && e.target.closest?.(".text-editor, .image-box, .float-bar")) return;
     const hit = this.pageHit(e);
     if (!hit) {
@@ -306,6 +340,7 @@ export class ToolController {
     else if (tool === "shape") this.startShape(e, hit);
     else if (tool === "sign") this.placeSignature(hit);
     else if (tool === "stamp") this.placeStamp(hit);
+    else if (tool === "mark") this.placeMark(hit);
     else this.editAt(hit);
   }
 
@@ -315,7 +350,7 @@ export class ToolController {
       return;
     }
     if (this.pending) this.movePendingGhost(e);
-    else if (this.tool === "sign" || this.tool === "stamp") this.moveGhost(e);
+    else if (PLACING.has(this.tool)) this.moveGhost(e);
     else if (this.tool === "edit" && !this.editing) {
       cancelAnimationFrame(this.hoverFrame);
       this.hoverFrame = requestAnimationFrame(() => this.updateHover(e));
@@ -502,8 +537,20 @@ export class ToolController {
 
   ghostSize(scale) {
     if (this.tool === "sign" && this.signature) {
-      const w = SIGNATURE_WIDTH_PT * scale;
-      return [w, w / this.signature.aspect];
+      const { aspect, kind } = this.signature;
+      const [maxW, maxH] = FILL_SIZES[kind === "initials" ? "initials" : "signature"][this.fillSize];
+      const w = Math.min(maxW, maxH * aspect);
+      return [w * scale, (w / aspect) * scale];
+    }
+    if (this.tool === "mark") {
+      if (this.mark === "date") {
+        const size = FILL_SIZES.date[this.fillSize];
+        const ctx = (this.measure ||= document.createElement("canvas").getContext("2d"));
+        ctx.font = `${size}px Helvetica, Arial, sans-serif`;
+        return [ctx.measureText(today()).width * scale, size * 1.2 * scale];
+      }
+      const side = FILL_SIZES.mark[this.fillSize] * scale;
+      return [side, side];
     }
     const stamp = annotations.STAMPS[this.stamp];
     const ctx = (this.measure ||= document.createElement("canvas").getContext("2d"));
@@ -527,6 +574,19 @@ export class ToolController {
         ghost.dataset.kind = "sign";
       }
       ghost.style.color = "";
+    } else if (this.tool === "mark") {
+      const [r, g, b] = FILL_INKS[this.fillInk].map((v) => Math.round(v * 255));
+      ghost.className = "place-ghost mark-ghost";
+      ghost.style.color = `rgb(${r}, ${g}, ${b})`;
+      const kind = `mark-${this.mark}-${this.fillSize}`;
+      if (ghost.dataset.kind !== kind) {
+        ghost.dataset.kind = kind;
+        if (this.mark === "date") ghost.replaceChildren(el("span", { text: today() }));
+        else {
+          ghost.innerHTML = `<svg viewBox="-50 -50 100 100" fill="none" stroke="currentColor" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">${MARK_SVG[this.mark]}</svg>`;
+        }
+      }
+      ghost.style.fontSize = `${FILL_SIZES.date[this.fillSize] * hit.scale}px`;
     } else {
       const stamp = annotations.STAMPS[this.stamp];
       ghost.className = "place-ghost stamp-ghost";
@@ -581,7 +641,15 @@ export class ToolController {
         }),
       ),
     );
-    URL.revokeObjectURL(signature.previewUrl);
+  }
+
+  async placeMark(hit) {
+    const kind = this.mark;
+    const size = (kind === "date" ? FILL_SIZES.date : FILL_SIZES.mark)[this.fillSize];
+    const color = FILL_INKS[this.fillInk];
+    await this.run("Aplicando…", () =>
+      hit.tab.edit((doc) => drawMark(doc, { pageIndex: hit.pageIndex, kind, center: hit.pdf, size, color, rotation: hit.rotation })),
+    );
   }
 
   async placeStamp(hit) {

@@ -213,13 +213,26 @@ function buildMenu() {
         item("Linha", "shape:line"),
         item("Seta", "shape:arrow"),
         item("Carimbo…", "tool:stamp"),
-        sep,
-        item("Assinar (desenho ou nome)", "tool:sign"),
       ],
     },
     {
       label: "Ferramentas",
       submenu: [
+        {
+          label: "Preencher e assinar",
+          submenu: [
+            item("Adicionar texto", "tool:text"),
+            item("Marca de seleção (✓)", "mark:check"),
+            item("Cruz (✗)", "mark:cross"),
+            item("Ponto (●)", "mark:dot"),
+            item("Data de hoje", "mark:date"),
+            sep,
+            item("Assinar…", "sign"),
+            item("Adicionar iniciais…", "sign-initials"),
+            item("Assinatura digital com certificado…", "cert-sign"),
+          ],
+        },
+        sep,
         item("Editar texto e imagens", "tool:edit", "E"),
         item("Adicionar imagem", "tool:image"),
         item("Marca d'água…", "watermark"),

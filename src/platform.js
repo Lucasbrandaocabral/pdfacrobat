@@ -136,6 +136,15 @@ export async function getUserName() {
   return (userName ||= "Usuário");
 }
 
+/** Nome que o próprio usuário informou (sem cair no nome da conta do sistema). */
+export function savedUserName() {
+  try {
+    return localStorage.getItem("authorName") || null;
+  } catch {
+    return null;
+  }
+}
+
 export function setUserName(name) {
   userName = name;
   try {

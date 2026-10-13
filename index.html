@@ -66,6 +66,7 @@
     <nav class="toolbar" data-needs-doc aria-label="Ferramentas">
       <div class="categories" role="tablist" aria-label="Categorias">
         <button class="category" data-category="comment" role="tab">Comentar</button>
+        <button class="category" data-category="fill" role="tab">Preencher e assinar</button>
         <button class="category" data-category="edit" role="tab">Editar</button>
         <button class="category" data-category="pages" role="tab">Páginas</button>
         <button class="category" data-category="protect" role="tab">Proteger</button>
@@ -88,7 +89,23 @@
             <button class="tool" data-tool="stamp" data-icon="stamp" title="Carimbo"><span>Carimbo</span></button>
             <button class="tool caret" data-menu="stamp-menu" data-icon="caret" title="Escolher carimbo" aria-haspopup="menu"></button>
           </div>
-          <button class="tool" data-tool="sign" data-icon="sign" title="Preencher e assinar"><span>Assinar</span></button>
+        </div>
+        <div class="tools" data-panel="fill" hidden>
+          <button class="tool" data-tool="select" data-icon="cursor" title="Selecionar e preencher os campos do formulário (V)"><span>Selecionar</span></button>
+          <button class="tool" data-tool="text" data-icon="text" title="Adicionar texto (T)"><span>Texto</span></button>
+          <button class="tool" data-mark="check" data-icon="check" title="Marca de seleção (✓)"><span>Marcar</span></button>
+          <button class="tool" data-mark="cross" data-icon="cross" title="Cruz (✗)"><span>Cruz</span></button>
+          <button class="tool" data-mark="dot" data-icon="dot" title="Ponto (●)"><span>Ponto</span></button>
+          <button class="tool" data-mark="date" data-icon="calendar" title="Data de hoje"><span>Data</span></button>
+          <span class="divider"></span>
+          <div class="split-button">
+            <button class="tool" data-action="sign" data-icon="sign" title="Assinar"><span>Assinar</span></button>
+            <button class="tool caret" data-menu="sign-menu" data-icon="caret" title="Assinatura e iniciais salvas" aria-haspopup="menu"></button>
+          </div>
+          <button class="tool" data-action="sign-initials" data-icon="initials" title="Adicionar iniciais"><span>Iniciais</span></button>
+          <span class="divider"></span>
+          <button class="tool" data-action="cert-sign" data-icon="certificate" title="Assinatura digital com certificado (.pfx/.p12)"><span>Certificado</span></button>
+          <span class="hint muted" id="fill-forms-hint" hidden>Há campos para preencher: clique neles.</span>
         </div>
         <div class="tools" data-panel="edit" hidden>
           <button class="tool" data-tool="select" data-icon="cursor" title="Selecionar (V)"><span>Selecionar</span></button>
@@ -142,10 +159,24 @@
           <label class="opt" data-for="text">Tamanho
             <input type="range" id="opt-font-size" min="8" max="72" value="16" />
           </label>
+          <label class="opt" data-for="mark sign">Tamanho
+            <select id="opt-fill-size">
+              <option value="small">Pequeno</option>
+              <option value="medium" selected>Médio</option>
+              <option value="large">Grande</option>
+            </select>
+          </label>
+          <label class="opt" data-for="mark">Cor
+            <select id="opt-fill-ink">
+              <option value="black">Preto</option>
+              <option value="blue">Azul</option>
+            </select>
+          </label>
           <span class="opt hint" data-for="highlight underline strike">Selecione um trecho do texto.</span>
           <span class="opt hint" data-for="note">Clique onde quer colocar a nota.</span>
           <span class="opt hint" data-for="shape">Arraste na página para desenhar.</span>
           <span class="opt hint" data-for="stamp sign">Clique na página para posicionar.</span>
+          <span class="opt hint" data-for="mark">Clique na página para marcar (Esc termina).</span>
           <span class="opt hint" data-for="edit">Clique num texto ou numa imagem para editar.</span>
         </div>
       </div>
@@ -158,6 +189,7 @@
       <button role="menuitem" data-shape="arrow" data-icon="arrow">Seta</button>
     </div>
     <div class="menu" id="stamp-menu" role="menu" hidden></div>
+    <div class="menu sign-menu" id="sign-menu" role="menu" hidden></div>
 
     <main class="workspace">
       <aside id="sidebar" class="sidebar" hidden aria-label="Painel lateral">
@@ -253,13 +285,29 @@
     <dialog id="signature-dialog" class="dialog">
       <form method="dialog">
         <h2>Criar assinatura</h2>
-        <div class="tabs">
-          <button type="button" class="tab active" data-sig-tab="draw">Desenhar</button>
-          <button type="button" class="tab" data-sig-tab="type">Digitar</button>
+        <div class="tabs" role="tablist">
+          <button type="button" class="tab active" role="tab" data-sig-tab="type">Digitar</button>
+          <button type="button" class="tab" role="tab" data-sig-tab="draw">Desenhar</button>
+          <button type="button" class="tab" role="tab" data-sig-tab="image">Imagem</button>
         </div>
-        <input id="signature-name" type="text" placeholder="Digite seu nome" hidden autocomplete="name" />
+        <div class="sig-pane" data-sig-pane="type">
+          <input id="signature-name" type="text" placeholder="Digite seu nome" autocomplete="name" />
+          <div class="sig-styles" role="radiogroup" aria-label="Estilo da letra"></div>
+        </div>
+        <div class="sig-pane" data-sig-pane="image" hidden>
+          <button type="button" class="btn" id="signature-image-button" data-icon="image"><span>Escolher imagem…</span></button>
+          <label class="check"><input type="checkbox" id="signature-remove-bg" checked /> Remover o fundo branco</label>
+        </div>
         <canvas class="signature-pad"></canvas>
-        <p class="muted small">Use o mouse, a caneta ou o dedo para assinar dentro do quadro.</p>
+        <p class="muted small sig-help"></p>
+        <div class="sig-options">
+          <span class="sig-inks" role="radiogroup" aria-label="Cor">
+            <span class="muted">Cor</span>
+            <button type="button" class="swatch" role="radio" data-ink="blue" title="Azul" aria-label="Azul" style="--swatch: #0b1f66"></button>
+            <button type="button" class="swatch" role="radio" data-ink="black" title="Preto" aria-label="Preto" style="--swatch: #111111"></button>
+          </span>
+          <label class="check"><input type="checkbox" id="signature-save" checked /> Salvar para usar de novo</label>
+        </div>
         <div class="dialog-actions">
           <button type="button" class="btn" id="signature-clear">Limpar</button>
           <span class="spacer"></span>

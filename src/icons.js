@@ -63,6 +63,11 @@ const paths = {
   pdf: `${DOC}<path d="M8 13h8M8 17h5"/>`,
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
   download: '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
+  check: '<path d="m4.5 12.5 5 5L20 7"/>',
+  cross: '<path d="M6 6l12 12M18 6 6 18"/>',
+  dot: '<circle cx="12" cy="12" r="4.5" fill="currentColor"/>',
+  calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  initials: '<path d="m3 18 4-12 4 12M4.4 14h5.2"/><path d="M14 6h3.5a3 3 0 0 1 0 6H14zm0 6h4a3 3 0 0 1 0 6h-4z"/>',
 };
 
 export function icon(name) {

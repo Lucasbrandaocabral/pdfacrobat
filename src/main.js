@@ -12,6 +12,7 @@ import * as convert from "./features/convert.js";
 import { ocr } from "./features/ocr.js";
 import { compare } from "./features/compare.js";
 import { certSign } from "./features/certsign.js";
+import * as fillSign from "./features/fillsign.js";
 import { setupUpdates } from "./updates.js";
 
 const PDFJS_EDITOR_TOOLS = new Set(["highlight", "text", "ink", "image"]);
@@ -180,8 +181,13 @@ manager.on("dirty", () => {
 manager.on("activate", (tab) => {
   updateTitle();
   syncPageUi(tab);
+  fillSign.updateFormsHint(tab);
 });
-manager.on("loaded", (tab) => tab.active && syncPageUi(tab));
+manager.on("loaded", (tab) => {
+  if (!tab.active) return;
+  syncPageUi(tab);
+  fillSign.updateFormsHint(tab);
+});
 manager.on("pagechange", (tab, n) => tab.active && ($("#page-input").value = n));
 manager.on("scalechange", (tab, e) => tab.active && updateZoomSelect(e));
 manager.on("findcount", (tab, count) => tab.active && showFindCount(count));
@@ -295,6 +301,8 @@ const actions = {
   combine: () => createFromFiles("pdfAndImages"),
   "create-from-images": () => createFromFiles("images"),
   "author-name": setAuthorName,
+  sign: () => fillSign.sign(app, "signature"),
+  "sign-initials": () => fillSign.sign(app, "initials"),
   "check-updates": () => checkForUpdates(),
 };
 
@@ -302,6 +310,7 @@ async function runAction(name) {
   try {
     if (name.startsWith("tool:")) return await app.tools.select(name.slice(5));
     if (name.startsWith("shape:")) return app.tools.setShape(name.slice(6));
+    if (name.startsWith("mark:")) return app.tools.setMark(name.slice(5));
     await actions[name]?.();
   } catch (err) {
     console.error(err);
@@ -332,9 +341,10 @@ function setupMenus() {
       const wasOpen = !menu.hidden;
       close();
       if (wasOpen) return;
+      if (menu.id === "sign-menu") fillSign.renderMenu();
       const rect = button.getBoundingClientRect();
       menu.hidden = false;
-      menu.style.left = `${Math.min(rect.left - 120, window.innerWidth - menu.offsetWidth - 8)}px`;
+      menu.style.left = `${Math.max(8, Math.min(rect.left - 120, window.innerWidth - menu.offsetWidth - 8))}px`;
       menu.style.top = `${rect.bottom + 4}px`;
     }),
   );
@@ -345,6 +355,7 @@ function setupMenus() {
     close();
     app.tools.setStamp(item.dataset.stamp);
   });
+  fillSign.setupMenu(app, close);
   document.addEventListener("click", close);
   document.addEventListener("keydown", (e) => e.key === "Escape" && close());
 }
@@ -353,6 +364,7 @@ function setupToolbar() {
   renderIcons();
   $$("[data-action]").forEach((b) => b.addEventListener("click", () => runAction(b.dataset.action)));
   $$("[data-tool]").forEach((b) => b.addEventListener("click", () => app.tools.select(b.dataset.tool)));
+  $$("[data-mark]").forEach((b) => b.addEventListener("click", () => app.tools.setMark(b.dataset.mark)));
   $$("[data-category]").forEach((b) => b.addEventListener("click", () => setCategory(b.dataset.category)));
   let category = "comment";
   try {

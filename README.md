@@ -11,7 +11,7 @@ Leitor e editor de PDF para Windows, macOS, Linux, navegador e celular, inspirad
 | **Ler** | Vários documentos em abas, miniaturas, marcadores (sumário) do PDF, zoom (inclusive Ctrl + roda do mouse), pesquisa com destaque, seleção e cópia de texto, links, PDFs com senha |
 | **Comentar e revisar** | Destacar, sublinhar e tachar texto; notas adesivas; caixas de texto; desenho à mão livre; retângulo, elipse, linha e seta; carimbos (Aprovado, Reprovado, Confidencial, Rascunho, Recebido, Revisado, Pago); painel com todos os comentários para ir até cada um, editar ou excluir |
 | **Editar** | Corrigir textos do PDF clicando neles; mover, redimensionar, substituir e excluir imagens; adicionar texto e imagens; marca d'água; cabeçalho, rodapé e numeração de páginas |
-| **Preencher e assinar** | Preencher formulários; assinar desenhando ou digitando o nome; assinatura digital com certificado A1 (.pfx/.p12, como e-CPF e e-CNPJ) |
+| **Preencher e assinar** | Preencher os campos de formulários; pôr texto, ✓, ✗, ● e a data de hoje em qualquer ponto da página; assinar digitando o nome (4 estilos de letra manuscrita), desenhando com o mouse, a caneta ou o dedo, ou com a foto da assinatura feita no papel (o fundo branco é removido); iniciais; a assinatura e as iniciais ficam salvas no aparelho para usar de novo; assinatura digital com certificado A1 (.pfx/.p12, como e-CPF e e-CNPJ) |
 | **Páginas** | Girar, excluir, inserir em branco, reordenar arrastando as miniaturas, inserir outros PDFs ou imagens, extrair páginas e dividir em vários arquivos |
 | **Proteger** | Senha para abrir (AES-256) e restrições de impressão, edição e cópia; remover senha; respeita as restrições de PDFs protegidos (pede a senha de permissões) |
 | **Converter** | Para imagens (PNG/JPG), texto (.txt) e Word (.docx); comprimir o PDF; reconhecer texto em páginas escaneadas (OCR, em português e inglês, sem internet); comparar duas versões, com as diferenças destacadas |
@@ -110,6 +110,7 @@ src/tabs.js              abas (um visualizador do PDF.js por documento), desfaze
 src/tools.js             ferramentas na página: comentar, formas, carimbos, assinar, editar texto e imagens
 src/sidebar.js           miniaturas, marcadores e lista de comentários
 src/updates.js           aviso de atualização e botão "Reiniciar e atualizar"
+src/signature.js         criar assinatura e iniciais (digitar, desenhar, imagem) e as salvas
 src/features/            janelas e fluxos: documento, converter, OCR, comparar, certificado
 src/pdf/                 operações no arquivo: anotações, conteúdo da página, marcas, segurança, compressão
 public/                  manifesto e service worker da versão web
@@ -141,4 +142,4 @@ Projeto de [@Lucasbrandaocabral](https://github.com/Lucasbrandaocabral), desenvo
 
 ## Licença
 
-MIT. Usa [PDF.js](https://github.com/mozilla/pdf.js) (Apache-2.0), [pdf-lib](https://github.com/cantoo-scribe/pdf-lib) (MIT), [Tesseract.js](https://github.com/naptha/tesseract.js) (Apache-2.0), [signpdf](https://github.com/vbuch/node-signpdf) (MIT), [node-forge](https://github.com/digitalbazaar/forge) (BSD/GPL), [docx](https://github.com/dolanmiu/docx) (MIT), [jsdiff](https://github.com/kpdecker/jsdiff) (BSD), [fflate](https://github.com/101arrowz/fflate) (MIT), [Electron](https://www.electronjs.org/) (MIT) e [electron-updater](https://github.com/electron-userland/electron-builder) (MIT).
+MIT. Usa [PDF.js](https://github.com/mozilla/pdf.js) (Apache-2.0), [pdf-lib](https://github.com/cantoo-scribe/pdf-lib) (MIT), [Tesseract.js](https://github.com/naptha/tesseract.js) (Apache-2.0), [signpdf](https://github.com/vbuch/node-signpdf) (MIT), [node-forge](https://github.com/digitalbazaar/forge) (BSD/GPL), [docx](https://github.com/dolanmiu/docx) (MIT), [jsdiff](https://github.com/kpdecker/jsdiff) (BSD), [fflate](https://github.com/101arrowz/fflate) (MIT), [Electron](https://www.electronjs.org/) (MIT) e [electron-updater](https://github.com/electron-userland/electron-builder) (MIT). Fontes da assinatura digitada: [Dancing Script](https://fonts.google.com/specimen/Dancing+Script), [Great Vibes](https://fonts.google.com/specimen/Great+Vibes) e [Caveat](https://fonts.google.com/specimen/Caveat) (OFL) e [Homemade Apple](https://fonts.google.com/specimen/Homemade+Apple) (Apache-2.0).
