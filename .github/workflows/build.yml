@@ -37,7 +37,17 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - run: npx electron-builder ${{ matrix.target }} --publish never
+      # Tenta até 3 vezes: o download do Electron às vezes falha com erro
+      # temporário do servidor (ex.: HTTP 500).
+      - name: Gerar instalador
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            npx electron-builder ${{ matrix.target }} --publish never && exit 0
+            echo "Tentativa $attempt falhou; tentando de novo em 20 segundos..."
+            sleep 20
+          done
+          exit 1
       - uses: actions/upload-artifact@v4
         with:
           name: instalador-${{ runner.os }}
