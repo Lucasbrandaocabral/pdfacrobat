@@ -49,7 +49,7 @@ Antes de reiniciar, o programa pede para salvar os documentos com alterações. 
 ### Publicar uma versão nova
 
 1. Abra **Releases** → **Draft a new release**.
-2. Em **Tag: Select tag**, digite a versão nova, maior que a anterior (ex.: `v1.3.0`), e escolha **Create new tag**.
+2. Em **Tag: Select tag**, digite a versão nova, maior que a anterior (ex.: `v1.3.0` ou `1.3.0`), e escolha **Create new tag**.
 3. Clique em **Publish release**.
 
 Em poucos minutos os instaladores aparecem anexados à versão (workflow **Gerar instaladores**), e os programas já instalados passam a se atualizar para ela. O número da versão do app vem da tag; não é preciso mudar o `package.json`. Uma versão marcada como **Set as a pre-release** não é oferecida como atualização, o que serve para testar antes.

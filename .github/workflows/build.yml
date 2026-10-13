@@ -4,7 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches: ["**"]
-    tags: ["v*"]
+    # Versões publicadas: tag com ou sem "v" (v1.2.0 ou 1.2.0).
+    tags: ["v*", "[0-9]*"]
     # Mudanças só de documentação não geram instaladores novos.
     paths-ignore:
       - "**.md"
@@ -36,10 +37,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # Numa versão publicada (tag v1.2.3) o número do app vem da tag: é ele
+      # Numa versão publicada (tag v1.2.3 ou 1.2.3) o número do app vem da tag: é ele
       # que o programa instalado compara para saber se há atualização.
       - name: Usar o número da versão da tag
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/')
         shell: bash
         run: |
           version="${GITHUB_REF_NAME#v}"
@@ -72,7 +73,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/')
     needs: build
     runs-on: ubuntu-latest
     steps:
