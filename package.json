@@ -28,7 +28,7 @@
     "buffer": "6.0.3",
     "diff": "9.0.0",
     "docx": "9.8.1",
-    "electron": "37.2.0",
+    "electron": "41.10.6",
     "electron-builder": "26.0.12",
     "fflate": "0.8.3",
     "node-forge": "1.4.0",
