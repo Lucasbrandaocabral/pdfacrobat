@@ -4,8 +4,12 @@ const { contextBridge, ipcRenderer, webUtils } = require("electron");
 contextBridge.exposeInMainWorld("pdfApi", {
   openDialog: (options) => ipcRenderer.invoke("open-dialog", options),
   saveFile: (options) => ipcRenderer.invoke("save-file", options),
+  pickDirectory: (options) => ipcRenderer.invoke("pick-directory", options),
+  writeFiles: (options) => ipcRenderer.invoke("write-files", options),
   readPath: (filePath) => ipcRenderer.invoke("read-path", filePath),
   getInitialFile: () => ipcRenderer.invoke("get-initial-file"),
+  getUserName: () => ipcRenderer.invoke("get-user-name"),
+  addRecent: (filePath) => ipcRenderer.send("add-recent", filePath),
   getPathForFile: (file) => {
     try {
       return webUtils.getPathForFile(file) || null;

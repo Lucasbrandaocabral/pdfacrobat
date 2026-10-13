@@ -2,26 +2,34 @@
 <html lang="pt-BR">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self' blob: data:" />
+    <meta name="theme-color" content="#d7373f" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" type="image/png" href="./icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
     <title>PDF Acrobat</title>
   </head>
   <body>
     <header class="topbar">
-      <div class="brand"><span class="brand-mark" data-icon="pdf"></span><span>PDF Acrobat</span></div>
+      <div class="brand"><span class="brand-mark" data-icon="pdf"></span><span class="brand-name">PDF Acrobat</span></div>
       <div class="group">
-        <button class="btn" id="btn-open" data-icon="open" title="Abrir (Ctrl+O)"><span>Abrir</span></button>
-        <button class="btn icon-only" id="btn-save" data-icon="save" title="Salvar (Ctrl+S)" data-needs-doc></button>
-        <button class="btn icon-only" id="btn-print" data-icon="print" title="Imprimir (Ctrl+P)" data-needs-doc></button>
-        <button class="btn icon-only" id="btn-sidebar" data-icon="sidebar" title="Miniaturas das páginas" data-needs-doc></button>
+        <button class="btn" data-action="open" data-icon="open" title="Abrir (Ctrl+O)"><span class="label">Abrir</span></button>
+        <button class="btn icon-only" data-action="save" data-icon="save" title="Salvar (Ctrl+S)" data-needs-doc></button>
+        <button class="btn icon-only" data-action="print" data-icon="print" title="Imprimir (Ctrl+P)" data-needs-doc></button>
+        <span class="divider" data-needs-doc></span>
+        <button class="btn icon-only" data-action="undo" data-icon="undo" title="Desfazer (Ctrl+Z)" data-needs-doc></button>
+        <button class="btn icon-only" data-action="redo" data-icon="redo" title="Refazer (Ctrl+Y)" data-needs-doc></button>
+        <span class="divider" data-needs-doc></span>
+        <button class="btn icon-only" id="btn-sidebar" data-action="toggle-sidebar" data-icon="sidebar" title="Painel lateral (F4)" data-needs-doc></button>
       </div>
       <div class="group center" data-needs-doc>
-        <button class="btn icon-only" id="btn-prev" data-icon="prev" title="Página anterior"></button>
+        <button class="btn icon-only" data-action="prev-page" data-icon="prev" title="Página anterior"></button>
         <input id="page-input" class="page-input" type="text" inputmode="numeric" aria-label="Página atual" />
         <span class="muted" id="page-count">/ 0</span>
-        <button class="btn icon-only" id="btn-next" data-icon="next" title="Próxima página"></button>
+        <button class="btn icon-only" data-action="next-page" data-icon="next" title="Próxima página"></button>
         <span class="divider"></span>
-        <button class="btn icon-only" id="btn-zoom-out" data-icon="zoomOut" title="Menos zoom (Ctrl −)"></button>
+        <button class="btn icon-only" data-action="zoom-out" data-icon="zoomOut" title="Menos zoom (Ctrl −)"></button>
         <select id="zoom-select" aria-label="Zoom">
           <option value="auto">Automático</option>
           <option value="page-width">Ajustar largura</option>
@@ -35,99 +43,202 @@
           <option value="3">300%</option>
           <option value="custom" hidden></option>
         </select>
-        <button class="btn icon-only" id="btn-zoom-in" data-icon="zoomIn" title="Mais zoom (Ctrl +)"></button>
+        <button class="btn icon-only" data-action="zoom-in" data-icon="zoomIn" title="Mais zoom (Ctrl +)"></button>
       </div>
       <div class="group right" data-needs-doc>
         <div class="search">
           <span data-icon="search"></span>
           <input id="find-input" type="search" placeholder="Localizar texto" aria-label="Localizar texto" />
           <span id="find-count" class="muted"></span>
-          <button class="btn icon-only small" id="btn-find-prev" data-icon="up" title="Anterior (Shift+Enter)"></button>
-          <button class="btn icon-only small" id="btn-find-next" data-icon="down" title="Próximo (Enter)"></button>
+          <button class="btn icon-only small" data-action="find-prev" data-icon="up" title="Anterior (Shift+Enter)"></button>
+          <button class="btn icon-only small" data-action="find-next" data-icon="down" title="Próximo (Enter)"></button>
         </div>
-        <button class="btn icon-only" id="btn-properties" data-icon="info" title="Propriedades do documento (Ctrl+D)"></button>
+        <button class="btn icon-only" data-action="properties" data-icon="info" title="Propriedades do documento (Ctrl+D)"></button>
+        <button class="btn icon-only" data-action="author-name" data-icon="user" title="Seu nome nos comentários e carimbos"></button>
       </div>
     </header>
 
+    <div class="tabbar" id="tabbar" data-needs-doc>
+      <div class="tab-list" role="tablist" aria-label="Documentos abertos"></div>
+      <button class="btn icon-only small" data-action="open" data-icon="plus" title="Abrir outro documento"></button>
+    </div>
+
     <nav class="toolbar" data-needs-doc aria-label="Ferramentas">
-      <div class="group" role="radiogroup" aria-label="Ferramenta de edição">
-        <button class="tool active" data-tool="select" data-icon="cursor" title="Selecionar (V)"><span>Selecionar</span></button>
-        <button class="tool" data-tool="highlight" data-icon="highlight" title="Destacar texto (H)"><span>Destacar</span></button>
-        <button class="tool" data-tool="text" data-icon="text" title="Adicionar texto (T)"><span>Texto</span></button>
-        <button class="tool" data-tool="ink" data-icon="pen" title="Desenhar (D)"><span>Desenhar</span></button>
-        <button class="tool" data-tool="image" data-icon="image" title="Adicionar imagem"><span>Imagem</span></button>
-        <button class="tool" data-tool="sign" data-icon="sign" title="Preencher e assinar"><span>Assinar</span></button>
+      <div class="categories" role="tablist" aria-label="Categorias">
+        <button class="category" data-category="comment" role="tab">Comentar</button>
+        <button class="category" data-category="edit" role="tab">Editar</button>
+        <button class="category" data-category="pages" role="tab">Páginas</button>
+        <button class="category" data-category="protect" role="tab">Proteger</button>
+        <button class="category" data-category="convert" role="tab">Converter</button>
       </div>
-      <div class="group tool-options" id="tool-options">
-        <label class="opt" data-for="text ink">Cor
-          <input type="color" id="opt-color" value="#e11d48" />
-        </label>
-        <label class="opt" data-for="highlight">Cor
-          <select id="opt-highlight">
-            <option value="#FFFF98">Amarelo</option>
-            <option value="#53FFBC">Verde</option>
-            <option value="#80EBFF">Azul</option>
-            <option value="#FFCBE6">Rosa</option>
-            <option value="#FF4F5F">Vermelho</option>
-          </select>
-        </label>
-        <label class="opt" data-for="ink">Espessura
-          <input type="range" id="opt-thickness" min="1" max="20" value="3" />
-        </label>
-        <label class="opt" data-for="text">Tamanho
-          <input type="range" id="opt-font-size" min="8" max="72" value="16" />
-        </label>
-        <span class="opt hint" data-for="highlight">Selecione um trecho do texto para destacar.</span>
-        <span class="opt hint" data-for="sign" id="sign-hint">Clique na página para posicionar a assinatura.</span>
-      </div>
-      <div class="group right">
-        <span class="muted label">Página:</span>
-        <button class="btn icon-only" id="btn-rotate-ccw" data-icon="rotateCcw" title="Girar para a esquerda"></button>
-        <button class="btn icon-only" id="btn-rotate-cw" data-icon="rotateCw" title="Girar para a direita"></button>
-        <button class="btn icon-only" id="btn-delete-page" data-icon="trash" title="Excluir página"></button>
-        <button class="btn icon-only" id="btn-blank-page" data-icon="blank" title="Inserir página em branco"></button>
-        <button class="btn icon-only" id="btn-insert" data-icon="insert" title="Inserir PDF ou imagem após esta página"></button>
-        <button class="btn icon-only" id="btn-extract" data-icon="extract" title="Extrair páginas para um novo PDF"></button>
+      <div class="tool-row">
+        <div class="tools" data-panel="comment">
+          <button class="tool" data-tool="select" data-icon="cursor" title="Selecionar (V)"><span>Selecionar</span></button>
+          <button class="tool" data-tool="highlight" data-icon="highlight" title="Destacar texto (H)"><span>Destacar</span></button>
+          <button class="tool" data-tool="underline" data-icon="underline" title="Sublinhar texto (U)"><span>Sublinhar</span></button>
+          <button class="tool" data-tool="strike" data-icon="strike" title="Tachar texto (K)"><span>Tachar</span></button>
+          <button class="tool" data-tool="note" data-icon="note" title="Nota (N)"><span>Nota</span></button>
+          <button class="tool" data-tool="text" data-icon="text" title="Adicionar texto (T)"><span>Texto</span></button>
+          <button class="tool" data-tool="ink" data-icon="pen" title="Desenhar (D)"><span>Desenhar</span></button>
+          <div class="split-button">
+            <button class="tool" data-tool="shape" data-icon="rect" id="shape-button" title="Formas"><span>Formas</span></button>
+            <button class="tool caret" data-menu="shape-menu" data-icon="caret" title="Escolher forma" aria-haspopup="menu"></button>
+          </div>
+          <div class="split-button">
+            <button class="tool" data-tool="stamp" data-icon="stamp" title="Carimbo"><span>Carimbo</span></button>
+            <button class="tool caret" data-menu="stamp-menu" data-icon="caret" title="Escolher carimbo" aria-haspopup="menu"></button>
+          </div>
+          <button class="tool" data-tool="sign" data-icon="sign" title="Preencher e assinar"><span>Assinar</span></button>
+        </div>
+        <div class="tools" data-panel="edit" hidden>
+          <button class="tool" data-tool="select" data-icon="cursor" title="Selecionar (V)"><span>Selecionar</span></button>
+          <button class="tool" data-tool="edit" data-icon="editText" title="Editar texto e imagens (E)"><span>Editar texto e imagens</span></button>
+          <button class="tool" data-tool="text" data-icon="text" title="Adicionar texto (T)"><span>Adicionar texto</span></button>
+          <button class="tool" data-tool="image" data-icon="image" title="Adicionar imagem"><span>Adicionar imagem</span></button>
+          <span class="divider"></span>
+          <button class="tool" data-action="watermark" data-icon="watermark" title="Marca d'água"><span>Marca d'água</span></button>
+          <button class="tool" data-action="header-footer" data-icon="headerFooter" title="Cabeçalho, rodapé e numeração de páginas"><span>Cabeçalho e rodapé</span></button>
+        </div>
+        <div class="tools" data-panel="pages" hidden>
+          <button class="tool" data-action="rotate-ccw" data-icon="rotateCcw" title="Girar para a esquerda"><span>Girar ↺</span></button>
+          <button class="tool" data-action="rotate-cw" data-icon="rotateCw" title="Girar para a direita"><span>Girar ↻</span></button>
+          <button class="tool" data-action="delete-page" data-icon="trash" title="Excluir a página atual"><span>Excluir</span></button>
+          <button class="tool" data-action="blank-page" data-icon="blank" title="Inserir página em branco depois da atual"><span>Em branco</span></button>
+          <button class="tool" data-action="insert-files" data-icon="insert" title="Inserir PDF ou imagem depois da página atual"><span>Inserir arquivo</span></button>
+          <button class="tool" data-action="extract" data-icon="extract" title="Extrair páginas para um novo PDF"><span>Extrair</span></button>
+          <button class="tool" data-action="split" data-icon="split" title="Dividir em vários arquivos"><span>Dividir</span></button>
+          <span class="hint muted">Arraste as miniaturas no painel lateral para reordenar.</span>
+        </div>
+        <div class="tools" data-panel="protect" hidden>
+          <button class="tool" data-action="protect" data-icon="lock" title="Proteger com senha e restrições"><span>Proteger com senha</span></button>
+          <button class="tool" data-action="unprotect" data-icon="unlock" title="Remover senha e restrições"><span>Remover senha</span></button>
+          <button class="tool" data-action="cert-sign" data-icon="certificate" title="Assinatura digital com certificado (.pfx/.p12)"><span>Assinatura digital</span></button>
+        </div>
+        <div class="tools" data-panel="convert" hidden>
+          <button class="tool" data-action="export-images" data-icon="exportImage" title="Salvar páginas como imagens"><span>Imagens</span></button>
+          <button class="tool" data-action="export-text" data-icon="exportText" title="Salvar o texto (.txt)"><span>Texto</span></button>
+          <button class="tool" data-action="export-word" data-icon="word" title="Salvar como Word (.docx)"><span>Word</span></button>
+          <span class="divider"></span>
+          <button class="tool" data-action="compress" data-icon="compress" title="Diminuir o tamanho do arquivo"><span>Comprimir</span></button>
+          <button class="tool" data-action="ocr" data-icon="ocr" title="Reconhecer texto em páginas escaneadas"><span>Reconhecer texto (OCR)</span></button>
+          <button class="tool" data-action="compare" data-icon="compare" title="Comparar duas versões"><span>Comparar</span></button>
+        </div>
+        <div class="tool-options" id="tool-options">
+          <label class="opt" data-for="text ink shape underline strike">Cor
+            <input type="color" id="opt-color" value="#e11d48" />
+          </label>
+          <label class="opt" data-for="highlight">Cor
+            <select id="opt-highlight">
+              <option value="#FFFF98">Amarelo</option>
+              <option value="#53FFBC">Verde</option>
+              <option value="#80EBFF">Azul</option>
+              <option value="#FFCBE6">Rosa</option>
+              <option value="#FF4F5F">Vermelho</option>
+            </select>
+          </label>
+          <label class="opt" data-for="ink shape">Espessura
+            <input type="range" id="opt-thickness" min="1" max="20" value="3" />
+          </label>
+          <label class="opt" data-for="text">Tamanho
+            <input type="range" id="opt-font-size" min="8" max="72" value="16" />
+          </label>
+          <span class="opt hint" data-for="highlight underline strike">Selecione um trecho do texto.</span>
+          <span class="opt hint" data-for="note">Clique onde quer colocar a nota.</span>
+          <span class="opt hint" data-for="shape">Arraste na página para desenhar.</span>
+          <span class="opt hint" data-for="stamp sign">Clique na página para posicionar.</span>
+          <span class="opt hint" data-for="edit">Clique num texto ou numa imagem para editar.</span>
+        </div>
       </div>
     </nav>
 
+    <div class="menu" id="shape-menu" role="menu" hidden>
+      <button role="menuitem" data-shape="rect" data-icon="rect">Retângulo</button>
+      <button role="menuitem" data-shape="ellipse" data-icon="ellipse">Elipse</button>
+      <button role="menuitem" data-shape="line" data-icon="line">Linha</button>
+      <button role="menuitem" data-shape="arrow" data-icon="arrow">Seta</button>
+    </div>
+    <div class="menu" id="stamp-menu" role="menu" hidden></div>
+
     <main class="workspace">
-      <aside id="sidebar" class="sidebar" hidden aria-label="Miniaturas">
-        <div id="thumbnails" class="thumbnails"></div>
+      <aside id="sidebar" class="sidebar" hidden aria-label="Painel lateral">
+        <div class="sidebar-tabs" role="tablist">
+          <button class="btn icon-only active" data-panel-tab="thumbs" data-icon="thumbnails" title="Miniaturas" role="tab"></button>
+          <button class="btn icon-only" data-panel-tab="outline" data-icon="bookmark" title="Marcadores" role="tab"></button>
+          <button class="btn icon-only" data-panel-tab="comments" data-icon="comments" title="Comentários" role="tab"></button>
+        </div>
+        <div class="panel" id="panel-thumbs"><div id="thumbnails" class="thumbnails"></div></div>
+        <div class="panel" id="panel-outline" hidden><div id="outline" class="outline"></div></div>
+        <div class="panel" id="panel-comments" hidden><div id="comments" class="comments"></div></div>
       </aside>
 
-      <section class="viewer-area">
-        <div id="viewer-container" class="viewer-container" tabindex="0">
-          <div id="viewer" class="pdfViewer"></div>
-        </div>
-
+      <section class="viewer-area" id="viewer-area">
         <div id="welcome" class="welcome">
           <div class="welcome-card">
             <div class="welcome-icon" data-icon="pdf"></div>
             <h1>Abra um PDF para começar</h1>
-            <p class="muted">Arraste um arquivo para esta janela ou escolha uma opção abaixo.</p>
+            <p class="muted">Arraste arquivos para esta janela ou escolha uma opção abaixo.</p>
             <div class="welcome-actions">
-              <button class="btn primary" id="welcome-open" data-icon="open"><span>Abrir arquivo</span></button>
-              <button class="btn" id="welcome-images" data-icon="image"><span>Criar PDF de imagens</span></button>
-              <button class="btn" id="welcome-combine" data-icon="combine"><span>Combinar arquivos</span></button>
+              <button class="btn primary" data-action="open" data-icon="open"><span>Abrir arquivo</span></button>
+              <button class="btn" data-action="create-from-images" data-icon="image"><span>Criar PDF de imagens</span></button>
+              <button class="btn" data-action="combine" data-icon="combine"><span>Combinar arquivos</span></button>
+              <button class="btn" data-action="compare" data-icon="compare"><span>Comparar arquivos</span></button>
             </div>
-            <ul class="feature-list muted">
-              <li>Ler, pesquisar e imprimir</li>
-              <li>Destacar, escrever, desenhar e assinar</li>
-              <li>Preencher formulários</li>
-              <li>Girar, excluir, reordenar, combinar e extrair páginas</li>
-            </ul>
+            <section id="recent-section" class="recent" hidden>
+              <h2>Recentes</h2>
+              <ul id="recent-list"></ul>
+            </section>
           </div>
         </div>
 
-        <div id="drop-overlay" class="drop-overlay" hidden><div>Solte o arquivo para abrir</div></div>
+        <div id="drop-overlay" class="drop-overlay" hidden><div>Solte os arquivos para abrir</div></div>
         <div id="busy" class="busy" hidden><div class="spinner"></div><span id="busy-text">Processando…</span></div>
       </section>
     </main>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <div id="sign-ghost" class="sign-ghost" hidden><img alt="" /></div>
+    <div id="place-ghost" class="place-ghost" hidden></div>
     <div id="print-container" class="print-container"></div>
+
+    <!-- Diálogos genéricos -->
+    <dialog id="confirm-dialog" class="dialog small">
+      <form method="dialog">
+        <h2></h2>
+        <p class="message"></p>
+        <div class="dialog-actions">
+          <span class="spacer"></span>
+          <button class="btn" value="cancel" formnovalidate>Cancelar</button>
+          <button class="btn primary" value="ok">OK</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="unsaved-dialog" class="dialog small">
+      <form method="dialog">
+        <h2>Salvar alterações?</h2>
+        <p class="message"></p>
+        <div class="dialog-actions">
+          <button class="btn" value="discard" formnovalidate>Não salvar</button>
+          <span class="spacer"></span>
+          <button class="btn" value="cancel" formnovalidate>Cancelar</button>
+          <button class="btn primary" value="ok">Salvar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="prompt-dialog" class="dialog small">
+      <form method="dialog">
+        <h2></h2>
+        <label class="field"><span class="prompt-label"></span>
+          <input id="prompt-input" type="text" autocomplete="off" />
+          <textarea id="prompt-textarea" rows="5" hidden></textarea>
+        </label>
+        <div class="dialog-actions">
+          <span class="spacer"></span>
+          <button class="btn" value="cancel" formnovalidate>Cancelar</button>
+          <button class="btn primary" value="ok">OK</button>
+        </div>
+      </form>
+    </dialog>
 
     <dialog id="signature-dialog" class="dialog">
       <form method="dialog">
@@ -148,13 +259,14 @@
       </form>
     </dialog>
 
-    <dialog id="extract-dialog" class="dialog">
+    <dialog id="extract-dialog" class="dialog small">
       <form method="dialog">
         <h2>Extrair páginas</h2>
         <label class="field">Páginas (ex.: 1-3, 5, 8)
-          <input id="extract-range" type="text" autocomplete="off" />
+          <input name="range" type="text" autocomplete="off" />
         </label>
-        <p class="muted small" id="extract-help"></p>
+        <label class="check"><input name="remove" type="checkbox" /> Excluir essas páginas deste documento depois de extrair</label>
+        <p class="muted small" data-total></p>
         <div class="dialog-actions">
           <span class="spacer"></span>
           <button class="btn" value="cancel" formnovalidate>Cancelar</button>
@@ -163,17 +275,268 @@
       </form>
     </dialog>
 
-    <dialog id="password-dialog" class="dialog">
+    <dialog id="split-dialog" class="dialog small">
       <form method="dialog">
-        <h2>Documento protegido</h2>
-        <p class="muted" id="password-message">Digite a senha para abrir este PDF.</p>
-        <label class="field">Senha
-          <input id="password-input" type="password" autocomplete="off" />
+        <h2>Dividir documento</h2>
+        <label class="check"><input type="radio" name="mode" value="every" checked /> A cada
+          <input name="every" type="number" min="1" value="1" class="inline-number" /> página(s)</label>
+        <label class="check"><input type="radio" name="mode" value="ranges" /> Por intervalos</label>
+        <input name="ranges" type="text" placeholder="Ex.: 1-3; 4-6; 7-10 (um arquivo para cada intervalo)" class="indent" />
+        <label class="field">Nome dos arquivos
+          <input name="prefix" type="text" />
+        </label>
+        <p class="muted small" data-total></p>
+        <div class="dialog-actions">
+          <span class="spacer"></span>
+          <button class="btn" value="cancel" formnovalidate>Cancelar</button>
+          <button class="btn primary" value="ok">Dividir</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="watermark-dialog" class="dialog">
+      <form method="dialog">
+        <h2>Marca d'água</h2>
+        <div class="grid two">
+          <label class="field span2">Texto
+            <input name="text" type="text" value="CONFIDENCIAL" required />
+          </label>
+          <label class="field">Tamanho da fonte
+            <input name="size" type="number" min="8" max="300" value="64" />
+          </label>
+          <label class="field">Cor
+            <input name="color" type="color" value="#c62828" />
+          </label>
+          <label class="field">Opacidade (%)
+            <input name="opacity" type="number" min="5" max="100" value="25" />
+          </label>
+          <label class="field">Inclinação
+            <select name="angle">
+              <option value="45">Diagonal ↗</option>
+              <option value="-45">Diagonal ↘</option>
+              <option value="0">Horizontal</option>
+              <option value="90">Vertical</option>
+            </select>
+          </label>
+          <label class="field">Posição
+            <select name="position">
+              <option value="center">Centro</option>
+              <option value="top">Topo</option>
+              <option value="bottom">Base</option>
+            </select>
+          </label>
+          <label class="field">Páginas
+            <input name="pages" type="text" value="todas" />
+          </label>
+          <label class="check span2"><input name="behind" type="checkbox" /> Colocar atrás do conteúdo da página</label>
+        </div>
+        <div class="dialog-actions">
+          <span class="spacer"></span>
+          <button class="btn" value="cancel" formnovalidate>Cancelar</button>
+          <button class="btn primary" value="ok">Aplicar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="header-footer-dialog" class="dialog">
+      <form method="dialog">
+        <h2>Cabeçalho, rodapé e numeração</h2>
+        <p class="muted small">Use <code>{n}</code> para o número da página, <code>{total}</code> para o total de páginas, <code>{data}</code> para a data de hoje e <code>{arquivo}</code> para o nome do arquivo.</p>
+        <fieldset>
+          <legend>Cabeçalho</legend>
+          <div class="grid three">
+            <input name="hl" type="text" placeholder="Esquerda" aria-label="Cabeçalho à esquerda" />
+            <input name="hc" type="text" placeholder="Centro" aria-label="Cabeçalho ao centro" />
+            <input name="hr" type="text" placeholder="Direita" aria-label="Cabeçalho à direita" />
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Rodapé</legend>
+          <div class="grid three">
+            <input name="fl" type="text" placeholder="Esquerda" aria-label="Rodapé à esquerda" />
+            <input name="fc" type="text" placeholder="Centro" value="Página {n} de {total}" aria-label="Rodapé ao centro" />
+            <input name="fr" type="text" placeholder="Direita" aria-label="Rodapé à direita" />
+          </div>
+        </fieldset>
+        <div class="grid four">
+          <label class="field">Tamanho
+            <input name="size" type="number" min="5" max="48" value="10" />
+          </label>
+          <label class="field">Cor
+            <input name="color" type="color" value="#333333" />
+          </label>
+          <label class="field">Margem (mm)
+            <input name="margin" type="number" min="2" max="60" value="12" />
+          </label>
+          <label class="field">Começar em
+            <input name="start" type="number" min="0" value="1" />
+          </label>
+        </div>
+        <label class="field">Páginas
+          <input name="pages" type="text" value="todas" />
         </label>
         <div class="dialog-actions">
           <span class="spacer"></span>
           <button class="btn" value="cancel" formnovalidate>Cancelar</button>
-          <button class="btn primary" value="ok">Abrir</button>
+          <button class="btn primary" value="ok">Aplicar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="export-images-dialog" class="dialog small">
+      <form method="dialog">
+        <h2>Converter em imagens</h2>
+        <div class="grid two">
+          <label class="field">Formato
+            <select name="format">
+              <option value="png">PNG (melhor qualidade)</option>
+              <option value="jpeg">JPG (arquivo menor)</option>
+            </select>
+          </label>
+          <label class="field">Resolução
+            <select name="dpi">
+              <option value="72">72 DPI (tela)</option>
+              <option value="150" selected>150 DPI (padrão)</option>
+              <option value="300">300 DPI (impressão)</option>
+            </select>
+          </label>
+        </div>
+        <label class="field">Páginas
+          <input name="pages" type="text" value="todas" />
+        </label>
+        <div class="dialog-actions">
+          <span class="spacer"></span>
+          <button class="btn" value="cancel" formnovalidate>Cancelar</button>
+          <button class="btn primary" value="ok">Converter</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="compress-dialog" class="dialog small">
+      <form method="dialog">
+        <h2>Comprimir PDF</h2>
+        <p class="muted" data-size></p>
+        <label class="check"><input type="radio" name="level" value="low" /> <span><b>Leve</b> — melhor qualidade, redução menor</span></label>
+        <label class="check"><input type="radio" name="level" value="medium" checked /> <span><b>Média</b> — recomendada para e-mail e sites</span></label>
+        <label class="check"><input type="radio" name="level" value="high" /> <span><b>Forte</b> — menor tamanho, imagens com menos detalhes</span></label>
+        <p class="muted small">A compressão age principalmente nas imagens. PDFs só com texto mudam pouco.</p>
+        <div class="dialog-actions">
+          <span class="spacer"></span>
+          <button class="btn" value="cancel" formnovalidate>Cancelar</button>
+          <button class="btn primary" value="ok">Comprimir</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="protect-dialog" class="dialog">
+      <form method="dialog">
+        <h2>Proteger com senha</h2>
+        <label class="check"><input name="requireOpen" type="checkbox" checked /> Exigir senha para abrir o documento</label>
+        <div class="grid two indent" data-group="open">
+          <input name="userPassword" type="password" placeholder="Senha para abrir" autocomplete="new-password" aria-label="Senha para abrir" />
+          <input name="userPassword2" type="password" placeholder="Confirmar senha" autocomplete="new-password" aria-label="Confirmar senha para abrir" />
+        </div>
+        <label class="check"><input name="restrict" type="checkbox" /> Restringir impressão, edição e cópia</label>
+        <div class="indent" data-group="restrict">
+          <div class="grid two">
+            <input name="ownerPassword" type="password" placeholder="Senha de permissões" autocomplete="new-password" aria-label="Senha de permissões" />
+            <input name="ownerPassword2" type="password" placeholder="Confirmar senha de permissões" autocomplete="new-password" aria-label="Confirmar senha de permissões" />
+          </div>
+          <div class="grid two">
+            <label class="field">Impressão
+              <select name="printing">
+                <option value="highResolution">Permitida</option>
+                <option value="lowResolution">Só em baixa resolução</option>
+                <option value="none">Não permitida</option>
+              </select>
+            </label>
+            <label class="field">Alterações
+              <select name="changes">
+                <option value="none">Nenhuma</option>
+                <option value="forms">Só preencher formulários</option>
+                <option value="comments" selected>Comentar e preencher formulários</option>
+                <option value="all">Qualquer alteração</option>
+              </select>
+            </label>
+          </div>
+          <label class="check"><input name="copying" type="checkbox" /> Permitir copiar texto e imagens</label>
+        </div>
+        <p class="muted small">Criptografia AES-256. Guarde as senhas: sem elas não é possível recuperar o documento.</p>
+        <div class="dialog-actions">
+          <span class="spacer"></span>
+          <button class="btn" value="cancel" formnovalidate>Cancelar</button>
+          <button class="btn primary" value="ok">Proteger</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="cert-sign-dialog" class="dialog">
+      <form method="dialog">
+        <h2>Assinatura digital com certificado</h2>
+        <div class="file-row">
+          <button type="button" class="btn" id="cert-file-button" data-icon="certificate"><span>Escolher certificado…</span></button>
+          <span id="cert-file-name" class="muted">Nenhum arquivo (.pfx ou .p12)</span>
+        </div>
+        <label class="field">Senha do certificado
+          <input name="password" type="password" autocomplete="off" />
+        </label>
+        <div class="grid two">
+          <label class="field">Motivo (opcional)
+            <input name="reason" type="text" placeholder="Ex.: Concordo com o conteúdo" />
+          </label>
+          <label class="field">Local (opcional)
+            <input name="location" type="text" placeholder="Ex.: São Paulo, SP" />
+          </label>
+        </div>
+        <label class="check"><input name="visible" type="checkbox" checked /> Mostrar a assinatura na página (você clica onde ela vai ficar)</label>
+        <p class="muted small">Funciona com certificados A1 (arquivo .pfx/.p12), como e-CPF e e-CNPJ. Certificados A3 (token ou cartão) não são suportados. Depois de assinado, qualquer alteração no documento invalida a assinatura.</p>
+        <div class="dialog-actions">
+          <span class="spacer"></span>
+          <button class="btn" value="cancel" formnovalidate>Cancelar</button>
+          <button class="btn primary" value="ok">Assinar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="ocr-dialog" class="dialog small">
+      <form method="dialog">
+        <h2>Reconhecer texto (OCR)</h2>
+        <p class="muted small">Transforma páginas escaneadas ou fotos em texto pesquisável e copiável. A aparência das páginas não muda.</p>
+        <label class="field">Idioma
+          <select name="lang">
+            <option value="por+eng">Português e inglês</option>
+            <option value="por">Português</option>
+            <option value="eng">Inglês</option>
+          </select>
+        </label>
+        <label class="check"><input type="radio" name="scope" value="auto" checked /> Só páginas sem texto (recomendado)</label>
+        <label class="check"><input type="radio" name="scope" value="range" /> Estas páginas:
+          <input name="pages" type="text" value="todas" class="inline-text" /></label>
+        <div class="dialog-actions">
+          <span class="spacer"></span>
+          <button class="btn" value="cancel" formnovalidate>Cancelar</button>
+          <button class="btn primary" value="ok">Reconhecer</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="compare-dialog" class="dialog">
+      <form method="dialog">
+        <h2>Comparar arquivos</h2>
+        <div class="compare-grid">
+          <label class="field">Versão antiga
+            <select name="old"></select>
+          </label>
+          <button type="button" class="btn icon-only" id="compare-swap" data-icon="swap" title="Trocar"></button>
+          <label class="field">Versão nova
+            <select name="new"></select>
+          </label>
+        </div>
+        <p class="muted small">O resultado abre num novo documento, com as versões lado a lado: <span class="removed-sample">vermelho</span> é o que saiu e <span class="added-sample">verde</span> é o que entrou. Compara o texto; mudanças só em imagens não aparecem.</p>
+        <div class="dialog-actions">
+          <span class="spacer"></span>
+          <button class="btn" value="cancel" formnovalidate>Cancelar</button>
+          <button class="btn primary" value="ok">Comparar</button>
         </div>
       </form>
     </dialog>
