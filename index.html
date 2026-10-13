@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self' blob: data:" />
+    <title>PDF Acrobat</title>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark" data-icon="pdf"></span><span>PDF Acrobat</span></div>
+      <div class="group">
+        <button class="btn" id="btn-open" data-icon="open" title="Abrir (Ctrl+O)"><span>Abrir</span></button>
+        <button class="btn icon-only" id="btn-save" data-icon="save" title="Salvar (Ctrl+S)" data-needs-doc></button>
+        <button class="btn icon-only" id="btn-print" data-icon="print" title="Imprimir (Ctrl+P)" data-needs-doc></button>
+        <button class="btn icon-only" id="btn-sidebar" data-icon="sidebar" title="Miniaturas das páginas" data-needs-doc></button>
+      </div>
+      <div class="group center" data-needs-doc>
+        <button class="btn icon-only" id="btn-prev" data-icon="prev" title="Página anterior"></button>
+        <input id="page-input" class="page-input" type="text" inputmode="numeric" aria-label="Página atual" />
+        <span class="muted" id="page-count">/ 0</span>
+        <button class="btn icon-only" id="btn-next" data-icon="next" title="Próxima página"></button>
+        <span class="divider"></span>
+        <button class="btn icon-only" id="btn-zoom-out" data-icon="zoomOut" title="Menos zoom (Ctrl −)"></button>
+        <select id="zoom-select" aria-label="Zoom">
+          <option value="auto">Automático</option>
+          <option value="page-width">Ajustar largura</option>
+          <option value="page-fit">Página inteira</option>
+          <option value="0.5">50%</option>
+          <option value="0.75">75%</option>
+          <option value="1">100%</option>
+          <option value="1.25">125%</option>
+          <option value="1.5">150%</option>
+          <option value="2">200%</option>
+          <option value="3">300%</option>
+          <option value="custom" hidden></option>
+        </select>
+        <button class="btn icon-only" id="btn-zoom-in" data-icon="zoomIn" title="Mais zoom (Ctrl +)"></button>
+      </div>
+      <div class="group right" data-needs-doc>
+        <div class="search">
+          <span data-icon="search"></span>
+          <input id="find-input" type="search" placeholder="Localizar texto" aria-label="Localizar texto" />
+          <span id="find-count" class="muted"></span>
+          <button class="btn icon-only small" id="btn-find-prev" data-icon="up" title="Anterior (Shift+Enter)"></button>
+          <button class="btn icon-only small" id="btn-find-next" data-icon="down" title="Próximo (Enter)"></button>
+        </div>
+        <button class="btn icon-only" id="btn-properties" data-icon="info" title="Propriedades do documento (Ctrl+D)"></button>
+      </div>
+    </header>
+
+    <nav class="toolbar" data-needs-doc aria-label="Ferramentas">
+      <div class="group" role="radiogroup" aria-label="Ferramenta de edição">
+        <button class="tool active" data-tool="select" data-icon="cursor" title="Selecionar (V)"><span>Selecionar</span></button>
+        <button class="tool" data-tool="highlight" data-icon="highlight" title="Destacar texto (H)"><span>Destacar</span></button>
+        <button class="tool" data-tool="text" data-icon="text" title="Adicionar texto (T)"><span>Texto</span></button>
+        <button class="tool" data-tool="ink" data-icon="pen" title="Desenhar (D)"><span>Desenhar</span></button>
+        <button class="tool" data-tool="image" data-icon="image" title="Adicionar imagem"><span>Imagem</span></button>
+        <button class="tool" data-tool="sign" data-icon="sign" title="Preencher e assinar"><span>Assinar</span></button>
+      </div>
+      <div class="group tool-options" id="tool-options">
+        <label class="opt" data-for="text ink">Cor
+          <input type="color" id="opt-color" value="#e11d48" />
+        </label>
+        <label class="opt" data-for="highlight">Cor
+          <select id="opt-highlight">
+            <option value="#FFFF98">Amarelo</option>
+            <option value="#53FFBC">Verde</option>
+            <option value="#80EBFF">Azul</option>
+            <option value="#FFCBE6">Rosa</option>
+            <option value="#FF4F5F">Vermelho</option>
+          </select>
+        </label>
+        <label class="opt" data-for="ink">Espessura
+          <input type="range" id="opt-thickness" min="1" max="20" value="3" />
+        </label>
+        <label class="opt" data-for="text">Tamanho
+          <input type="range" id="opt-font-size" min="8" max="72" value="16" />
+        </label>
+        <span class="opt hint" data-for="highlight">Selecione um trecho do texto para destacar.</span>
+        <span class="opt hint" data-for="sign" id="sign-hint">Clique na página para posicionar a assinatura.</span>
+      </div>
+      <div class="group right">
+        <span class="muted label">Página:</span>
+        <button class="btn icon-only" id="btn-rotate-ccw" data-icon="rotateCcw" title="Girar para a esquerda"></button>
+        <button class="btn icon-only" id="btn-rotate-cw" data-icon="rotateCw" title="Girar para a direita"></button>
+        <button class="btn icon-only" id="btn-delete-page" data-icon="trash" title="Excluir página"></button>
+        <button class="btn icon-only" id="btn-blank-page" data-icon="blank" title="Inserir página em branco"></button>
+        <button class="btn icon-only" id="btn-insert" data-icon="insert" title="Inserir PDF ou imagem após esta página"></button>
+        <button class="btn icon-only" id="btn-extract" data-icon="extract" title="Extrair páginas para um novo PDF"></button>
+      </div>
+    </nav>
+
+    <main class="workspace">
+      <aside id="sidebar" class="sidebar" hidden aria-label="Miniaturas">
+        <div id="thumbnails" class="thumbnails"></div>
+      </aside>
+
+      <section class="viewer-area">
+        <div id="viewer-container" class="viewer-container" tabindex="0">
+          <div id="viewer" class="pdfViewer"></div>
+        </div>
+
+        <div id="welcome" class="welcome">
+          <div class="welcome-card">
+            <div class="welcome-icon" data-icon="pdf"></div>
+            <h1>Abra um PDF para começar</h1>
+            <p class="muted">Arraste um arquivo para esta janela ou escolha uma opção abaixo.</p>
+            <div class="welcome-actions">
+              <button class="btn primary" id="welcome-open" data-icon="open"><span>Abrir arquivo</span></button>
+              <button class="btn" id="welcome-images" data-icon="image"><span>Criar PDF de imagens</span></button>
+              <button class="btn" id="welcome-combine" data-icon="combine"><span>Combinar arquivos</span></button>
+            </div>
+            <ul class="feature-list muted">
+              <li>Ler, pesquisar e imprimir</li>
+              <li>Destacar, escrever, desenhar e assinar</li>
+              <li>Preencher formulários</li>
+              <li>Girar, excluir, reordenar, combinar e extrair páginas</li>
+            </ul>
+          </div>
+        </div>
+
+        <div id="drop-overlay" class="drop-overlay" hidden><div>Solte o arquivo para abrir</div></div>
+        <div id="busy" class="busy" hidden><div class="spinner"></div><span id="busy-text">Processando…</span></div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <div id="sign-ghost" class="sign-ghost" hidden><img alt="" /></div>
+    <div id="print-container" class="print-container"></div>
+
+    <dialog id="signature-dialog" class="dialog">
+      <form method="dialog">
+        <h2>Criar assinatura</h2>
+        <div class="tabs">
+          <button type="button" class="tab active" data-sig-tab="draw">Desenhar</button>
+          <button type="button" class="tab" data-sig-tab="type">Digitar</button>
+        </div>
+        <input id="signature-name" type="text" placeholder="Digite seu nome" hidden autocomplete="name" />
+        <canvas class="signature-pad"></canvas>
+        <p class="muted small">Use o mouse, a caneta ou o dedo para assinar dentro do quadro.</p>
+        <div class="dialog-actions">
+          <button type="button" class="btn" id="signature-clear">Limpar</button>
+          <span class="spacer"></span>
+          <button class="btn" value="cancel" formnovalidate>Cancelar</button>
+          <button class="btn primary" value="ok">Usar assinatura</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="extract-dialog" class="dialog">
+      <form method="dialog">
+        <h2>Extrair páginas</h2>
+        <label class="field">Páginas (ex.: 1-3, 5, 8)
+          <input id="extract-range" type="text" autocomplete="off" />
+        </label>
+        <p class="muted small" id="extract-help"></p>
+        <div class="dialog-actions">
+          <span class="spacer"></span>
+          <button class="btn" value="cancel" formnovalidate>Cancelar</button>
+          <button class="btn primary" value="ok">Extrair</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="password-dialog" class="dialog">
+      <form method="dialog">
+        <h2>Documento protegido</h2>
+        <p class="muted" id="password-message">Digite a senha para abrir este PDF.</p>
+        <label class="field">Senha
+          <input id="password-input" type="password" autocomplete="off" />
+        </label>
+        <div class="dialog-actions">
+          <span class="spacer"></span>
+          <button class="btn" value="cancel" formnovalidate>Cancelar</button>
+          <button class="btn primary" value="ok">Abrir</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="properties-dialog" class="dialog">
+      <form method="dialog">
+        <h2>Propriedades do documento</h2>
+        <dl id="properties-list" class="properties"></dl>
+        <div class="dialog-actions">
+          <span class="spacer"></span>
+          <button class="btn primary" value="ok">Fechar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,93 @@
+{
+  "name": "pdfacrobat",
+  "productName": "PDF Acrobat",
+  "version": "1.0.0",
+  "description": "Leitor e editor de PDF para desktop (visualizar, anotar, assinar, preencher formulários, organizar páginas).",
+  "author": "Lucas Brandão Cabral",
+  "license": "MIT",
+  "main": "electron/main.cjs",
+  "type": "module",
+  "scripts": {
+    "predev": "node scripts/copy-pdfjs-assets.mjs",
+    "dev": "vite",
+    "prebuild": "node scripts/copy-pdfjs-assets.mjs",
+    "build": "vite build",
+    "start": "npm run build && electron .",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "37.2.0",
+    "electron-builder": "26.0.12",
+    "pdf-lib": "1.17.1",
+    "pdfjs-dist": "4.10.38",
+    "vite": "6.3.5"
+  },
+  "homepage": "https://github.com/Lucasbrandaocabral/pdfacrobat",
+  "build": {
+    "appId": "com.lucasbrandaocabral.pdfacrobat",
+    "productName": "PDF Acrobat",
+    "artifactName": "PDF-Acrobat-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "fileAssociations": [
+      {
+        "ext": "pdf",
+        "name": "Documento PDF",
+        "description": "Documento PDF",
+        "mimeType": "application/pdf",
+        "role": "Editor"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "shortcutName": "PDF Acrobat",
+      "language": "1046"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.png"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Office",
+      "icon": "build/icon.png",
+      "maintainer": "Lucas Brandão Cabral"
+    }
+  }
+}

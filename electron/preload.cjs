@@ -1,0 +1,20 @@
+// Ponte segura entre a interface (sem acesso ao Node) e o processo principal.
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
+
+contextBridge.exposeInMainWorld("pdfApi", {
+  openDialog: (options) => ipcRenderer.invoke("open-dialog", options),
+  saveFile: (options) => ipcRenderer.invoke("save-file", options),
+  readPath: (filePath) => ipcRenderer.invoke("read-path", filePath),
+  getInitialFile: () => ipcRenderer.invoke("get-initial-file"),
+  getPathForFile: (file) => {
+    try {
+      return webUtils.getPathForFile(file) || null;
+    } catch {
+      return null;
+    }
+  },
+  setState: (state) => ipcRenderer.send("set-state", state),
+  closeWindow: () => ipcRenderer.send("close-window"),
+  onMenu: (callback) => ipcRenderer.on("menu", (_e, action) => callback(action)),
+  onOpenFile: (callback) => ipcRenderer.on("open-file", (_e, file) => callback(file)),
+});
