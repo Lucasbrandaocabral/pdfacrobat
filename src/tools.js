@@ -304,8 +304,10 @@ export class ToolController {
       this.resolvePending(null);
       return;
     }
+    // Digitando num campo (pesquisa, número da página, formulário): a tecla é dele.
+    const field = e.target.closest?.("input, textarea, select");
     if (e.key === "Escape") {
-      if (this.editing) {
+      if (this.editing && !field) {
         e.preventDefault();
         this.clearEdit();
       } else if (this.drag) {
@@ -314,7 +316,7 @@ export class ToolController {
       return;
     }
     const box = this.editing?.kind === "image" || this.editing?.kind === "signature";
-    if (box && !e.target.closest?.("input, textarea, [contenteditable]")) {
+    if (box && !field && !e.target.closest?.("[contenteditable]")) {
       const signature = this.editing.kind === "signature";
       const step = e.shiftKey ? 10 : 1;
       const nudge = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
