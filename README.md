@@ -30,6 +30,8 @@ Os instaladores ficam na aba **Releases** do repositório. Baixe o arquivo do se
 | macOS | `PDF-Acrobat-<versão>-mac-arm64.dmg` (Apple Silicon) ou `-x64.dmg` (Intel) |
 | Linux | `.AppImage` (portátil) ou `.deb` (Ubuntu/Debian) |
 
+Requer Windows 10 ou 11 (64 bits), macOS 13 ou mais novo, ou Linux de 64 bits.
+
 > Os instaladores não têm assinatura digital paga. Por isso, no **Windows** o SmartScreen pode avisar "O Windows protegeu o computador": clique em *Mais informações* → *Executar assim mesmo*. No **macOS**, na primeira vez, clique com o botão direito no app → *Abrir* (no macOS 15 ou mais novo: *Ajustes do Sistema* → *Privacidade e Segurança* → *Abrir Mesmo Assim*).
 
 ### Atualizações automáticas

@@ -36,6 +36,26 @@ let isDirty = false;
 let forceClose = false;
 let pendingFiles = findPdfArgs(process.argv);
 
+// Pasta usada por último nos diálogos de abrir e salvar. Sem uma pasta
+// indicada, os diálogos abrem sempre em Downloads (desde o Electron 43), então
+// o programa guarda a última, inclusive entre uma vez e outra que é aberto.
+let lastDir;
+const lastDirFile = () => path.join(app.getPath("userData"), "ultima-pasta.json");
+
+async function loadLastDir() {
+  try {
+    lastDir = JSON.parse(await fs.readFile(lastDirFile(), "utf8")).dir || undefined;
+  } catch {
+    // Primeira vez ou arquivo ilegível: os diálogos abrem em Downloads.
+  }
+}
+
+function rememberDir(dir) {
+  if (!dir || dir === lastDir) return;
+  lastDir = dir;
+  fs.writeFile(lastDirFile(), JSON.stringify({ dir })).catch(() => {});
+}
+
 function findPdfArgs(argv) {
   return argv.slice(1).filter((a) => a.toLowerCase().endsWith(".pdf") && !a.startsWith("-"));
 }
@@ -277,10 +297,12 @@ async function uniquePath(dir, name) {
 
 ipcMain.handle("open-dialog", async (_e, { multiple = false, filters = [PDF_FILTER] } = {}) => {
   const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+    defaultPath: lastDir,
     properties: multiple ? ["openFile", "multiSelections"] : ["openFile"],
     filters: filters.filter(Boolean),
   });
-  if (canceled) return [];
+  if (canceled || !filePaths.length) return [];
+  rememberDir(path.dirname(filePaths[0]));
   return Promise.all(filePaths.map(readFileForRenderer));
 });
 
@@ -288,8 +310,9 @@ ipcMain.handle("save-file", async (_e, { data, filePath, suggestedName, saveAs, 
   let target = filePath;
   const chosenFilter = filter || PDF_FILTER;
   if (saveAs || !target) {
+    const name = suggestedName || "documento.pdf";
     const { canceled, filePath: chosen } = await dialog.showSaveDialog(mainWindow, {
-      defaultPath: target || suggestedName || "documento.pdf",
+      defaultPath: target || (lastDir ? path.join(lastDir, name) : name),
       filters: [chosenFilter],
     });
     if (canceled || !chosen) return null;
@@ -297,15 +320,19 @@ ipcMain.handle("save-file", async (_e, { data, filePath, suggestedName, saveAs, 
     target = chosenFilter.extensions.some((e) => chosen.toLowerCase().endsWith(`.${e}`)) ? chosen : `${chosen}${ext}`;
   }
   await fs.writeFile(target, Buffer.from(data));
+  rememberDir(path.dirname(target));
   return { name: path.basename(target), path: target };
 });
 
 ipcMain.handle("pick-directory", async (_e, { title } = {}) => {
   const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
     title,
+    defaultPath: lastDir,
     properties: ["openDirectory", "createDirectory"],
   });
-  return canceled ? null : filePaths[0];
+  if (canceled || !filePaths.length) return null;
+  rememberDir(filePaths[0]);
+  return filePaths[0];
 });
 
 ipcMain.handle("write-files", async (_e, { dir, files }) => {
@@ -383,6 +410,7 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     app.setName(APP_NAME);
+    loadLastDir();
     registerAppProtocol();
     createWindow();
     updater.setup({ send: (status) => send("update-status", status) });
