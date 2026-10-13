@@ -29,9 +29,16 @@ const app = {
 };
 app.tools = new ToolController(manager, app);
 app.sidebar = new Sidebar(manager, {
-  movePage: (tab, from, to) => documentFeatures.movePage(app, tab, from, to),
+  // Antes de mexer no documento pela barra lateral, conclui a edição aberta.
+  movePage: async (tab, from, to) => {
+    await app.tools.settled();
+    return documentFeatures.movePage(app, tab, from, to);
+  },
   guard: app.guard,
-  run: app.run,
+  run: async (message, task) => {
+    await app.tools.settled();
+    return app.run(message, task);
+  },
 });
 
 // ---------------------------------------------------------------------------
@@ -83,6 +90,8 @@ async function createFromFiles(kind) {
 
 async function saveTab(tab, { saveAs = false } = {}) {
   if (!tab) return false;
+  // A edição aberta (ex.: assinatura ainda na caixa) entra no arquivo salvo.
+  await app.tools.settled();
   const ok = await runBusy("Salvando…", async () => {
     const bytes = await tab.currentBytes();
     const result = await platform.saveFile(bytes, { path: tab.path, suggestedName: tab.name, saveAs: saveAs || !tab.path });
@@ -111,6 +120,7 @@ function askUnsaved(name) {
 
 async function closeTab(tab) {
   if (!tab) return false;
+  if (app.tools.editing?.hit?.tab === tab) await app.tools.settled();
   if (tab.dirty) {
     manager.activate(tab);
     const choice = await askUnsaved(tab.name);
@@ -233,6 +243,8 @@ function zoom(direction) {
 async function undoRedo(kind) {
   const tab = manager.active;
   if (!tab) return;
+  // Desfazer com uma caixa aberta (assinatura ou imagem) só a descarta.
+  if (kind === "undo" && ["signature", "image"].includes(app.tools.editing?.kind)) return app.tools.clearEdit();
   if (PDFJS_EDITOR_TOOLS.has(app.tools.tool)) {
     tab.eventBus.dispatch("editingaction", { source: window, name: kind });
     return;
@@ -306,8 +318,29 @@ const actions = {
   "check-updates": () => checkForUpdates(),
 };
 
+// Ações que não mexem no documento deixam aberta a edição em andamento (a
+// assinatura na caixa, a imagem sendo movida). Antes das outras ela é
+// concluída, como ao clicar fora dela.
+const LEAVES_EDIT_OPEN = new Set([
+  "undo",
+  "find",
+  "find-next",
+  "find-prev",
+  "zoom-in",
+  "zoom-out",
+  "fit-width",
+  "fit-page",
+  "toggle-sidebar",
+  "prev-page",
+  "next-page",
+  "properties",
+  "author-name",
+  "check-updates",
+]);
+
 async function runAction(name) {
   try {
+    if (!LEAVES_EDIT_OPEN.has(name)) await app.tools.settled();
     if (name.startsWith("tool:")) return await app.tools.select(name.slice(5));
     if (name.startsWith("shape:")) return app.tools.setShape(name.slice(6));
     if (name.startsWith("mark:")) return app.tools.setMark(name.slice(5));

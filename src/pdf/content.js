@@ -226,6 +226,16 @@ function xobjectSubtype(doc, page, name) {
   return stream?.dict?.lookup(PDFName.of("Subtype"))?.asString?.() ?? null;
 }
 
+/** A imagem `name` da página tem transparência (máscara)? */
+export function imageHasMask(doc, page, name) {
+  const resources = page.node.Resources();
+  const xobjects = resources?.lookup(PDFName.of("XObject"));
+  if (!(xobjects instanceof PDFDict)) return false;
+  const dict = xobjects.lookup(PDFName.of(name))?.dict;
+  if (!dict) return false;
+  return dict.has(PDFName.of("SMask")) || dict.has(PDFName.of("Mask")) || dict.lookup(PDFName.of("ImageMask"))?.asBoolean?.() === true;
+}
+
 /** Imagens desenhadas diretamente na página, com posição e trecho no conteúdo. */
 export function findImages(doc, page, content = readPageContent(doc, page)) {
   const ops = parseOperations(content);

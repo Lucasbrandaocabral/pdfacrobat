@@ -2,11 +2,12 @@
 // texto, desenho, imagem) e as nossas (sublinhar, tachar, nota, formas,
 // carimbo, assinatura, marcas do "Preencher e assinar" e edição de
 // texto/imagens).
-import { AnnotationEditorParamsType, AnnotationEditorType, fontRealName, getTextItems } from "./pdfjs.js";
+import { PDFDocument } from "@cantoo/pdf-lib";
+import { AnnotationEditorParamsType, AnnotationEditorType, fontRealName, getTextItems, loadPdf, pdfjsLib } from "./pdfjs.js";
 import { $, $$, askText, el, hexToRgb, toast } from "./ui.js";
 import { icon } from "./icons.js";
 import * as annotations from "./pdf/annotations.js";
-import { findImages, isolatePage, moveImage, removeImage } from "./pdf/content.js";
+import { findImages, imageHasMask, isolatePage, moveImage, removeImage } from "./pdf/content.js";
 import { drawPngOnPage } from "./pdf/ops.js";
 import { drawMark, today } from "./pdf/fill.js";
 import { fontStyle, replaceText } from "./pdf/textedit.js";
@@ -50,6 +51,7 @@ const MARK_SVG = {
   cross: '<path d="M-32 -32 L32 32 M32 -32 L-32 32" />',
   dot: '<circle r="20" stroke="none" fill="currentColor" />',
 };
+const ALL_HANDLES = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
 const SHAPE_ICONS = { rect: "rect", ellipse: "ellipse", line: "line", arrow: "arrow" };
 const SHAPE_LABELS = { rect: "Retângulo", ellipse: "Elipse", line: "Linha", arrow: "Seta" };
 
@@ -78,7 +80,9 @@ export class ToolController {
       if (tab.active) this.applyEditorMode(tab);
     });
     manager.on("activate", () => this.apply("select"));
-    manager.on("scalechange", (tab) => tab.active && this.clearEdit());
+    manager.on("scalechange", (tab) => tab.active && this.followZoom());
+    // Recarregar o documento recria as páginas: a edição aberta nele se perde.
+    manager.on("loaded", (tab) => this.editing?.hit.tab === tab && this.clearEdit());
   }
 
   get tab() {
@@ -93,7 +97,7 @@ export class ToolController {
     const perm = PERMISSIONS[tool];
     if (perm && !(await this.guard(tab, perm[0], perm[1]))) return;
     if (tool === "sign" && !this.signature) return;
-    this.clearEdit();
+    this.finishEdit();
     this.apply(tool);
     if (tool === "image") this.setEditorParam(AnnotationEditorParamsType.CREATE, null);
   }
@@ -102,7 +106,7 @@ export class ToolController {
   async startSignature(signature) {
     const tab = this.tab;
     if (!tab?.doc || !(await this.guard(tab, ...PERMISSIONS.sign))) return;
-    this.clearEdit();
+    this.finishEdit();
     this.signature = signature;
     this.apply("sign");
   }
@@ -155,7 +159,7 @@ export class ToolController {
     this.ghost.hidden = true;
     this.ghost.dataset.kind = "";
     this.cancelDrag();
-    if (tool !== "edit") this.clearEdit();
+    if (tool !== "edit" || this.editing?.kind === "signature") this.finishEdit();
     if (this.tab?.doc) this.applyEditorMode(this.tab);
   }
 
@@ -274,6 +278,8 @@ export class ToolController {
     // Na janela, em captura: assim as nossas ferramentas recebem o clique antes
     // dos editores do PDF.js (que também escutam a janela durante um desenho).
     window.addEventListener("pointerdown", (e) => this.onPointerDown(e), true);
+    window.addEventListener("pointerup", (e) => this.endOutsideTap(e), true);
+    window.addEventListener("pointercancel", () => (this.outsideTap = null), true);
     this.area.addEventListener("pointermove", (e) => this.onPointerMove(e));
     this.area.addEventListener("pointerup", (e) => this.onPointerUp(e));
     this.area.addEventListener("pointerleave", () => {
@@ -290,6 +296,9 @@ export class ToolController {
   }
 
   onKeyDown(e) {
+    // Com uma janela ou menu aberto por cima, as teclas são dele (o Esc fecha o
+    // menu, não descarta a assinatura na caixa).
+    if (document.querySelector("dialog[open], .menu:not([hidden])")) return;
     if (e.key === "Escape" && this.pending) {
       e.preventDefault();
       this.resolvePending(null);
@@ -304,13 +313,23 @@ export class ToolController {
       }
       return;
     }
-    if (this.editing?.kind === "image" && !e.target.closest?.("input, textarea, [contenteditable]")) {
-      if (e.key === "Delete" || e.key === "Backspace") {
+    const box = this.editing?.kind === "image" || this.editing?.kind === "signature";
+    if (box && !e.target.closest?.("input, textarea, [contenteditable]")) {
+      const signature = this.editing.kind === "signature";
+      const step = e.shiftKey ? 10 : 1;
+      const nudge = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
+      if (nudge) {
         e.preventDefault();
-        this.deleteImage();
-      } else if (e.key === "Enter") {
+        e.stopPropagation();
+        this.editing.rect = this.clampToPage({ ...this.editing.rect, left: this.editing.rect.left + nudge[0], top: this.editing.rect.top + nudge[1] });
+        this.layoutImageBox();
+      } else if (e.key === "Delete" || e.key === "Backspace") {
         e.preventDefault();
-        this.commitImage();
+        if (signature) this.clearEdit();
+        else this.deleteImage();
+      } else if (e.key === "Enter" && !e.target.closest?.(".float-bar")) {
+        e.preventDefault();
+        this.finishEdit();
       }
     }
   }
@@ -326,12 +345,20 @@ export class ToolController {
       }
       return;
     }
+    if (this.editing?.kind === "signature") {
+      // Tocar ou clicar na página fora da assinatura conclui; quem decide na
+      // barra de ferramentas é a própria ação (zoom, por exemplo, não conclui).
+      if (this.area.contains(e.target) && !e.target.closest?.(".image-box, .float-bar") && !onScrollbar(e)) {
+        this.outsideTap = { id: e.pointerId, x: e.clientX, y: e.clientY };
+      }
+      return;
+    }
     const tool = this.tool;
     if (!["note", "shape", "sign", "stamp", "mark", "edit"].includes(tool)) return;
     if (tool === "edit" && e.target.closest?.(".text-editor, .image-box, .float-bar")) return;
     const hit = this.pageHit(e);
     if (!hit) {
-      if (tool === "edit") this.finishEdit();
+      if (tool === "edit" && this.area.contains(e.target)) this.finishEdit();
       return;
     }
     e.preventDefault();
@@ -342,6 +369,14 @@ export class ToolController {
     else if (tool === "stamp") this.placeStamp(hit);
     else if (tool === "mark") this.placeMark(hit);
     else this.editAt(hit);
+  }
+
+  /** Só conclui no fim de um toque sem arrastar: rolar a página com o dedo não conta. */
+  endOutsideTap(e) {
+    const tap = this.outsideTap;
+    this.outsideTap = null;
+    if (tap?.id !== e.pointerId || this.editing?.kind !== "signature") return;
+    if (Math.hypot(e.clientX - tap.x, e.clientY - tap.y) < 10) this.commitSignature();
   }
 
   onPointerMove(e) {
@@ -622,25 +657,47 @@ export class ToolController {
     ghost.hidden = false;
   }
 
-  async placeSignature(hit) {
+  /**
+   * Põe a assinatura (ou as iniciais) numa caixa ajustável onde foi o clique:
+   * dá para arrastar e mudar o tamanho pelos cantos, vendo como vai ficar,
+   * antes de aplicar com "Concluir".
+   */
+  placeSignature(hit) {
     const signature = this.signature;
     if (!signature) return;
     const [w, h] = this.ghostSize(hit.scale);
-    // Canto inferior esquerdo da assinatura, como visto na tela.
-    const origin = hit.pageView.viewport.convertToPdfPoint(hit.x - w / 2, hit.y + h / 2);
     this.apply("select");
-    await this.run("Aplicando assinatura…", () =>
-      hit.tab.edit((doc) =>
-        drawPngOnPage(doc, {
-          pageIndex: hit.pageIndex,
-          pngBytes: signature.png,
-          origin,
-          width: w / hit.scale,
-          height: h / hit.scale,
-          rotation: hit.rotation,
-        }),
-      ),
-    );
+    const rect = this.clampToLayer(this.overlayFor(hit), { left: hit.x - w / 2, top: hit.y - h / 2, width: w, height: h });
+    const label = signature.kind === "initials" ? "as iniciais" : "a assinatura";
+    this.openBox(hit, "signature", rect, {
+      handles: ["nw", "ne", "se", "sw"],
+      preview: el("img", { class: "box-preview", src: signature.previewUrl, alt: "", draggable: "false" }),
+      buttons: [
+        el("span", { class: "float-hint", text: "Arraste para mover; puxe os cantos para mudar o tamanho" }),
+        el("button", { class: "btn", type: "button", title: `Descartar ${label}`, html: `${icon("trash")}<span>Excluir</span>`, onclick: () => this.clearEdit() }),
+        el("button", { class: "btn primary", type: "button", text: "Concluir", onclick: () => this.commitSignature() }),
+      ],
+      extra: { signature },
+    });
+  }
+
+  /** Aplica na página a assinatura que estava sendo posicionada. */
+  commitSignature() {
+    const editing = this.editing;
+    if (editing?.kind !== "signature") return this.committing;
+    const { hit, rect, viewport, signature } = editing;
+    this.clearEdit();
+    const origin = viewport.convertToPdfPoint(rect.left, rect.top + rect.height);
+    const draw = (doc) =>
+      drawPngOnPage(doc, {
+        pageIndex: hit.pageIndex,
+        pngBytes: signature.png,
+        origin,
+        width: rect.width / viewport.scale,
+        height: rect.height / viewport.scale,
+        rotation: hit.rotation,
+      });
+    return this.track(this.run("Aplicando assinatura…", () => hit.tab.edit(draw)));
   }
 
   async placeMark(hit) {
@@ -703,6 +760,8 @@ export class ToolController {
   }
 
   updateHover(e) {
+    // O quadro pode chegar depois do clique que abriu a edição.
+    if (this.editing || this.tool !== "edit") return this.removeHover();
     const hit = this.pageHit(e);
     if (!hit) return this.removeHover();
     const data = hit.tab.pageCache.get(`edit-${hit.pageNumber}-ready`);
@@ -847,26 +906,121 @@ export class ToolController {
     );
   }
 
-  startImageEdit(hit, image) {
+  /**
+   * Caixa com alças para mover e redimensionar, com a prévia dentro: a imagem
+   * em edição ou a assinatura sendo posicionada.
+   */
+  openBox(hit, kind, rect, { handles = ALL_HANDLES, preview, buttons, extra }) {
     const layer = this.overlayFor(hit);
-    const css = this.cssRect(hit.pageView, image.rect);
-    const box = el("div", { class: "image-box" });
-    for (const h of ["nw", "n", "ne", "e", "se", "s", "sw", "w"]) box.append(el("span", { class: "handle", dataset: { h } }));
-    const bar = el("div", { class: "float-bar" }, [
-      el("button", { class: "btn", type: "button", html: `${icon("image")}<span>Substituir</span>`, onclick: () => this.replaceImage() }),
-      el("button", { class: "btn", type: "button", html: `${icon("trash")}<span>Excluir</span>`, onclick: () => this.deleteImage() }),
-      el("button", { class: "btn primary", type: "button", text: "Concluir", onclick: () => this.commitImage() }),
-    ]);
+    const box = el("div", { class: "image-box" }, [preview]);
+    for (const h of handles) box.append(el("span", { class: "handle", dataset: { h } }));
+    const bar = el("div", { class: "float-bar" }, buttons);
     layer.append(box, bar);
-    this.editing = { kind: "image", hit, image, box, bar, rect: { ...css }, original: { ...css }, aspect: css.width / css.height };
+    this.editing = { kind, hit, layer, box, bar, preview, viewport: hit.pageView.viewport, rect: { ...rect }, original: { ...rect }, aspect: rect.width / rect.height, ...extra };
     this.layoutImageBox();
     box.addEventListener("pointerdown", (e) => this.startImageDrag(e));
+    return this.editing;
+  }
+
+  startImageEdit(hit, image) {
+    const css = this.cssRect(hit.pageView, image.rect);
+    const pageCanvas = hit.pageDiv.querySelector(".canvasWrapper canvas");
+    // Até a prévia exata ficar pronta, mostra o recorte do que está na tela.
+    const preview = pageCanvas ? cropCanvas(pageCanvas, css) : el("span");
+    preview.classList.add("box-preview");
+    const editing = this.openBox(hit, "image", css, {
+      preview,
+      buttons: [
+        el("button", { class: "btn", type: "button", html: `${icon("image")}<span>Substituir</span>`, onclick: () => this.replaceImage() }),
+        el("button", { class: "btn", type: "button", html: `${icon("trash")}<span>Excluir</span>`, onclick: () => this.deleteImage() }),
+        el("button", { class: "btn primary", type: "button", text: "Concluir", onclick: () => this.finishEdit() }),
+      ],
+      extra: { image },
+    });
+    if (pageCanvas) this.prepareImagePreview(editing, pageCanvas);
+  }
+
+  /**
+   * Prévia exata da edição de imagem: redesenha a página sem a imagem (por
+   * cima da página na tela) e põe dentro da caixa a imagem como ela aparece,
+   * com transparência quando ela tem.
+   */
+  async prepareImagePreview(editing, pageCanvas) {
+    const { hit, image, viewport } = editing;
+    let pdf = null;
+    try {
+      const lib = await hit.tab.pageCache.get("lib");
+      const copy = await PDFDocument.create();
+      const [page] = await copy.copyPages(lib, [hit.pageIndex]);
+      copy.addPage(page);
+      removeImage(copy, copy.getPage(0), image.index);
+      ({ doc: pdf } = await loadPdf(await copy.save()));
+      const pdfPage = await pdf.getPage(1);
+      const vp = pdfPage.getViewport({ scale: viewport.scale, rotation: viewport.rotation });
+      const clean = el("canvas", { class: "clean-page" });
+      clean.width = pageCanvas.width;
+      clean.height = pageCanvas.height;
+      await pdfPage.render({
+        canvasContext: clean.getContext("2d"),
+        viewport: vp,
+        transform: [clean.width / vp.width, 0, 0, clean.height / vp.height, 0, 0],
+        annotationMode: pdfjsLib.AnnotationMode.ENABLE_FORMS,
+      }).promise;
+      if (this.editing !== editing) return;
+      if (imageHasMask(lib, lib.getPage(hit.pageIndex), image.name)) {
+        const matte = transparentCrop(pageCanvas, clean, editing.original);
+        matte.classList.add("box-preview");
+        editing.preview.replaceWith(matte);
+        editing.preview = matte;
+      }
+      editing.layer.prepend(clean);
+      editing.clean = clean;
+    } catch (err) {
+      console.warn("Sem prévia da imagem:", err);
+    } finally {
+      pdf?.destroy();
+    }
   }
 
   layoutImageBox() {
-    const { box, bar, rect } = this.editing;
+    const { box, bar, rect, layer } = this.editing;
     Object.assign(box.style, { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px` });
-    Object.assign(bar.style, { left: `${rect.left}px`, top: `${Math.max(0, rect.top - 40)}px` });
+    // Barra acima da caixa (abaixo quando não cabe) e sem passar da borda da página.
+    const left = Math.max(0, Math.min(rect.left, layer.clientWidth - bar.offsetWidth));
+    const top = rect.top >= 40 ? rect.top - 40 : rect.top + rect.height + 8;
+    Object.assign(bar.style, { left: `${left}px`, top: `${top}px` });
+  }
+
+  /**
+   * O zoom recria as camadas da página: a assinatura em posicionamento volta
+   * no mesmo lugar da página, na escala nova; as outras edições são concluídas.
+   */
+  followZoom() {
+    const editing = this.editing;
+    if (!editing) return;
+    const viewport = editing.hit.pageView.viewport;
+    // Mesmo zoom (ex.: "Automático" reaplicado): as camadas não mudaram.
+    if (viewport.scale === (editing.viewport?.scale ?? editing.hit.scale)) return;
+    if (editing.kind !== "signature") return this.finishEdit();
+    const { viewport: old, rect } = editing;
+    const a = viewport.convertToViewportPoint(...old.convertToPdfPoint(rect.left, rect.top));
+    const b = viewport.convertToViewportPoint(...old.convertToPdfPoint(rect.left + rect.width, rect.top + rect.height));
+    editing.viewport = viewport;
+    editing.layer = this.overlayFor(editing.hit);
+    editing.layer.append(editing.box, editing.bar);
+    editing.rect = { left: Math.min(a[0], b[0]), top: Math.min(a[1], b[1]), width: Math.abs(b[0] - a[0]), height: Math.abs(b[1] - a[1]) };
+    this.layoutImageBox();
+  }
+
+  clampToLayer(layer, r) {
+    const width = layer.clientWidth || r.width;
+    const height = layer.clientHeight || r.height;
+    return { ...r, left: Math.min(Math.max(0, r.left), Math.max(0, width - r.width)), top: Math.min(Math.max(0, r.top), Math.max(0, height - r.height)) };
+  }
+
+  /** Mantém a caixa dentro da página. */
+  clampToPage(r) {
+    return this.clampToLayer(this.editing.layer, r);
   }
 
   startImageDrag(e) {
@@ -880,10 +1034,11 @@ export class ToolController {
     const move = (ev) => {
       const dx = ev.clientX - sx;
       const dy = ev.clientY - sy;
-      const r = { ...startRect };
+      let r = { ...startRect };
       if (!handle) {
         r.left += dx;
         r.top += dy;
+        r = this.clampToPage(r);
       } else {
         if (handle.includes("e")) r.width = Math.max(8, startRect.width + dx);
         if (handle.includes("s")) r.height = Math.max(8, startRect.height + dy);
@@ -913,8 +1068,7 @@ export class ToolController {
   }
 
   imagePdfRect() {
-    const { hit, rect } = this.editing;
-    const vp = hit.pageView.viewport;
+    const { rect, viewport: vp } = this.editing;
     const a = vp.convertToPdfPoint(rect.left, rect.top + rect.height);
     const b = vp.convertToPdfPoint(rect.left + rect.width, rect.top);
     return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])];
@@ -929,10 +1083,10 @@ export class ToolController {
     await this.run("Movendo imagem…", () => hit.tab.edit((doc) => moveImage(doc, doc.getPage(hit.pageIndex), image.index, target)));
   }
 
-  async deleteImage() {
+  deleteImage() {
     const { hit, image } = this.editing;
     this.clearEdit();
-    await this.run("Excluindo imagem…", () => hit.tab.edit((doc) => removeImage(doc, doc.getPage(hit.pageIndex), image.index)));
+    return this.track(this.run("Excluindo imagem…", () => hit.tab.edit((doc) => removeImage(doc, doc.getPage(hit.pageIndex), image.index))));
   }
 
   async replaceImage() {
@@ -956,20 +1110,93 @@ export class ToolController {
     );
   }
 
-  async finishEdit() {
-    if (!this.editing) return;
-    if (this.editing.kind === "text") await this.commitText();
-    else await this.commitImage();
+  /** Conclui a edição aberta, como ao clicar fora dela: aplica o que mudou. */
+  finishEdit() {
+    const kind = this.editing?.kind;
+    if (kind === "signature") return this.commitSignature();
+    if (kind === "text") return this.track(this.commitText());
+    if (kind === "image") return this.track(this.commitImage());
+    return this.committing;
+  }
+
+  /** Guarda a alteração em andamento para quem precisa esperar por ela. */
+  track(promise) {
+    const tracked = promise.finally(() => {
+      if (this.committing === tracked) this.committing = null;
+    });
+    this.committing = tracked;
+    return tracked;
+  }
+
+  /** Conclui a edição aberta e espera aplicar (antes de salvar, por exemplo). */
+  async settled() {
+    this.finishEdit();
+    await this.committing;
+    // Aplicar recarrega o documento: espera a página atual e o zoom voltarem,
+    // senão a próxima ação (girar a página atual, por exemplo) erra a página.
+    await this.tab?.loaded;
   }
 
   clearEdit() {
     if (!this.editing) return;
-    const { editor, box, bar } = this.editing;
+    const { editor, box, bar, clean } = this.editing;
     this.editing = null;
     editor?.remove();
     box?.remove();
     bar?.remove();
+    clean?.remove();
   }
+}
+
+/** Pixels de `canvas` dentro do retângulo CSS `css` (relativo à página). */
+function pixelRect(canvas, css) {
+  const box = canvas.getBoundingClientRect();
+  const sx = canvas.width / (box.width || canvas.width);
+  const sy = canvas.height / (box.height || canvas.height);
+  const x = Math.max(0, Math.floor(css.left * sx));
+  const y = Math.max(0, Math.floor(css.top * sy));
+  return {
+    x,
+    y,
+    w: Math.max(1, Math.min(canvas.width - x, Math.ceil(css.width * sx))),
+    h: Math.max(1, Math.min(canvas.height - y, Math.ceil(css.height * sy))),
+  };
+}
+
+/** Recorte do canvas da página (o que aparece na tela). */
+/** Clique numa barra de rolagem (não é um clique na página). */
+function onScrollbar(e) {
+  const t = e.target;
+  return t instanceof HTMLElement && t.clientWidth > 0 && (e.offsetX > t.clientWidth || e.offsetY > t.clientHeight);
+}
+
+function cropCanvas(canvas, css) {
+  const r = pixelRect(canvas, css);
+  const out = document.createElement("canvas");
+  out.width = r.w;
+  out.height = r.h;
+  out.getContext("2d").drawImage(canvas, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+  return out;
+}
+
+/**
+ * Recorte com transparência: compara a página com e sem a imagem; o que não
+ * mudou era o fundo aparecendo pela imagem e fica transparente.
+ */
+function transparentCrop(withImage, without, css) {
+  const r = pixelRect(withImage, css);
+  const a = withImage.getContext("2d").getImageData(r.x, r.y, r.w, r.h);
+  const b = without.getContext("2d").getImageData(r.x, r.y, r.w, r.h).data;
+  const d = a.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const diff = Math.abs(d[i] - b[i]) + Math.abs(d[i + 1] - b[i + 1]) + Math.abs(d[i + 2] - b[i + 2]);
+    d[i + 3] = diff < 4 ? 0 : Math.min(255, diff * 6);
+  }
+  const out = document.createElement("canvas");
+  out.width = r.w;
+  out.height = r.h;
+  out.getContext("2d").putImageData(a, 0, 0);
+  return out;
 }
 
 /** Junta retângulos da mesma linha (a seleção do navegador gera vários por linha). */

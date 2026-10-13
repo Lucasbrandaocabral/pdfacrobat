@@ -115,7 +115,6 @@ export class DocTab {
 
   /** Carrega (ou recarrega) bytes nesta aba. */
   async load(bytes, { password = this.password, ownerPassword = this.security?.ownerPassword, view = null } = {}) {
-    this.loaded = new Promise((resolve) => (this.resolveLoaded = resolve));
     const { doc, password: used } = await loadPdf(bytes, {
       password,
       onPassword: (incorrect) => askOpenPassword(this.name, incorrect),
@@ -130,6 +129,8 @@ export class DocTab {
     this.pendingView = view;
     this.pageCache.clear();
     doc.annotationStorage.onSetModified = () => this.setDirty(true);
+    // Resolvida quando as páginas carregam e a posição volta (ver finishLoad).
+    this.loaded = new Promise((resolve) => (this.resolveLoaded = resolve));
     this.viewer.setDocument(doc);
     this.linkService.setDocument(doc, null);
     previous?.destroy();
