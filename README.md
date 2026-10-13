@@ -38,7 +38,7 @@ Os instaladores ficam na aba **Releases** do repositório. Baixe o arquivo do se
 2. Em **Tag: Select tag**, digite a versão (ex.: `v1.1.0`) e escolha **Create new tag**.
 3. Clique em **Publish release**.
 
-Em poucos minutos os instaladores aparecem anexados à versão (workflow **Gerar instaladores**) e a versão web é atualizada (workflow **Publicar versão web**).
+Em poucos minutos os instaladores aparecem anexados à versão (workflow **Gerar instaladores**).
 
 Todo envio de código também gera os instaladores como *Artifacts* na aba **Actions** (vêm em `.zip`), útil para testar antes de publicar.
 
@@ -46,7 +46,7 @@ Todo envio de código também gera os instaladores como *Artifacts* na aba **Act
 
 A mesma interface roda no navegador, no computador ou no celular, em **https://lucasbrandaocabral.github.io/pdfacrobat/**. No celular, use **Adicionar à tela inicial** para instalar como app. Depois da primeira visita ela funciona sem internet.
 
-Para ativar o endereço (uma vez só): **Settings → Pages → Source: GitHub Actions**. Depois publique uma versão ou rode o workflow **Publicar versão web** (aba **Actions** → **Run workflow**).
+Ela é atualizada automaticamente a cada envio de código para o branch principal (workflow **Publicar versão web**). Para ativar o endereço (uma vez só): **Settings → Pages → Source: GitHub Actions**.
 
 Na versão web os arquivos são abertos e baixados pelo navegador (vários arquivos de uma vez vêm num `.zip`). Para usar arquivos da nuvem, abra-os a partir das pastas sincronizadas do OneDrive, Google Drive ou Dropbox.
 

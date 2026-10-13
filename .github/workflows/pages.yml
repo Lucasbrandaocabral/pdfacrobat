@@ -1,11 +1,16 @@
 name: Publicar versão web
 
-# A versão web (navegador e celular) é publicada no GitHub Pages a cada
-# versão lançada (Releases) ou manualmente pelo botão "Run workflow".
+# A versão web (navegador e celular) é publicada no GitHub Pages a cada envio
+# de código para o branch principal, ou manualmente pelo botão "Run workflow".
+# O ambiente "github-pages" só aceita publicar a partir do branch principal
+# (tags de versão são recusadas), por isso não usamos o evento de Releases.
 # Antes da primeira vez: Settings → Pages → Source: GitHub Actions.
 on:
-  release:
-    types: [published]
+  push:
+    branches: ["**"]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
   workflow_dispatch:
 
 permissions:
@@ -19,6 +24,7 @@ concurrency:
 
 jobs:
   build:
+    if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
