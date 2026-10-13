@@ -88,6 +88,7 @@
       "category": "Office",
       "icon": "build/icon.png",
       "maintainer": "Lucas Brandão Cabral"
-    }
+    },
+    "afterPack": "scripts/adhoc-sign.cjs"
   }
 }
