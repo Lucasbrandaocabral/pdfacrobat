@@ -1,7 +1,7 @@
 {
   "name": "pdfacrobat",
   "productName": "PDF Acrobat",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Leitor e editor de PDF para desktop, navegador e celular: comentar, editar texto e imagens, assinar (inclusive com certificado digital), proteger com senha, OCR, converter, comprimir, comparar e organizar páginas.",
   "author": "Lucas Brandão Cabral",
   "license": "MIT",
@@ -100,6 +100,14 @@
       "icon": "build/icon.png",
       "maintainer": "Lucas Brandão Cabral"
     },
-    "afterPack": "scripts/adhoc-sign.cjs"
+    "afterPack": "scripts/adhoc-sign.cjs",
+    "publish": {
+      "provider": "github",
+      "owner": "Lucasbrandaocabral",
+      "repo": "pdfacrobat"
+    }
+  },
+  "dependencies": {
+    "electron-updater": "6.8.9"
   }
 }

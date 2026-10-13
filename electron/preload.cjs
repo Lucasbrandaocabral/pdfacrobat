@@ -21,4 +21,9 @@ contextBridge.exposeInMainWorld("pdfApi", {
   closeWindow: () => ipcRenderer.send("close-window"),
   onMenu: (callback) => ipcRenderer.on("menu", (_e, action) => callback(action)),
   onOpenFile: (callback) => ipcRenderer.on("open-file", (_e, file) => callback(file)),
+  getUpdateStatus: () => ipcRenderer.invoke("update-status"),
+  onUpdateStatus: (callback) => ipcRenderer.on("update-status", (_e, status) => callback(status)),
+  checkForUpdates: () => ipcRenderer.send("update-check"),
+  downloadUpdate: () => ipcRenderer.send("update-download"),
+  installUpdate: () => ipcRenderer.send("update-install"),
 });

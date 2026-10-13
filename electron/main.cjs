@@ -6,6 +6,12 @@ const os = require("node:os");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
+// Ao instalar uma atualização do AppImage, o atualizador executa a versão
+// nova só para concluir a instalação: ela deve sair sem abrir a janela.
+if (process.env.APPIMAGE_EXIT_AFTER_INSTALL === "true") process.exit(0);
+
+const updater = require("./updater.cjs");
+
 const APP_NAME = "PDF Acrobat";
 const PDF_FILTER = { name: "Documentos PDF", extensions: ["pdf"] };
 const DIST_DIR = path.join(__dirname, "..", "dist");
@@ -235,6 +241,8 @@ function buildMenu() {
     {
       label: "Ajuda",
       submenu: [
+        item("Verificar atualizações…", "check-updates"),
+        sep,
         {
           label: "Sobre o PDF Acrobat",
           click: () =>
@@ -351,6 +359,11 @@ ipcMain.on("close-window", () => {
   mainWindow?.close();
 });
 
+ipcMain.handle("update-status", () => updater.getStatus());
+ipcMain.on("update-check", () => updater.check({ manual: true }));
+ipcMain.on("update-download", () => updater.downloadInstaller());
+ipcMain.on("update-install", () => updater.install());
+
 // ---- Ciclo de vida ----
 
 if (!app.requestSingleInstanceLock()) {
@@ -372,6 +385,7 @@ if (!app.requestSingleInstanceLock()) {
     app.setName(APP_NAME);
     registerAppProtocol();
     createWindow();
+    updater.setup({ send: (status) => send("update-status", status) });
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });

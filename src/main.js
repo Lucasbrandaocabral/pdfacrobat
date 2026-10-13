@@ -12,6 +12,7 @@ import * as convert from "./features/convert.js";
 import { ocr } from "./features/ocr.js";
 import { compare } from "./features/compare.js";
 import { certSign } from "./features/certsign.js";
+import { setupUpdates } from "./updates.js";
 
 const PDFJS_EDITOR_TOOLS = new Set(["highlight", "text", "ink", "image"]);
 const manager = new TabManager($("#viewer-area"), $("#tabbar"));
@@ -116,6 +117,14 @@ async function closeTab(tab) {
     if (choice === "ok" && !(await saveTab(tab))) return false;
   }
   manager.remove(tab);
+  return true;
+}
+
+/** Antes de reiniciar para atualizar: salva ou descarta os documentos alterados. */
+async function closeUnsaved() {
+  for (const tab of manager.tabs.filter((t) => t.dirty)) {
+    if (!(await closeTab(tab))) return false;
+  }
   return true;
 }
 
@@ -286,6 +295,7 @@ const actions = {
   combine: () => createFromFiles("pdfAndImages"),
   "create-from-images": () => createFromFiles("images"),
   "author-name": setAuthorName,
+  "check-updates": () => checkForUpdates(),
 };
 
 async function runAction(name) {
@@ -541,6 +551,7 @@ function registerServiceWorker() {
 
 setupToolbar();
 setupDragAndDrop();
+const checkForUpdates = setupUpdates({ closeDocuments: closeUnsaved });
 document.addEventListener("keydown", onKeyDown);
 platform.onMenu((action) => runAction(action));
 platform.onOpenFile((file) => openFiles([file]));

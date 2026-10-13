@@ -114,6 +114,15 @@ export function addRecentDocument(path) {
   api?.addRecent(path);
 }
 
+/** Atualização do app desktop (no navegador a versão web se atualiza sozinha). */
+export const updates = {
+  getStatus: () => api?.getUpdateStatus() ?? Promise.resolve(null),
+  onStatus: (callback) => api?.onUpdateStatus(callback),
+  check: () => api?.checkForUpdates(),
+  download: () => api?.downloadUpdate(),
+  install: () => api?.installUpdate(),
+};
+
 let userName = null;
 /** Nome usado como autor dos comentários. */
 export async function getUserName() {

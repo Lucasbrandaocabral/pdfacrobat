@@ -196,6 +196,16 @@
     </main>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <div id="update-bar" class="update-bar" role="status" aria-live="polite" hidden>
+      <div class="update-icon" data-icon="download"></div>
+      <div class="update-body">
+        <strong class="update-title"></strong>
+        <span class="update-text"></span>
+        <progress class="update-progress" max="100" hidden></progress>
+        <button class="btn primary update-action" hidden></button>
+      </div>
+      <button class="btn icon-only small update-close" title="Fechar aviso" aria-label="Fechar aviso" data-icon="close"></button>
+    </div>
     <div id="place-ghost" class="place-ghost" hidden></div>
     <div id="print-container" class="print-container"></div>
 

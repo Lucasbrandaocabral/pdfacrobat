@@ -32,13 +32,25 @@ Os instaladores ficam na aba **Releases** do repositório. Baixe o arquivo do se
 
 > Os instaladores não têm assinatura digital paga. Por isso, no **Windows** o SmartScreen pode avisar "O Windows protegeu o computador": clique em *Mais informações* → *Executar assim mesmo*. No **macOS**, na primeira vez, clique com o botão direito no app → *Abrir* (no macOS 15 ou mais novo: *Ajustes do Sistema* → *Privacidade e Segurança* → *Abrir Mesmo Assim*).
 
+### Atualizações automáticas
+
+A partir da versão 1.2.0 o programa se atualiza sozinho, sem precisar entrar no GitHub. Ele procura uma versão nova ao abrir e a cada 6 horas; para procurar na hora, use **Ajuda → Verificar atualizações…**.
+
+| Sistema | Como atualiza |
+|---|---|
+| Windows e Linux (AppImage) | Baixa a versão nova em segundo plano (quando possível, só as partes que mudaram) e avisa quando ela está pronta. Ela é instalada ao fechar o programa, ou na hora, pelo botão **Reiniciar e atualizar**. |
+| Linux (.deb) | Igual, mas a instalação pede a senha de administrador e só acontece pelo botão **Reiniciar e atualizar**. |
+| macOS | Avisa que há versão nova; o botão **Baixar** baixa e abre o instalador, e basta arrastar o app para a pasta Aplicativos. Sem o certificado pago da Apple, o macOS não permite que o app se substitua sozinho. |
+
+Antes de reiniciar, o programa pede para salvar os documentos com alterações. Quem usa a versão 1.1.0 ou anterior precisa instalar a 1.2.0 manualmente uma vez; daí em diante as atualizações chegam sozinhas.
+
 ### Publicar uma versão nova
 
 1. Abra **Releases** → **Draft a new release**.
-2. Em **Tag: Select tag**, digite a versão (ex.: `v1.1.0`) e escolha **Create new tag**.
+2. Em **Tag: Select tag**, digite a versão nova, maior que a anterior (ex.: `v1.3.0`), e escolha **Create new tag**.
 3. Clique em **Publish release**.
 
-Em poucos minutos os instaladores aparecem anexados à versão (workflow **Gerar instaladores**).
+Em poucos minutos os instaladores aparecem anexados à versão (workflow **Gerar instaladores**), e os programas já instalados passam a se atualizar para ela. O número da versão do app vem da tag; não é preciso mudar o `package.json`. Uma versão marcada como **Set as a pre-release** não é oferecida como atualização, o que serve para testar antes.
 
 Todo envio de código também gera os instaladores como *Artifacts* na aba **Actions** (vêm em `.zip`), útil para testar antes de publicar.
 
@@ -82,6 +94,7 @@ A arquitetura segue a do Acrobat moderno: um núcleo que interpreta e desenha o 
 | OCR | Adobe Sensei | **Tesseract** (WebAssembly) |
 | Assinatura digital | PKI própria | **@signpdf** + **node-forge** (PKCS#7) |
 | Conversão para Word | Serviço na nuvem | **docx** |
+| Atualização automática | Adobe Updater (ARM) | **electron-updater**, a partir das Releases do GitHub — `electron/updater.cjs` |
 | Build, instaladores e web | — | **Vite**, **electron-builder**, GitHub Actions e GitHub Pages |
 
 ### Estrutura
@@ -89,10 +102,12 @@ A arquitetura segue a do Acrobat moderno: um núcleo que interpreta e desenha o 
 ```
 electron/main.cjs        processo principal: janela, menus, diálogos, abrir/salvar arquivos
 electron/preload.cjs     ponte segura entre a interface e o sistema
+electron/updater.cjs     atualização automática (procura, baixa e instala versões novas)
 src/main.js              inicialização, ações, atalhos, arrastar e soltar, recentes
 src/tabs.js              abas (um visualizador do PDF.js por documento), desfazer/refazer, permissões
 src/tools.js             ferramentas na página: comentar, formas, carimbos, assinar, editar texto e imagens
 src/sidebar.js           miniaturas, marcadores e lista de comentários
+src/updates.js           aviso de atualização e botão "Reiniciar e atualizar"
 src/features/            janelas e fluxos: documento, converter, OCR, comparar, certificado
 src/pdf/                 operações no arquivo: anotações, conteúdo da página, marcas, segurança, compressão
 public/                  manifesto e service worker da versão web
@@ -124,4 +139,4 @@ Projeto de [@Lucasbrandaocabral](https://github.com/Lucasbrandaocabral), desenvo
 
 ## Licença
 
-MIT. Usa [PDF.js](https://github.com/mozilla/pdf.js) (Apache-2.0), [pdf-lib](https://github.com/cantoo-scribe/pdf-lib) (MIT), [Tesseract.js](https://github.com/naptha/tesseract.js) (Apache-2.0), [signpdf](https://github.com/vbuch/node-signpdf) (MIT), [node-forge](https://github.com/digitalbazaar/forge) (BSD/GPL), [docx](https://github.com/dolanmiu/docx) (MIT), [jsdiff](https://github.com/kpdecker/jsdiff) (BSD), [fflate](https://github.com/101arrowz/fflate) (MIT) e [Electron](https://www.electronjs.org/) (MIT).
+MIT. Usa [PDF.js](https://github.com/mozilla/pdf.js) (Apache-2.0), [pdf-lib](https://github.com/cantoo-scribe/pdf-lib) (MIT), [Tesseract.js](https://github.com/naptha/tesseract.js) (Apache-2.0), [signpdf](https://github.com/vbuch/node-signpdf) (MIT), [node-forge](https://github.com/digitalbazaar/forge) (BSD/GPL), [docx](https://github.com/dolanmiu/docx) (MIT), [jsdiff](https://github.com/kpdecker/jsdiff) (BSD), [fflate](https://github.com/101arrowz/fflate) (MIT), [Electron](https://www.electronjs.org/) (MIT) e [electron-updater](https://github.com/electron-userland/electron-builder) (MIT).
