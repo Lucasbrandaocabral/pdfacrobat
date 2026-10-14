@@ -132,6 +132,7 @@ public class NativeFilesPlugin extends Plugin {
         Intent data = result.getData();
         if (result.getResultCode() != Activity.RESULT_OK || data == null || data.getData() == null) {
             call.resolve(new JSObject().put("canceled", true));
+            getBridge().releaseCall(call);
             return;
         }
         Uri uri = data.getData();
@@ -147,6 +148,9 @@ public class NativeFilesPlugin extends Plugin {
             call.resolve(ret);
         } catch (Exception e) {
             call.reject("Não foi possível salvar: " + e.getMessage(), e);
+        } finally {
+            // A chamada guardada enquanto o seletor estava aberto leva o arquivo inteiro.
+            getBridge().releaseCall(call);
         }
     }
 
@@ -161,6 +165,7 @@ public class NativeFilesPlugin extends Plugin {
         Intent data = result.getData();
         if (result.getResultCode() != Activity.RESULT_OK || data == null || data.getData() == null) {
             call.resolve(new JSObject().put("canceled", true));
+            getBridge().releaseCall(call);
             return;
         }
         Uri tree = data.getData();
@@ -184,6 +189,8 @@ public class NativeFilesPlugin extends Plugin {
                 call.resolve(ret);
             } catch (Exception e) {
                 call.reject("Não foi possível salvar os arquivos: " + e.getMessage(), e);
+            } finally {
+                getBridge().releaseCall(call);
             }
         });
     }
