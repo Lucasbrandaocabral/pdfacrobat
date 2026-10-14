@@ -1,0 +1,134 @@
+# Fontes incluídas
+
+Fontes do [Google Fonts](https://fonts.google.com), redistribuídas conforme as licenças abaixo
+(SIL Open Font License 1.1, Apache 2.0 ou Ubuntu Font Licence). Apenas o subconjunto latino,
+convertido para TrueType sem hinting por `scripts/build-fonts.py`.
+
+- **Roboto** — Copyright 2011 The Roboto Project Authors (https://github.com/googlefonts/roboto-classic)  https://openfontlicense.org
+- **Open Sans** — Copyright 2020 The Open Sans Project Authors (https://github.com/googlefonts/opensans)  http://scripts.sil.org/OFL
+- **Lato** — Copyright (c) 2010-2011 by tyPoland Lukasz Dziedzic with Reserved Font Name "Lato". Licensed under the SIL Open Font License, Version 1.1.  http://scripts.sil.org/OFL
+- **Montserrat** — Copyright 2011 The Montserrat Project Authors (https://github.com/JulietaUla/Montserrat)  https://openfontlicense.org
+- **Poppins** — Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)  https://scripts.sil.org/OFL
+- **Inter** — Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)  https://openfontlicense.org
+- **Raleway** — Copyright 2010 The Raleway Project Authors (impallari@gmail.com), with Reserved Font Name "Raleway".  http://scripts.sil.org/OFL
+- **Nunito** — Copyright 2014 The Nunito Project Authors (https://github.com/googlefonts/nunito)  https://scripts.sil.org/OFL
+- **Nunito Sans** — Copyright 2016 The Nunito Sans Project Authors (https://github.com/Fonthausen/NunitoSans)  https://scripts.sil.org/OFL
+- **Ubuntu** — Copyright 2011 Canonical Ltd.  Licensed under the Ubuntu Font Licence 1.0
+- **Noto Sans** — Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)  https://openfontlicense.org
+- **PT Sans** — Copyright © 2009 ParaType Ltd. All rights reserved.  http://scripts.sil.org/OFL_web
+- **Source Sans 3** — © 2023 Adobe (http://www.adobe.com/), with Reserved Font Name ‘Source’  http://scripts.sil.org/OFL
+- **Work Sans** — Copyright 2019 The Work Sans Project Authors (https://github.com/weiweihuanghuang/Work-Sans)  http://scripts.sil.org/OFL
+- **Rubik** — Copyright 2015 The Rubik Project Authors (https://github.com/googlefonts/rubik)  https://scripts.sil.org/OFL
+- **Mulish** — Copyright 2016 The Mulish Project Authors (https://github.com/googlefonts/mulish)  http://scripts.sil.org/OFL
+- **Barlow** — Copyright 2017 The Barlow Project Authors (https://github.com/jpt/barlow)  http://scripts.sil.org/OFL
+- **Fira Sans** — Digitized data copyright 2012-2016, The Mozilla Foundation and Telefonica S.A.  http://scripts.sil.org/OFL
+- **Karla** — Copyright 2019 The Karla Project Authors (https://github.com/googlefonts/karla)  https://scripts.sil.org/OFL
+- **Josefin Sans** — Copyright 2010 The Josefin Sans Project Authors (https://github.com/ThomasJockin/JosefinSansFont-master), with Reserved Font Name "Josefin Sans".  http://scripts.sil.org/OFL
+- **Archivo** — Copyright 2020 The Archivo Project Authors (https://github.com/Omnibus-Type/Archivo)  http://scripts.sil.org/OFL
+- **Quicksand** — Copyright 2019 The Quicksand Project Authors (https://github.com/andrew-paglinawan/QuicksandFamily.git), with Reserved Font Name "Quicksand"  https://scripts.sil.org/OFL
+- **Cabin** — Copyright 2018 The Cabin Project Authors (https://github.com/impallari/Cabin)  https://scripts.sil.org/OFL
+- **Titillium Web** — Copyright (c) 2009-2011 by Accademia di Belle Arti di Urbino and students of MA course of Visual design. Some rights reserved.  http://scripts.sil.org/OFL
+- **Hind** — Copyright (c) 2014 Indian Type Foundry (info@indiantypefoundry.com)  http://scripts.sil.org/OFL
+- **Heebo** — Copyright 2014 The Heebo Project Authors (https://github.com/OdedEzer/heebo)  https://scripts.sil.org/OFL
+- **Manrope** — Copyright 2019 The Manrope Project Authors (https://github.com/sharanda/manrope)  http://scripts.sil.org/OFL
+- **DM Sans** — Copyright 2014 The DM Sans Project Authors (https://github.com/googlefonts/dm-fonts)  https://scripts.sil.org/OFL
+- **Libre Franklin** — Copyright 2020 The Libre Franklin Project Authors (https://github.com/googlefonts/Libre-Franklin)  https://openfontlicense.org
+- **Lexend** — Copyright 2019 The Lexend Project Authors (https://github.com/googlefonts/lexend)  https://scripts.sil.org/OFL
+- **Outfit** — Copyright 2021 The Outfit Project Authors (https://github.com/Outfitio/Outfit-Fonts)  https://scripts.sil.org/OFL
+- **Plus Jakarta Sans** — Copyright 2020 The Plus Jakarta Sans Project Authors (https://github.com/tokotype/PlusJakartaSans)  https://scripts.sil.org/OFL
+- **Figtree** — Copyright 2022 The Figtree Project Authors (https://github.com/erikdkennedy/figtree)  https://openfontlicense.org
+- **Kanit** — Copyright 2020 The Kanit Project Authors (https://github.com/cadsondemak/kanit)  https://scripts.sil.org/OFL
+- **Exo 2** — Copyright 2013 The Exo 2 Project Authors (https://github.com/googlefonts/Exo-2.0)  https://openfontlicense.org
+- **Oxygen** — Copyright (c) 2012, Vernon Adams (vern@newtypography.co.uk), with Reserved Font Names 'Oxygen'  http://scripts.sil.org/OFL
+- **Varela Round** — Copyright 2023 The Varela Round Project Authors (https://github.com/alefalefalef/Varela-Round-Hebrew/), with Reserved Font Names 'Varela' and 'Varela Round'.  http://scripts.sil.org/OFL
+- **Comfortaa** — Copyright 2011 The Comfortaa Project Authors (https://github.com/alexeiva/comfortaa), with Reserved Font Name "Comfortaa".  http://scripts.sil.org/OFL
+- **Maven Pro** — Copyright 2011 The Maven Pro Project Authors (https://github.com/m4rc1e/mavenproFont), with Reserved Font Name "Maven Pro".  https://openfontlicense.org
+- **Assistant** — Copyright 2020 The Assistant Project Authors (https://github.com/hafontia/Assistant). Copyright 2010 The Source Sans Pro Authors (https://github.com/adobe-fonts/source-sans-pro), with Reserved Font Name 'Source'. Source is a trademark of Adobe Systems Incorporated in the United States and/or other countries.  http://scripts.sil.org/OFL
+- **Space Grotesk** — Copyright 2020 The Space Grotesk Project Authors (https://github.com/floriankarsten/space-grotesk)  https://scripts.sil.org/OFL
+- **IBM Plex Sans** — Copyright 2019 IBM Corp. All rights reserved.  http://scripts.sil.org/OFL
+- **Red Hat Display** — Copyright 2024 The Red Hat Project Authors (https://github.com/RedHatOfficial/RedHatFont)  https://openfontlicense.org
+- **Sora** — Copyright 2019 The Sora Project Authors (https://github.com/sora-xor/sora-font)  https://scripts.sil.org/OFL
+- **Urbanist** — Copyright 2021 The Urbanist Project Authors (https://github.com/coreyhu/Urbanist)  https://scripts.sil.org/OFL
+- **Arimo** — Copyright 2020 The Arimo Project Authors (https://github.com/googlefonts/arimo)  https://openfontlicense.org
+- **Carlito** — Copyright 2013 The Carlito Project Authors (https://github.com/googlefonts/carlito)  https://scripts.sil.org/OFL
+- **Merriweather** — Copyright 2024 The Merriweather Project Authors (https://github.com/EbenSorkin/Merriweather4) with Reserved Font Name "Merriweather".  https://openfontlicense.org
+- **Playfair Display** — Copyright 2017 The Playfair Display Project Authors (https://github.com/clauseggers/Playfair-Display), with Reserved Font Name "Playfair Display".  http://scripts.sil.org/OFL
+- **Lora** — Copyright 2011 The Lora Project Authors (https://github.com/cyrealtype/Lora-Cyrillic), with Reserved Font Name "Lora".  https://scripts.sil.org/OFL
+- **PT Serif** — Copyright © 2010 ParaType Ltd. All rights reserved.  http://scripts.sil.org/OFL_web
+- **Noto Serif** — Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)  https://openfontlicense.org
+- **Roboto Slab** — Copyright 2018 The Roboto Slab Project Authors (https://github.com/googlefonts/robotoslab)  http://www.apache.org/licenses/LICENSE-2.0
+- **Libre Baskerville** — Copyright 2012 The Libre Baskerville Project Authors (https://github.com/impallari/Libre-Baskerville)  https://openfontlicense.org
+- **Crimson Text** — Copyright 2010 The Crimson Text Project Authors (https://github.com/googlefonts/Crimson)  https://scripts.sil.org/OFL
+- **EB Garamond** — Copyright 2017 The EB Garamond Project Authors (https://github.com/octaviopardo/EBGaramond12)  https://openfontlicense.org
+- **Cormorant Garamond** — Copyright 2015 The Cormorant Project Authors (github.com/CatharsisFonts/Cormorant)  https://openfontlicense.org
+- **Bitter** — Copyright 2011 The Bitter Project Authors (https://github.com/solmatas/BitterPro)  https://openfontlicense.org
+- **Arvo** — Copyright (c) 2010 Anton Koovit.  http://www.korkork.com/license/arvo/
+- **Zilla Slab** — Copyright 2017, The Mozilla Foundation  http://scripts.sil.org/OFL
+- **Spectral** — Copyright 2017 The Spectral Project Authors (https://github.com/productiontype/Spectral)  https://openfontlicense.org
+- **Source Serif 4** — © 2014 - 2021 Adobe Systems Incorporated (http://www.adobe.com/), with Reserved Font Name ‘Source’.  http://scripts.sil.org/OFL
+- **DM Serif Display** — Copyright 2014 - 2017 Adobe Systems Incorporated (http://www.adobe.com/), with Reserved Font Name 'Source'. Copyright 2019 Google LLC.  http://scripts.sil.org/OFL
+- **Cinzel** — Copyright 2020 The Cinzel Project Authors (https://github.com/NDISCOVER/Cinzel)  https://scripts.sil.org/OFL
+- **Old Standard TT** — Copyright 2011 The Old Standard Project Authors (amkryukov@gmail.com)  http://scripts.sil.org/OFL
+- **Alegreya** — Copyright 2011 The Alegreya Project Authors (https://github.com/huertatipografica/Alegreya)  http://scripts.sil.org/OFL
+- **Vollkorn** — Copyright 2018 The Vollkorn Project Authors (https://github.com/FAlthausen/Vollkorn-Typeface)  http://scripts.sil.org/OFL
+- **Domine** — Copyright 2020 The Domine Project Authors (https://github.com/googlefonts/domine)  http://scripts.sil.org/OFL
+- **Prata** — Copyright 2011 The Prata Project Authors (contact@cyreal.org)  http://scripts.sil.org/OFL
+- **Tinos** — Copyright 2026 The Tinos Project Authors (https://github.com/googlefonts/tinos)  https://openfontlicense.org
+- **Caladea** — Copyright 2012 The Caladea Project Authors (https://github.com/huertatipografica/Caladea)  http://scripts.sil.org/OFL
+- **Gelasio** — Copyright 2022 The Gelasio Project Authors (https://github.com/SorkinType/Gelasio)  https://openfontlicense.org
+- **Bebas Neue** — Copyright 2019 The Bebas Neue Project Authors (https://github.com/dharmatype/Bebas-Neue)  http://scripts.sil.org/OFL
+- **Anton** — Copyright 2020 The Anton Project Authors (https://github.com/googlefonts/AntonFont.git)  https://scripts.sil.org/OFL
+- **Oswald** — Copyright 2016 The Oswald Project Authors (https://github.com/googlefonts/OswaldFont)  https://scripts.sil.org/OFL
+- **Lobster** — Copyright 2010 The Lobster Project Authors (https://github.com/impallari/The-Lobster-Font), with Reserved Font Name "Lobster".  http://scripts.sil.org/OFL
+- **Righteous** — Copyright (c) 2011 by Brian J. Bonislawsky DBA Astigmatic (AOETI) (astigma@astigmatic.com), with ReservedFont Name "Righteous"  http://scripts.sil.org/OFL
+- **Abril Fatface** — Copyright (c) 2011, Copyright (c) 2011, TypeTogether (www.type-together.com), with Reserved Font Names "Abril" and "Abril Fatface"  http://scripts.sil.org/OFL
+- **Alfa Slab One** — Copyright 2016 The Alfa Slab One Project Authors (http://www.jmsole.cl | info@jmsole.cl), with Reserved Font Name "Alfa Slab".  http://scripts.sil.org/OFL
+- **Fredoka** — Copyright 2016 The Fredoka Project Authors (https://github.com/hafontia/Fredoka-One)  http://scripts.sil.org/OFL
+- **Bangers** — Copyright 2010 The Bangers Project Authors (https://github.com/googlefonts/bangers)  https://scripts.sil.org/OFL
+- **Fjalla One** — Copyright 2012 The Fjalla Project Authors (https://github.com/SorkinType/FjallaOne)  https://scripts.sil.org/OFL
+- **Archivo Black** — Copyright 2017 The Archivo Black Project Authors (https://github.com/Omnibus-Type/ArchivoBlack)  http://scripts.sil.org/OFL
+- **Black Ops One** — Copyright 2022 The PinyonScript Project Authors (https://github.com/SorkinType/Black-Ops)  https://scripts.sil.org/OFL
+- **Russo One** — Copyright (c) 2011-2012, Jovanny Lemonad (jovanny.ru), with Reserved Font Name "Russo"  http://scripts.sil.org/OFL
+- **Teko** — Copyright 2023 The Teko Project Authors (https://www.github.com/googlefonts/teko)  http://scripts.sil.org/OFL
+- **Barlow Condensed** — Copyright 2017 The Barlow Project Authors (https://github.com/jpt/barlow)  http://scripts.sil.org/OFL
+- **Orbitron** — Copyright 2018 The Orbitron Project Authors (https://github.com/theleagueof/orbitron), with Reserved Font Name: "Orbitron".  http://scripts.sil.org/OFL
+- **Press Start 2P** — Copyright 2012 The Press Start 2P Project Authors (cody@zone38.net), with Reserved Font Name "Press Start 2P"  http://scripts.sil.org/OFL
+- **Bungee** — Copyright 2023 The Bungee Project Authors (https://github.com/djrrb/Bungee)  https://openfontlicense.org
+- **Passion One** — Copyright (c) 2011 Fontstage (info@fontstage.com), with Reserved Font Name "Passion"  http://scripts.sil.org/OFL
+- **Lilita One** — Copyright (c) 2011 Juan Montoreano (juan@remolacha.biz), with Reserved Font Names "Lilita One"  http://scripts.sil.org/OFL
+- **Luckiest Guy** — Copyright (c) 2010 by Brian J. Bonislawsky DBA Astigmatic (AOETI). All rights reserved. Available under the Apache 2.0 licence.http://www.apache.org/licenses/LICENSE-2.0.html  http://www.apache.org/licenses/LICENSE-2.0
+- **Staatliches** — Copyright 2018 The Staatliches Project Authors (https://github.com/googlefonts/staatliches)  http://scripts.sil.org/OFL
+- **Chewy** — Copyright (c) 2010 by Font Diner, Inc DBA Sideshow. All rights reserved.  http://www.apache.org/licenses/LICENSE-2.0
+- **Dancing Script** — Copyright 2016 The Dancing Script Project Authors (https://github.com/googlefonts/DancingScript), with Reserved Font Name "Dancing Script".  http://scripts.sil.org/OFL
+- **Great Vibes** — Copyright 2010 The Great Vibes Pro Project Authors (https://github.com/googlefonts/great-vibes)  https://openfontlicense.org
+- **Pacifico** — Copyright 2018 The Pacifico Project Authors (https://github.com/googlefonts/Pacifico)  http://scripts.sil.org/OFL
+- **Caveat** — Copyright 2014 The Caveat Project Authors (https://github.com/googlefonts/caveat)  http://scripts.sil.org/OFL
+- **Satisfy** — Copyright (c) 2011 by Font Diner, Inc. All rights reserved.  http://www.apache.org/licenses/LICENSE-2.0
+- **Shadows Into Light** — Copyright (c) 2010, Kimberly Geswein (kimberlygeswein.com)  http://scripts.sil.org/OFL
+- **Indie Flower** — Copyright (c) 2010, Kimberly Geswein (kimberlygeswein.com)  http://scripts.sil.org/OFL
+- **Amatic SC** — Copyright 2015 The Amatic SC Project Authors (https://github.com/googlefonts/AmaticSC)  http://scripts.sil.org/OFL
+- **Permanent Marker** — Copyright (c) 2010 by Font Diner, Inc. All rights reserved.  http://www.apache.org/licenses/LICENSE-2.0
+- **Sacramento** — Copyright (c) 2012 by Brian J. Bonislawsky DBA Astigmatic (AOETI) (astigma@astigmatic.com), with ReservedFont Name "Sacramento"  http://scripts.sil.org/OFL
+- **Allura** — Copyright 2010 The Allura Project Authors (https://github.com/googlefonts/allura)  https://scripts.sil.org/OFL
+- **Alex Brush** — Copyright 2011 The Alex Brush Project Authors (https://github.com/googlefonts/alex-brush)  https://scripts.sil.org/OFL
+- **Parisienne** — Copyright (c) 2012 by Brian J. Bonislawsky DBA Astigmatic (AOETI) (astigma@astigmatic.com), with ReservedFont Name "Parisienne"  http://scripts.sil.org/OFL
+- **Kaushan Script** — Copyright (c) 2011, Pablo Impallari (www.impallari.com|impallari@gmail.com),Copyright (c) 2011, Igino Marini. (www.ikern.com|mail@iginomarini.com),with Reserved Font Name Kaushan Script.  http://scripts.sil.org/OFL
+- **Yellowtail** — Copyright (c) 2011 by Brian J. Bonislawsky DBA Astigmatic (AOETI). All rights reserved. Available under the Apache 2.0 licence.
+http://www.apache.org/licenses/LICENSE-2.0.html
+- **Cookie** — Copyright (c) 2011 by Ania Kruk (hello@aniakruk.com), with Reserved Font Name Cookie.  http://scripts.sil.org/OFL
+- **Tangerine** — Copyright (c) 2010 by Toshi Omagari. All rights reserved.
+- **Homemade Apple** — Copyright (c) 2010 by Font Diner, Inc. All rights reserved.  http://www.apache.org/licenses/LICENSE-2.0
+- **Patrick Hand** — Copyright (c) 2012 Patrick Wagesreiter (mail@patrickwagesreiter.at)  http://scripts.sil.org/OFL
+- **Kalam** — Copyright (c) 2014 Indian Type Foundry (info@indiantypefoundry.com)  http://scripts.sil.org/OFL
+- **Gloria Hallelujah** — Copyright (c) 2010, Kimberly Geswein (kimberlygeswein.com)  http://scripts.sil.org/OFL
+- **Courgette** — Copyright (c) 2012, Sorkin Type Co (www.sorkintype.com) with Reserved Font Name "Courgette".  http://scripts.sil.org/OFL
+- **Handlee** — Copyright (c) 2011, Admix Designs (http://www.admixdesigns.com/) with Reserved Font Name Handlee.  http://scripts.sil.org/OFL
+- **Roboto Mono** — Copyright 2015 The Roboto Mono Project Authors (https://github.com/googlefonts/robotomono)  https://openfontlicense.org
+- **Source Code Pro** — © 2023 Adobe (http://www.adobe.com/), with Reserved Font Name ‘Source’  https://openfontlicense.org
+- **Space Mono** — Copyright 2016 The Space Mono Project Authors (https://github.com/googlefonts/spacemono)  https://openfontlicense.org
+- **IBM Plex Mono** — Copyright 2017 IBM Corp. All rights reserved.  http://scripts.sil.org/OFL
+- **Inconsolata** — Copyright 2006 The Inconsolata Project Authors (https://github.com/cyrealtype/Inconsolata)  http://scripts.sil.org/OFL
+- **Fira Code** — Copyright 2014-2020 The Fira Code Project Authors (https://github.com/tonsky/FiraCode)  http://scripts.sil.org/OFL
+- **JetBrains Mono** — Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)  https://scripts.sil.org/OFL
+- **Courier Prime** — Copyright 2015 The Courier Prime Project Authors (https://github.com/quoteunquoteapps/CourierPrime).  http://scripts.sil.org/OFL
+- **Cousine** — Copyright 2026 The Cousine Project Authors (https://github.com/googlefonts/cousine)  https://openfontlicense.org

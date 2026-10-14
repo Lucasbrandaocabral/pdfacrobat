@@ -20,6 +20,7 @@
     "android": "npm run build && cap sync android"
   },
   "devDependencies": {
+    "@cantoo/fontkit": "2.0.12",
     "@cantoo/pdf-lib": "2.11.1",
     "@capacitor/android": "8.5.3",
     "@capacitor/app": "8.1.2",

@@ -1,0 +1,790 @@
+{
+ "fonts": [
+  {
+   "id": "roboto",
+   "family": "Roboto",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "open-sans",
+   "family": "Open Sans",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "lato",
+   "family": "Lato",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "montserrat",
+   "family": "Montserrat",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "poppins",
+   "family": "Poppins",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "inter",
+   "family": "Inter",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "raleway",
+   "family": "Raleway",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "nunito",
+   "family": "Nunito",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "nunito-sans",
+   "family": "Nunito Sans",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "ubuntu",
+   "family": "Ubuntu",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "noto-sans",
+   "family": "Noto Sans",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "pt-sans",
+   "family": "PT Sans",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "source-sans-3",
+   "family": "Source Sans 3",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "work-sans",
+   "family": "Work Sans",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "rubik",
+   "family": "Rubik",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "mulish",
+   "family": "Mulish",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "barlow",
+   "family": "Barlow",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "fira-sans",
+   "family": "Fira Sans",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "karla",
+   "family": "Karla",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "josefin-sans",
+   "family": "Josefin Sans",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "archivo",
+   "family": "Archivo",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "quicksand",
+   "family": "Quicksand",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "cabin",
+   "family": "Cabin",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "titillium-web",
+   "family": "Titillium Web",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "hind",
+   "family": "Hind",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "heebo",
+   "family": "Heebo",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "manrope",
+   "family": "Manrope",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "dm-sans",
+   "family": "DM Sans",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "libre-franklin",
+   "family": "Libre Franklin",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "lexend",
+   "family": "Lexend",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "outfit",
+   "family": "Outfit",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "plus-jakarta-sans",
+   "family": "Plus Jakarta Sans",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "figtree",
+   "family": "Figtree",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "kanit",
+   "family": "Kanit",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "exo-2",
+   "family": "Exo 2",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "oxygen",
+   "family": "Oxygen",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "varela-round",
+   "family": "Varela Round",
+   "category": "sans",
+   "bold": false
+  },
+  {
+   "id": "comfortaa",
+   "family": "Comfortaa",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "maven-pro",
+   "family": "Maven Pro",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "assistant",
+   "family": "Assistant",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "space-grotesk",
+   "family": "Space Grotesk",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "ibm-plex-sans",
+   "family": "IBM Plex Sans",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "red-hat-display",
+   "family": "Red Hat Display",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "sora",
+   "family": "Sora",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "urbanist",
+   "family": "Urbanist",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "arimo",
+   "family": "Arimo",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "carlito",
+   "family": "Carlito",
+   "category": "sans",
+   "bold": true
+  },
+  {
+   "id": "merriweather",
+   "family": "Merriweather",
+   "category": "serif",
+   "bold": true
+  },
+  {
+   "id": "playfair-display",
+   "family": "Playfair Display",
+   "category": "serif",
+   "bold": true
+  },
+  {
+   "id": "lora",
+   "family": "Lora",
+   "category": "serif",
+   "bold": true
+  },
+  {
+   "id": "pt-serif",
+   "family": "PT Serif",
+   "category": "serif",
+   "bold": true
+  },
+  {
+   "id": "noto-serif",
+   "family": "Noto Serif",
+   "category": "serif",
+   "bold": true
+  },
+  {
+   "id": "roboto-slab",
+   "family": "Roboto Slab",
+   "category": "serif",
+   "bold": true
+  },
+  {
+   "id": "libre-baskerville",
+   "family": "Libre Baskerville",
+   "category": "serif",
+   "bold": true
+  },
+  {
+   "id": "crimson-text",
+   "family": "Crimson Text",
+   "category": "serif",
+   "bold": true
+  },
+  {
+   "id": "eb-garamond",
+   "family": "EB Garamond",
+   "category": "serif",
+   "bold": true
+  },
+  {
+   "id": "cormorant-garamond",
+   "family": "Cormorant Garamond",
+   "category": "serif",
+   "bold": true
+  },
+  {
+   "id": "bitter",
+   "family": "Bitter",
+   "category": "serif",
+   "bold": true
+  },
+  {
+   "id": "arvo",
+   "family": "Arvo",
+   "category": "serif",
+   "bold": true
+  },
+  {
+   "id": "zilla-slab",
+   "family": "Zilla Slab",
+   "category": "serif",
+   "bold": true
+  },
+  {
+   "id": "spectral",
+   "family": "Spectral",
+   "category": "serif",
+   "bold": true
+  },
+  {
+   "id": "source-serif-4",
+   "family": "Source Serif 4",
+   "category": "serif",
+   "bold": true
+  },
+  {
+   "id": "dm-serif-display",
+   "family": "DM Serif Display",
+   "category": "serif",
+   "bold": false
+  },
+  {
+   "id": "cinzel",
+   "family": "Cinzel",
+   "category": "serif",
+   "bold": true
+  },
+  {
+   "id": "old-standard-tt",
+   "family": "Old Standard TT",
+   "category": "serif",
+   "bold": true
+  },
+  {
+   "id": "alegreya",
+   "family": "Alegreya",
+   "category": "serif",
+   "bold": true
+  },
+  {
+   "id": "vollkorn",
+   "family": "Vollkorn",
+   "category": "serif",
+   "bold": true
+  },
+  {
+   "id": "domine",
+   "family": "Domine",
+   "category": "serif",
+   "bold": true
+  },
+  {
+   "id": "prata",
+   "family": "Prata",
+   "category": "serif",
+   "bold": false
+  },
+  {
+   "id": "tinos",
+   "family": "Tinos",
+   "category": "serif",
+   "bold": true
+  },
+  {
+   "id": "caladea",
+   "family": "Caladea",
+   "category": "serif",
+   "bold": true
+  },
+  {
+   "id": "gelasio",
+   "family": "Gelasio",
+   "category": "serif",
+   "bold": true
+  },
+  {
+   "id": "bebas-neue",
+   "family": "Bebas Neue",
+   "category": "display",
+   "bold": false
+  },
+  {
+   "id": "anton",
+   "family": "Anton",
+   "category": "display",
+   "bold": false
+  },
+  {
+   "id": "oswald",
+   "family": "Oswald",
+   "category": "display",
+   "bold": true
+  },
+  {
+   "id": "lobster",
+   "family": "Lobster",
+   "category": "display",
+   "bold": false
+  },
+  {
+   "id": "righteous",
+   "family": "Righteous",
+   "category": "display",
+   "bold": false
+  },
+  {
+   "id": "abril-fatface",
+   "family": "Abril Fatface",
+   "category": "display",
+   "bold": false
+  },
+  {
+   "id": "alfa-slab-one",
+   "family": "Alfa Slab One",
+   "category": "display",
+   "bold": false
+  },
+  {
+   "id": "fredoka",
+   "family": "Fredoka",
+   "category": "display",
+   "bold": true
+  },
+  {
+   "id": "bangers",
+   "family": "Bangers",
+   "category": "display",
+   "bold": false
+  },
+  {
+   "id": "fjalla-one",
+   "family": "Fjalla One",
+   "category": "display",
+   "bold": false
+  },
+  {
+   "id": "archivo-black",
+   "family": "Archivo Black",
+   "category": "display",
+   "bold": false
+  },
+  {
+   "id": "black-ops-one",
+   "family": "Black Ops One",
+   "category": "display",
+   "bold": false
+  },
+  {
+   "id": "russo-one",
+   "family": "Russo One",
+   "category": "display",
+   "bold": false
+  },
+  {
+   "id": "teko",
+   "family": "Teko",
+   "category": "display",
+   "bold": true
+  },
+  {
+   "id": "barlow-condensed",
+   "family": "Barlow Condensed",
+   "category": "display",
+   "bold": true
+  },
+  {
+   "id": "orbitron",
+   "family": "Orbitron",
+   "category": "display",
+   "bold": true
+  },
+  {
+   "id": "press-start-2p",
+   "family": "Press Start 2P",
+   "category": "display",
+   "bold": false
+  },
+  {
+   "id": "bungee",
+   "family": "Bungee",
+   "category": "display",
+   "bold": false
+  },
+  {
+   "id": "passion-one",
+   "family": "Passion One",
+   "category": "display",
+   "bold": true
+  },
+  {
+   "id": "lilita-one",
+   "family": "Lilita One",
+   "category": "display",
+   "bold": false
+  },
+  {
+   "id": "luckiest-guy",
+   "family": "Luckiest Guy",
+   "category": "display",
+   "bold": false
+  },
+  {
+   "id": "staatliches",
+   "family": "Staatliches",
+   "category": "display",
+   "bold": false
+  },
+  {
+   "id": "chewy",
+   "family": "Chewy",
+   "category": "display",
+   "bold": false
+  },
+  {
+   "id": "dancing-script",
+   "family": "Dancing Script",
+   "category": "handwriting",
+   "bold": true
+  },
+  {
+   "id": "great-vibes",
+   "family": "Great Vibes",
+   "category": "handwriting",
+   "bold": false
+  },
+  {
+   "id": "pacifico",
+   "family": "Pacifico",
+   "category": "handwriting",
+   "bold": false
+  },
+  {
+   "id": "caveat",
+   "family": "Caveat",
+   "category": "handwriting",
+   "bold": true
+  },
+  {
+   "id": "satisfy",
+   "family": "Satisfy",
+   "category": "handwriting",
+   "bold": false
+  },
+  {
+   "id": "shadows-into-light",
+   "family": "Shadows Into Light",
+   "category": "handwriting",
+   "bold": false
+  },
+  {
+   "id": "indie-flower",
+   "family": "Indie Flower",
+   "category": "handwriting",
+   "bold": false
+  },
+  {
+   "id": "amatic-sc",
+   "family": "Amatic SC",
+   "category": "handwriting",
+   "bold": true
+  },
+  {
+   "id": "permanent-marker",
+   "family": "Permanent Marker",
+   "category": "handwriting",
+   "bold": false
+  },
+  {
+   "id": "sacramento",
+   "family": "Sacramento",
+   "category": "handwriting",
+   "bold": false
+  },
+  {
+   "id": "allura",
+   "family": "Allura",
+   "category": "handwriting",
+   "bold": false
+  },
+  {
+   "id": "alex-brush",
+   "family": "Alex Brush",
+   "category": "handwriting",
+   "bold": false
+  },
+  {
+   "id": "parisienne",
+   "family": "Parisienne",
+   "category": "handwriting",
+   "bold": false
+  },
+  {
+   "id": "kaushan-script",
+   "family": "Kaushan Script",
+   "category": "handwriting",
+   "bold": false
+  },
+  {
+   "id": "yellowtail",
+   "family": "Yellowtail",
+   "category": "handwriting",
+   "bold": false
+  },
+  {
+   "id": "cookie",
+   "family": "Cookie",
+   "category": "handwriting",
+   "bold": false
+  },
+  {
+   "id": "tangerine",
+   "family": "Tangerine",
+   "category": "handwriting",
+   "bold": true
+  },
+  {
+   "id": "homemade-apple",
+   "family": "Homemade Apple",
+   "category": "handwriting",
+   "bold": false
+  },
+  {
+   "id": "patrick-hand",
+   "family": "Patrick Hand",
+   "category": "handwriting",
+   "bold": false
+  },
+  {
+   "id": "kalam",
+   "family": "Kalam",
+   "category": "handwriting",
+   "bold": true
+  },
+  {
+   "id": "gloria-hallelujah",
+   "family": "Gloria Hallelujah",
+   "category": "handwriting",
+   "bold": false
+  },
+  {
+   "id": "courgette",
+   "family": "Courgette",
+   "category": "handwriting",
+   "bold": false
+  },
+  {
+   "id": "handlee",
+   "family": "Handlee",
+   "category": "handwriting",
+   "bold": false
+  },
+  {
+   "id": "roboto-mono",
+   "family": "Roboto Mono",
+   "category": "mono",
+   "bold": true
+  },
+  {
+   "id": "source-code-pro",
+   "family": "Source Code Pro",
+   "category": "mono",
+   "bold": true
+  },
+  {
+   "id": "space-mono",
+   "family": "Space Mono",
+   "category": "mono",
+   "bold": true
+  },
+  {
+   "id": "ibm-plex-mono",
+   "family": "IBM Plex Mono",
+   "category": "mono",
+   "bold": true
+  },
+  {
+   "id": "inconsolata",
+   "family": "Inconsolata",
+   "category": "mono",
+   "bold": true
+  },
+  {
+   "id": "fira-code",
+   "family": "Fira Code",
+   "category": "mono",
+   "bold": true
+  },
+  {
+   "id": "jetbrains-mono",
+   "family": "JetBrains Mono",
+   "category": "mono",
+   "bold": true
+  },
+  {
+   "id": "courier-prime",
+   "family": "Courier Prime",
+   "category": "mono",
+   "bold": true
+  },
+  {
+   "id": "cousine",
+   "family": "Cousine",
+   "category": "mono",
+   "bold": true
+  }
+ ],
+ "aliases": {
+  "arial": "arimo",
+  "helvetica": "arimo",
+  "helveticaneue": "arimo",
+  "liberationsans": "arimo",
+  "timesnewroman": "tinos",
+  "times": "tinos",
+  "liberationserif": "tinos",
+  "couriernew": "cousine",
+  "courier": "cousine",
+  "liberationmono": "cousine",
+  "calibri": "carlito",
+  "cambria": "caladea",
+  "georgia": "gelasio",
+  "segoeui": "open-sans",
+  "verdana": "noto-sans",
+  "tahoma": "pt-sans",
+  "trebuchetms": "fira-sans",
+  "garamond": "eb-garamond",
+  "bookantiqua": "domine",
+  "palatinolinotype": "domine",
+  "gillsans": "cabin",
+  "futura": "josefin-sans"
+ }
+}
