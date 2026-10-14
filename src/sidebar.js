@@ -1,5 +1,5 @@
-// Painel lateral: miniaturas (com reordenação por arrastar), marcadores do PDF
-// e lista de comentários.
+// Painel lateral: miniaturas (com botões para mover, girar e excluir cada
+// página, e reordenação por arrastar), marcadores do PDF e lista de comentários.
 import { pdfjsLib } from "./pdfjs.js";
 import { $, $$, askText, confirmAction, el, toast } from "./ui.js";
 import { icon } from "./icons.js";
@@ -10,8 +10,10 @@ const THUMB_WIDTH = 140;
 
 export class Sidebar {
   /**
-   * `actions.movePage(tab, from, to)` reordena páginas e `actions.guard(tab,
-   * flag, what)` confirma permissões antes de alterar comentários.
+   * `actions.movePage(tab, from, to)` reordena páginas, `actions.deletePage(tab,
+   * index)` e `actions.rotatePage(tab, index, delta)` excluem e giram uma
+   * página, e `actions.guard(tab, flag, what)` confirma permissões antes de
+   * alterar comentários.
    */
   constructor(manager, actions) {
     this.manager = manager;
@@ -20,6 +22,7 @@ export class Sidebar {
     this.panel = "thumbs";
     this.observer = null;
     this.dragFrom = null;
+    this.focusPage = null;
     this.buildToken = 0;
 
     $$("[data-panel-tab]", this.root).forEach((button) =>
@@ -80,18 +83,72 @@ export class Sidebar {
       },
       { root: $("#panel-thumbs"), rootMargin: "300px" },
     );
-    for (let n = 1; n <= doc.numPages; n++) {
-      const item = el(
-        "button",
-        { class: "thumb", draggable: "true", title: `Página ${n}`, dataset: { page: n } },
-        [el("div", { class: "thumb-image" }), el("span", { class: "thumb-label", text: String(n) })],
-      );
-      item.addEventListener("click", () => (tab.viewer.currentPageNumber = n));
+    const count = doc.numPages;
+    for (let n = 1; n <= count; n++) {
+      const open = el("button", { class: "thumb-open", type: "button", title: `Página ${n}`, onclick: () => (tab.viewer.currentPageNumber = n) }, [
+        el("div", { class: "thumb-image" }),
+      ]);
+      const item = el("div", { class: "thumb", draggable: "true", dataset: { page: n } }, [open, this.thumbBar(tab, n, count)]);
+      item.addEventListener("keydown", (e) => this.onThumbKey(e, tab, n, count));
       this.bindDrag(tab, item, n);
       list.append(item);
       this.observer.observe(item);
     }
     this.highlightThumb(tab.viewer.currentPageNumber || 1);
+    // Depois de mover ou excluir, o foco volta para a página na posição nova.
+    if (this.focusPage) list.querySelector(`.thumb[data-page="${this.focusPage}"] .thumb-open`)?.focus();
+    this.focusPage = null;
+  }
+
+  /** Número da página com os botões para mover, girar e excluir. */
+  thumbBar(tab, n, count) {
+    const index = n - 1;
+    const button = (name, title, disabled, run) =>
+      el("button", {
+        class: "btn icon-only small",
+        type: "button",
+        title,
+        "aria-label": `${title} (página ${n})`,
+        disabled,
+        html: icon(name),
+        onclick: run,
+      });
+    return el("div", { class: "thumb-bar" }, [
+      button("up", "Mover para cima", n === 1, () => this.movePage(tab, index, index - 1)),
+      button("down", "Mover para baixo", n === count, () => this.movePage(tab, index, index + 1)),
+      el("span", { class: "thumb-label", text: String(n) }),
+      button("rotateCw", "Girar para a direita", false, () => {
+        this.focusPage = n;
+        this.actions.rotatePage(tab, index, 90);
+      }),
+      button("trash", "Excluir página", count === 1, () => this.deletePage(tab, index, count)),
+    ]);
+  }
+
+  movePage(tab, from, to) {
+    this.focusPage = to + 1;
+    this.actions.movePage(tab, from, to);
+  }
+
+  deletePage(tab, index, count) {
+    this.focusPage = Math.min(index + 1, count - 1);
+    this.actions.deletePage(tab, index);
+  }
+
+  /** Delete exclui a página da miniatura; Alt+↑/↓ a movem; ↑/↓ andam entre as miniaturas. */
+  onThumbKey(e, tab, n, count) {
+    if (e.defaultPrevented || e.target.closest(".thumb-bar")) return;
+    const index = n - 1;
+    if ((e.key === "Delete" || e.key === "Backspace") && count > 1) {
+      e.preventDefault();
+      this.deletePage(tab, index, count);
+    } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+      e.preventDefault();
+      const to = e.key === "ArrowUp" ? index - 1 : index + 1;
+      if (to < 0 || to >= count) return;
+      if (e.altKey) this.movePage(tab, index, to);
+      else $(`#thumbnails .thumb[data-page="${to + 1}"] .thumb-open`)?.focus();
+    }
   }
 
   bindDrag(tab, item, n) {
@@ -103,7 +160,9 @@ export class Sidebar {
     item.addEventListener("dragover", (e) => {
       if (this.dragFrom === null) return;
       e.preventDefault();
-      const after = e.offsetY > item.offsetHeight / 2;
+      // Metade de baixo da miniatura: solta depois dela.
+      const box = item.getBoundingClientRect();
+      const after = e.clientY > box.top + box.height / 2;
       item.classList.toggle("drop-before", !after);
       item.classList.toggle("drop-after", after);
     });

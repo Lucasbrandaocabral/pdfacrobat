@@ -24,8 +24,12 @@ const current = (tab) => tab.viewer.currentPageNumber - 1;
 
 export async function rotate(app, delta) {
   const tab = requireTab(app);
+  await rotatePageAt(app, tab, current(tab), delta);
+}
+
+/** Gira a página `index` (contando do 0). */
+export async function rotatePageAt(app, tab, index, delta) {
   if (!(await app.guard(tab, Perm.ASSEMBLE, "reorganizar páginas"))) return;
-  const index = current(tab);
   await app.run("Girando página…", () => tab.edit((doc) => ops.rotatePages(doc, [index], delta), { keepView: false, page: index + 1 }));
 }
 
@@ -38,6 +42,18 @@ export async function deletePage(app) {
   await app.run("Excluindo página…", () =>
     tab.edit((doc) => ops.deletePages(doc, [n - 1]), { keepView: false, page: Math.min(n, tab.doc.numPages - 1) }),
   );
+}
+
+/** Exclui a página `index` (contando do 0) sem perguntar: Desfazer traz de volta. */
+export async function deletePageAt(app, tab, index) {
+  if (!(await app.guard(tab, Perm.ASSEMBLE, "reorganizar páginas"))) return;
+  const count = tab.doc.numPages;
+  if (count <= 1) return toast("Um PDF precisa ter pelo menos uma página.");
+  const done = await app.run("Excluindo página…", async () => {
+    await tab.edit((doc) => ops.deletePages(doc, [index]), { keepView: false, page: Math.min(index + 1, count - 1) });
+    return true;
+  });
+  if (done) toast(`Página ${index + 1} excluída. Para trazer de volta, use Desfazer.`);
 }
 
 export async function movePage(app, tab, from, to) {

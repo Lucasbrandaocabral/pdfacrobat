@@ -188,7 +188,7 @@ body:not(.has-doc) [data-needs-doc] {
 .btn:focus-visible,
 .tool:focus-visible,
 .category:focus-visible,
-.thumb:focus-visible,
+.thumb-open:focus-visible,
 .tab:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
@@ -607,14 +607,42 @@ textarea:focus {
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  padding: 6px;
+  padding: 6px 6px 2px;
   border: 2px solid transparent;
   border-radius: var(--radius);
-  background: none;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
   position: relative;
+}
+
+.thumb-open {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+/* Número da página entre os botões; os botões aparecem na miniatura da
+   página atual, ao passar o mouse e ao navegar pelo teclado. */
+.thumb-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 140px;
+}
+
+.thumb-bar .btn {
+  visibility: hidden;
+}
+
+.thumb:hover .thumb-bar .btn,
+.thumb:focus-within .thumb-bar .btn,
+.thumb.active .thumb-bar .btn {
+  visibility: visible;
+}
+
+.thumb-bar .btn .icon {
+  width: 15px;
+  height: 15px;
 }
 
 .thumb:hover {

@@ -55,6 +55,10 @@ export function deletePages(doc, indices) {
 export function movePage(doc, from, to) {
   const page = doc.getPage(from);
   doc.removePage(from);
+  // O removePage do pdf-lib também apaga o objeto da página: sem devolvê-lo,
+  // a página reinserida apontaria para o nada e o PDF ficaria quebrado (o
+  // leitor mostrava só uma página em branco).
+  doc.context.assign(page.ref, page.node);
   doc.insertPage(to, page);
 }
 

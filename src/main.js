@@ -34,6 +34,14 @@ app.sidebar = new Sidebar(manager, {
     await app.tools.settled();
     return documentFeatures.movePage(app, tab, from, to);
   },
+  deletePage: async (tab, index) => {
+    await app.tools.settled();
+    return documentFeatures.deletePageAt(app, tab, index);
+  },
+  rotatePage: async (tab, index, delta) => {
+    await app.tools.settled();
+    return documentFeatures.rotatePageAt(app, tab, index, delta);
+  },
   guard: app.guard,
   run: async (message, task) => {
     await app.tools.settled();
