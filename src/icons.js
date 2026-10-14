@@ -32,6 +32,7 @@ const paths = {
   image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>',
   sign: '<path d="M3 17c3-3 4-9 6-9s-1 9 2 9 3-4 5-4 1 4 3 4h2"/><path d="M3 21h18"/>',
   editText: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4M14 20h6"/>',
+  addText: '<path d="M3 7V4h12v3M9 4v15M6.5 19h5"/><path d="M18 12v8M14 16h8"/>',
   watermark: `${DOC}<path d="M8 17 16 11" opacity=".6"/>`,
   headerFooter: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 17h8"/>',
   pages: '<rect x="4" y="6" width="11" height="15" rx="1.5"/><path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h9A1.5 1.5 0 0 1 20 4.5v12a1.5 1.5 0 0 1-1.5 1.5H15"/>',

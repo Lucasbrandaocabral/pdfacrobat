@@ -49,8 +49,9 @@ export async function getTextItems(page) {
     const [a, b, c, d, e, f] = item.transform;
     const size = Math.hypot(c, d) || Math.hypot(a, b);
     const style = content.styles[item.fontName] || {};
-    const ascent = style.ascent ?? 0.8;
-    const descent = style.descent ?? -0.2;
+    // Fontes Type3 (comuns em PDFs do Canva) vêm sem essas medidas (NaN).
+    const ascent = style.ascent > 0 && style.ascent < 2 ? style.ascent : 0.8;
+    const descent = style.descent <= 0 && style.descent > -1 ? style.descent : -0.2;
     const angle = Math.atan2(b, a);
     const width = item.width;
     // Caixa no espaço do texto (sem rotação) a partir da linha de base.
@@ -84,10 +85,19 @@ export async function getTextItems(page) {
 
 /** Nome real da fonte (ex.: "ABCDEF+Calibri-Bold") para inferir negrito/itálico. */
 export function fontRealName(page, fontName) {
+  return fontInfo(page, fontName).name;
+}
+
+/**
+ * O que o PDF.js sabe da fonte: nome real e, quando ela foi carregada no
+ * navegador para desenhar a página, o nome da família no CSS (`face`).
+ */
+export function fontInfo(page, fontName) {
   try {
     const font = page.commonObjs.get(fontName);
-    return font?.name || "";
+    const usable = font && !font.isType3Font && !font.missingFile && font.loadedName;
+    return { name: font?.name || "", face: usable ? font.loadedName : null };
   } catch {
-    return "";
+    return { name: "", face: null };
   }
 }

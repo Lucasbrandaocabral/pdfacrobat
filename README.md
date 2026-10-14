@@ -10,8 +10,8 @@ Leitor e editor de PDF para Windows, macOS, Linux, navegador e celular, inspirad
 |---|---|
 | **Ler** | Vários documentos em abas, miniaturas, marcadores (sumário) do PDF, zoom (inclusive Ctrl + roda do mouse), pesquisa com destaque, seleção e cópia de texto, links, PDFs com senha |
 | **Comentar e revisar** | Destacar, sublinhar e tachar texto; notas adesivas; caixas de texto; desenho à mão livre; retângulo, elipse, linha e seta; carimbos (Aprovado, Reprovado, Confidencial, Rascunho, Recebido, Revisado, Pago); painel com todos os comentários para ir até cada um, editar ou excluir |
-| **Editar** | Corrigir textos do PDF clicando neles; mover, redimensionar, substituir e excluir imagens, vendo como fica antes de concluir; adicionar texto e imagens; marca d'água; cabeçalho, rodapé e numeração de páginas |
-| **Preencher e assinar** | Preencher os campos de formulários; pôr texto, ✓, ✗, ● e a data de hoje em qualquer ponto da página; assinar digitando o nome (4 estilos de letra manuscrita), desenhando com o mouse, a caneta ou o dedo, ou com a foto da assinatura feita no papel (o fundo branco é removido); antes de concluir, dá para arrastar a assinatura e mudar o tamanho dela pelos cantos (ou com as setas do teclado), já vendo como vai ficar; iniciais; a assinatura e as iniciais ficam salvas no aparelho para usar de novo; assinatura digital com certificado A1 (.pfx/.p12, como e-CPF e e-CNPJ) |
+| **Editar** | Editar o texto do PDF clicando na linha: o texto antigo sai de verdade da página (sem caixa por cima, mesmo sobre fotos e fundos coloridos) e o novo fica no mesmo lugar, com a fonte original quando ela tem as letras; trocar a fonte, o tamanho, a cor, negrito e itálico, apagar a linha ou arrastá-la para outro lugar; adicionar texto com qualquer uma das 127 fontes do Google Fonts que vêm com o app (pesquisa por nome e por categoria); mover, redimensionar, substituir e excluir imagens, vendo como fica antes de concluir; adicionar imagens; marca d'água; cabeçalho, rodapé e numeração de páginas |
+| **Preencher e assinar** | Preencher os campos de formulários; pôr texto (com a fonte que quiser), ✓, ✗, ● e a data de hoje em qualquer ponto da página; assinar digitando o nome (4 estilos de letra manuscrita), desenhando com o mouse, a caneta ou o dedo, ou com a foto da assinatura feita no papel (o fundo branco é removido); antes de concluir, dá para arrastar a assinatura e mudar o tamanho dela pelos cantos (ou com as setas do teclado), já vendo como vai ficar; iniciais; a assinatura e as iniciais ficam salvas no aparelho para usar de novo; assinatura digital com certificado A1 (.pfx/.p12, como e-CPF e e-CNPJ) |
 | **Páginas** | Girar, excluir, inserir em branco e reordenar, pelos botões de cada miniatura (subir, descer, girar, excluir) ou arrastando as miniaturas; inserir outros PDFs ou imagens, extrair páginas e dividir em vários arquivos |
 | **Proteger** | Senha para abrir (AES-256) e restrições de impressão, edição e cópia; remover senha; respeita as restrições de PDFs protegidos (pede a senha de permissões) |
 | **Converter** | Para imagens (PNG/JPG), texto (.txt) e Word (.docx); comprimir o PDF; reconhecer texto em páginas escaneadas (OCR, em português e inglês, sem internet); comparar duas versões, com as diferenças destacadas |
@@ -94,8 +94,11 @@ Na versão web os arquivos são abertos e baixados pelo navegador (vários arqui
 | Ctrl + / Ctrl − | Zoom |
 | F4 | Painel lateral |
 | Delete / Alt+↑ / Alt+↓ (numa miniatura) | Excluir / mover a página |
-| V, H, U, K, N, T, D, E | Selecionar, Destacar, Sublinhar, Tachar, Nota, Texto, Desenhar, Editar texto e imagens |
-| Esc | Voltar para a ferramenta Selecionar |
+| V, H, U, K, N, T, D, E | Selecionar, Destacar, Sublinhar, Tachar, Nota, Texto, Desenhar, Editar texto e imagens (T em Editar e em Preencher e assinar escreve na página; em Comentar, cria uma caixa de texto) |
+| Enter / Shift+Enter (editando uma linha) | Concluir / quebrar a linha |
+| Ctrl+Enter (texto novo) | Concluir (Enter quebra a linha) |
+| Ctrl+B / Ctrl+I (no texto) | Negrito / itálico |
+| Esc | Cancelar a edição aberta; sem edição, voltar para a ferramenta Selecionar |
 
 No macOS, use Cmd no lugar de Ctrl.
 
@@ -112,6 +115,7 @@ A arquitetura segue a do Acrobat moderno: um núcleo que interpreta e desenha o 
 | Edição estrutural, anotações e criptografia | Camadas PD / Cos do SDK | **pdf-lib** (versão `@cantoo/pdf-lib`, com AES-256) — `src/pdf/` |
 | OCR | Adobe Sensei | **Tesseract** (WebAssembly) |
 | Assinatura digital | PKI própria | **@signpdf** + **node-forge** (PKCS#7) |
+| Fontes | CoolType | **fontkit** (embute no PDF só as letras usadas) e 127 famílias do Google Fonts — `public/fonts/` |
 | Conversão para Word | Serviço na nuvem | **docx** |
 | Atualização automática | Adobe Updater (ARM) | **electron-updater**, a partir das Releases do GitHub — `electron/updater.cjs` |
 | Build, instaladores e web | — | **Vite**, **electron-builder**, **Gradle**, GitHub Actions e GitHub Pages |
@@ -130,9 +134,14 @@ src/tools.js             ferramentas na página: comentar, formas, carimbos, ass
 src/sidebar.js           miniaturas, marcadores e lista de comentários
 src/updates.js           aviso de atualização (desktop e Android)
 src/signature.js         criar assinatura e iniciais (digitar, desenhar, imagem) e as salvas
+src/fonts.js             catálogo de fontes: carregar na tela, embutir no PDF, reconhecer a fonte de um PDF
+src/fontpicker.js        lista de fontes com pesquisa e categorias
 src/features/            janelas e fluxos: documento, converter, OCR, comparar, certificado
 src/pdf/                 operações no arquivo: anotações, conteúdo da página, marcas, segurança, compressão
-public/                  manifesto e service worker da versão web
+src/pdf/textops.js       lê os comandos de texto da página (e dos formulários internos) e apaga uma linha
+src/pdf/textedit.js      linhas editáveis, escrever texto novo com a fonte do catálogo ou a original
+public/                  manifesto e service worker da versão web; public/fonts: as fontes e suas licenças
+scripts/build-fonts.py   baixa as fontes do Google Fonts e monta o catálogo
 ```
 
 ## Desenvolvimento
@@ -146,12 +155,13 @@ npm start            # app desktop
 npm run dist         # gera o instalador do sistema atual em release/
 npm run dist:win     # ou :mac / :linux
 npm run android      # copia a interface para o app Android (android/)
+python3 scripts/build-fonts.py   # refaz o catálogo de fontes (precisa de internet e de pip install fonttools brotli)
 cd android && ./gradlew assembleDebug   # APK de teste (precisa do JDK 21 e do Android SDK)
 ```
 
 ## Limitações
 
-- **Editar texto:** o trecho original é coberto e o novo texto é escrito por cima, no mesmo lugar, com uma fonte padrão parecida (Helvetica, Times ou Courier). Funciona bem para correções; textos com fontes especiais podem mudar um pouco de aparência.
+- **Editar texto:** a edição é por linha (um parágrafo não se reorganiza sozinho, e uma linha justificada fica com o espaçamento normal). Letras que a fonte original do PDF não tem saem com a fonte parecida do catálogo. Texto que faz parte de uma imagem (documento escaneado) é coberto com a cor do fundo; use antes o OCR. Texto transformado em desenho (curvas) não é editável como texto.
 - **Word:** a conversão leva o texto em parágrafos, sem o layout original (colunas, tabelas e imagens).
 - **Assinatura digital:** só certificados A1 (arquivo). Certificados A3 (token ou cartão) não são suportados.
 - **Comparar:** compara o texto; mudanças só em imagens não aparecem.
@@ -163,4 +173,4 @@ Projeto de [@Lucasbrandaocabral](https://github.com/Lucasbrandaocabral), desenvo
 
 ## Licença
 
-MIT. Usa [PDF.js](https://github.com/mozilla/pdf.js) (Apache-2.0), [pdf-lib](https://github.com/cantoo-scribe/pdf-lib) (MIT), [Tesseract.js](https://github.com/naptha/tesseract.js) (Apache-2.0), [signpdf](https://github.com/vbuch/node-signpdf) (MIT), [node-forge](https://github.com/digitalbazaar/forge) (BSD/GPL), [docx](https://github.com/dolanmiu/docx) (MIT), [jsdiff](https://github.com/kpdecker/jsdiff) (BSD), [fflate](https://github.com/101arrowz/fflate) (MIT), [Electron](https://www.electronjs.org/) (MIT), [Capacitor](https://capacitorjs.com/) (MIT) e [electron-updater](https://github.com/electron-userland/electron-builder) (MIT). Fontes da assinatura digitada: [Dancing Script](https://fonts.google.com/specimen/Dancing+Script), [Great Vibes](https://fonts.google.com/specimen/Great+Vibes) e [Caveat](https://fonts.google.com/specimen/Caveat) (OFL) e [Homemade Apple](https://fonts.google.com/specimen/Homemade+Apple) (Apache-2.0).
+MIT. Usa [PDF.js](https://github.com/mozilla/pdf.js) (Apache-2.0), [pdf-lib](https://github.com/cantoo-scribe/pdf-lib) (MIT), [Tesseract.js](https://github.com/naptha/tesseract.js) (Apache-2.0), [signpdf](https://github.com/vbuch/node-signpdf) (MIT), [node-forge](https://github.com/digitalbazaar/forge) (BSD/GPL), [docx](https://github.com/dolanmiu/docx) (MIT), [jsdiff](https://github.com/kpdecker/jsdiff) (BSD), [fflate](https://github.com/101arrowz/fflate) (MIT), [Electron](https://www.electronjs.org/) (MIT), [Capacitor](https://capacitorjs.com/) (MIT) e [electron-updater](https://github.com/electron-userland/electron-builder) (MIT). Fontes da assinatura digitada: [Dancing Script](https://fonts.google.com/specimen/Dancing+Script), [Great Vibes](https://fonts.google.com/specimen/Great+Vibes) e [Caveat](https://fonts.google.com/specimen/Caveat) (OFL) e [Homemade Apple](https://fonts.google.com/specimen/Homemade+Apple) (Apache-2.0). Fontes do editor de texto: 127 famílias do [Google Fonts](https://fonts.google.com) (SIL Open Font License 1.1, Apache 2.0 e Ubuntu Font Licence), com os direitos autorais e a licença de cada uma em [`public/fonts/LICENSES.md`](public/fonts/LICENSES.md); leitura e embutimento com [fontkit](https://github.com/cantoo-scribe/fontkit) (MIT).

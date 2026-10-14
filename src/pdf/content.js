@@ -161,7 +161,8 @@ export function unitBox(m) {
   return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
 }
 
-function streamBytes(stream) {
+/** Bytes decodificados (sem compressão) de um stream do PDF. */
+export function decodeStream(stream) {
   if (stream instanceof PDFRawStream) return decodePDFRawStream(stream).decode();
   if (typeof stream?.getUnencodedContents === "function") return stream.getUnencodedContents();
   if (typeof stream?.getContents === "function") return stream.getContents();
@@ -173,7 +174,7 @@ export function readPageContent(doc, page) {
   const contents = page.node.Contents();
   if (!contents) return new Uint8Array();
   const streams = contents instanceof PDFArray ? contents.asArray().map((ref) => doc.context.lookup(ref)) : [contents];
-  const parts = streams.map(streamBytes);
+  const parts = streams.map(decodeStream);
   const total = parts.reduce((sum, p) => sum + p.length + 1, 0);
   const out = new Uint8Array(total);
   let offset = 0;

@@ -859,12 +859,14 @@ textarea:focus {
 .viewer-area.mode-place .textLayer,
 .viewer-area.mode-note .textLayer,
 .viewer-area.mode-shape .textLayer,
-.viewer-area.mode-edit .textLayer {
+.viewer-area.mode-edit .textLayer,
+.viewer-area.mode-addtext .textLayer {
   pointer-events: none;
   user-select: none;
 }
 
-.viewer-area.mode-edit .page {
+.viewer-area.mode-edit .page,
+.viewer-area.mode-addtext .page {
   cursor: text;
 }
 
@@ -896,18 +898,257 @@ textarea:focus {
   pointer-events: none;
 }
 
-.text-editor {
+/* Texto em edição (uma linha do PDF ou texto novo): a caixa fica com a linha
+   de base no lugar do texto; a alça à esquerda move. */
+.text-box {
   position: absolute;
-  min-width: 20px;
+  z-index: 2;
+}
+
+.text-editor {
+  min-width: 8px;
   padding: 0;
   margin: 0;
   outline: 2px solid #1e88e5;
-  outline-offset: 1px;
+  outline-offset: 2px;
   white-space: pre;
-  line-height: 1.15;
   user-select: text;
   cursor: text;
-  z-index: 2;
+  caret-color: #1e88e5;
+}
+
+.text-editor:empty::before {
+  content: attr(data-placeholder);
+  color: rgb(30 136 229 / 0.6);
+  pointer-events: none;
+}
+
+.text-grip {
+  position: absolute;
+  top: 50%;
+  left: -22px;
+  width: 14px;
+  height: 22px;
+  margin-top: -11px;
+  border-radius: 3px;
+  background:
+    radial-gradient(circle, #1e88e5 1.6px, transparent 2px) 0 0 / 7px 7px,
+    rgb(255 255 255 / 0.85);
+  box-shadow: 0 0 0 1px rgb(30 136 229 / 0.5);
+  cursor: move;
+  touch-action: none;
+}
+
+@media (pointer: coarse) {
+  .text-grip {
+    left: -30px;
+    width: 22px;
+    height: 30px;
+    margin-top: -15px;
+  }
+}
+
+/* Mede onde fica a linha de base com a fonte e o tamanho da caixa. */
+.baseline-probe {
+  position: absolute;
+  top: 0;
+  left: -10000px;
+  visibility: hidden;
+  white-space: pre;
+  padding: 0;
+  margin: 0;
+}
+
+.baseline-probe span {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  vertical-align: baseline;
+}
+
+.text-bar {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.text-bar .font-button {
+  max-width: 170px;
+  border-color: var(--border);
+  gap: 2px;
+}
+
+.text-bar .font-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.text-bar .font-caret .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.text-bar .size-input {
+  width: 58px;
+  height: 28px;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: inherit;
+  font: inherit;
+}
+
+.text-bar .toggle {
+  width: 28px;
+  padding: 0;
+  justify-content: center;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 15px;
+}
+
+.text-bar .toggle[aria-pressed="true"] {
+  background: var(--active-bg);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.text-bar .color-input {
+  width: 30px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  cursor: pointer;
+}
+
+/* Lista de fontes */
+.font-picker {
+  position: fixed;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  width: 300px;
+  max-height: min(430px, calc(100vh - 16px));
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.font-search {
+  flex: none;
+  margin: 8px 8px 4px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  color: inherit;
+  font: inherit;
+}
+
+.font-cats {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 8px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.font-cats .chip {
+  flex: none;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.font-cats .chip.active {
+  background: var(--active-bg);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.font-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px;
+  overscroll-behavior: contain;
+}
+
+.font-heading {
+  padding: 8px 8px 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.font-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  width: 100%;
+  min-height: 38px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.font-option:hover,
+.font-option:focus-visible {
+  background: var(--hover);
+  outline: none;
+}
+
+.font-option.selected {
+  background: var(--active-bg);
+}
+
+.font-sample {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 19px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.font-option small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.font-empty {
+  padding: 16px 10px;
+  color: var(--muted);
+}
+
+/* No celular, a lista fica presa à parte de baixo da tela. */
+@media (max-width: 560px) {
+  .font-picker {
+    left: 8px !important;
+    right: 8px;
+    top: auto !important;
+    bottom: 8px;
+    width: auto;
+    max-height: 60vh;
+  }
 }
 
 .image-box {

@@ -3,14 +3,17 @@
 // carimbo, assinatura, marcas do "Preencher e assinar" e edição de
 // texto/imagens).
 import { PDFDocument } from "@cantoo/pdf-lib";
-import { AnnotationEditorParamsType, AnnotationEditorType, fontRealName, getTextItems, loadPdf, pdfjsLib } from "./pdfjs.js";
-import { $, $$, askText, el, hexToRgb, toast } from "./ui.js";
+import { AnnotationEditorParamsType, AnnotationEditorType, fontInfo, getTextItems, loadPdf, pdfjsLib } from "./pdfjs.js";
+import { $, $$, askText, el, hexToRgb, rgbToHex, toast } from "./ui.js";
 import { icon } from "./icons.js";
 import * as annotations from "./pdf/annotations.js";
-import { findImages, imageHasMask, isolatePage, moveImage, removeImage } from "./pdf/content.js";
+import { findImages, imageHasMask, isolatePage, moveImage, readPageContent, removeImage } from "./pdf/content.js";
 import { drawPngOnPage } from "./pdf/ops.js";
 import { drawMark, today } from "./pdf/fill.js";
-import { fontStyle, replaceText } from "./pdf/textedit.js";
+import { LINE_HEIGHT, addText, describeLine, editText, fontStyle, groupLines } from "./pdf/textedit.js";
+import { findTextRuns, lineRuns, removeRuns } from "./pdf/textops.js";
+import { catalogFont, cssFamily, exactFamily, fallbackFont, fontById, loadFontFace, matchFont, rememberFont } from "./fonts.js";
+import { closeFontPicker, fontPickerOpen, openFontPicker } from "./fontpicker.js";
 import { Perm, loadForEdit } from "./pdf/security.js";
 import * as platform from "./platform.js";
 
@@ -35,6 +38,7 @@ const PERMISSIONS = {
   sign: [Perm.MODIFY, "assinar"],
   mark: [Perm.MODIFY, "preencher"],
   edit: [Perm.MODIFY, "editar o conteúdo"],
+  addtext: [Perm.MODIFY, "escrever no documento"],
 };
 const PLACING = new Set(["sign", "stamp", "mark"]);
 // Tamanhos do "Preencher e assinar" (pequeno, médio, grande), em pontos do PDF:
@@ -155,6 +159,7 @@ export class ToolController {
     this.area.classList.toggle("mode-note", tool === "note");
     this.area.classList.toggle("mode-shape", tool === "shape");
     this.area.classList.toggle("mode-edit", tool === "edit");
+    this.area.classList.toggle("mode-addtext", tool === "addtext");
     if (tool !== "sign") this.signature = null;
     this.ghost.hidden = true;
     this.ghost.dataset.kind = "";
@@ -298,7 +303,7 @@ export class ToolController {
   onKeyDown(e) {
     // Com uma janela ou menu aberto por cima, as teclas são dele (o Esc fecha o
     // menu, não descarta a assinatura na caixa).
-    if (document.querySelector("dialog[open], .menu:not([hidden])")) return;
+    if (document.querySelector("dialog[open], .menu:not([hidden]), .font-picker")) return;
     if (e.key === "Escape" && this.pending) {
       e.preventDefault();
       this.resolvePending(null);
@@ -308,7 +313,9 @@ export class ToolController {
     const field = e.target.closest?.("input, textarea, select");
     if (e.key === "Escape") {
       if (this.editing && !field) {
+        // Só desfaz a edição aberta: a ferramenta continua escolhida.
         e.preventDefault();
+        e.stopPropagation();
         this.clearEdit();
       } else if (this.drag) {
         this.cancelDrag();
@@ -356,11 +363,12 @@ export class ToolController {
       return;
     }
     const tool = this.tool;
-    if (!["note", "shape", "sign", "stamp", "mark", "edit"].includes(tool)) return;
-    if (tool === "edit" && e.target.closest?.(".text-editor, .image-box, .float-bar")) return;
+    if (!["note", "shape", "sign", "stamp", "mark", "edit", "addtext"].includes(tool)) return;
+    const editTool = tool === "edit" || tool === "addtext";
+    if (editTool && e.target.closest?.(".text-box, .image-box, .float-bar, .font-picker")) return;
     const hit = this.pageHit(e);
     if (!hit) {
-      if (tool === "edit" && this.area.contains(e.target)) this.finishEdit();
+      if (editTool && this.area.contains(e.target)) this.finishEdit();
       return;
     }
     e.preventDefault();
@@ -370,6 +378,7 @@ export class ToolController {
     else if (tool === "sign") this.placeSignature(hit);
     else if (tool === "stamp") this.placeStamp(hit);
     else if (tool === "mark") this.placeMark(hit);
+    else if (tool === "addtext") this.addTextAt(hit);
     else this.editAt(hit);
   }
 
@@ -725,25 +734,52 @@ export class ToolController {
 
   // ---- Editar texto e imagens ----
 
-  /** Itens de texto e imagens da página (em cache até o próximo recarregamento). */
+  /** O documento da aba no pdf-lib, para ler o conteúdo das páginas (em cache até o próximo recarregamento). */
+  libDoc(tab) {
+    if (!tab.pageCache.has("lib")) {
+      tab.pageCache.set("lib", tab.doc.getData().then((bytes) => loadForEdit(bytes, tab.encrypted ? tab.security : null)));
+    }
+    return tab.pageCache.get("lib");
+  }
+
+  /** Linhas de texto e imagens da página (em cache até o próximo recarregamento). */
   pageData(tab, pageNumber) {
     const key = `edit-${pageNumber}`;
     if (!tab.pageCache.has(key)) {
       const promise = (async () => {
         const page = await tab.doc.getPage(pageNumber);
-        const items = await getTextItems(page);
-        for (const item of items) item.style = fontStyle(item.fontFamily, fontRealName(page, item.fontName));
-        if (!tab.pageCache.has("lib")) {
-          tab.pageCache.set("lib", tab.doc.getData().then((bytes) => loadForEdit(bytes, tab.encrypted ? tab.security : null)));
-        }
-        const lib = await tab.pageCache.get("lib");
+        const lines = groupLines(await getTextItems(page));
+        const lib = await this.libDoc(tab);
+        const libPage = lib.getPage(pageNumber - 1);
+        let content;
+        let runs = [];
         let images = [];
         try {
-          images = findImages(lib, lib.getPage(pageNumber - 1));
+          content = readPageContent(lib, libPage);
+          runs = findTextRuns(lib, libPage, content);
+        } catch (err) {
+          console.warn("Não foi possível ler o texto da página", err);
+        }
+        try {
+          images = findImages(lib, libPage, content);
         } catch (err) {
           console.warn("Não foi possível ler as imagens da página", err);
         }
-        return { items, images };
+        for (const line of lines) {
+          const info = fontInfo(page, line.fontName);
+          let drawn = { runs: null, color: null, original: null, spacing: null, text: null };
+          try {
+            drawn = describeLine(lib, libPage, line, runs);
+          } catch (err) {
+            console.warn("Não foi possível analisar a linha", err);
+          }
+          Object.assign(line, drawn, { realName: info.name, face: info.face, style: fontStyle(line.fontFamily, info.name) });
+        }
+        // Página que é só uma imagem (escaneada ou foto): não há texto para editar.
+        const [x0, y0, x1, y1] = page.view;
+        const area = Math.abs((x1 - x0) * (y1 - y0));
+        const scanned = !lines.length && images.some(({ rect: r }) => (r[2] - r[0]) * (r[3] - r[1]) > 0.5 * area);
+        return { lines, images, scanned };
       })();
       tab.pageCache.set(key, promise);
       promise.then((data) => tab.pageCache.set(`${key}-ready`, data)).catch(() => tab.pageCache.delete(key));
@@ -753,8 +789,10 @@ export class ToolController {
 
   hitTest(data, [px, py]) {
     const inside = ([x0, y0, x1, y1], pad = 0) => px >= x0 - pad && px <= x1 + pad && py >= y0 - pad && py <= y1 + pad;
-    const item = data.items.find((it) => inside(it.rect, 1));
-    if (item) return { kind: "text", item };
+    // Entre linhas sobrepostas, a menor (a mais específica).
+    const area = ([x0, y0, x1, y1]) => (x1 - x0) * (y1 - y0);
+    const line = data.lines.filter((l) => inside(l.rect, Math.max(1.5, 0.15 * l.size))).sort((a, b) => area(a.rect) - area(b.rect))[0];
+    if (line) return { kind: "text", line };
     for (let i = data.images.length - 1; i >= 0; i--) {
       if (inside(data.images[i].rect)) return { kind: "image", image: data.images[i] };
     }
@@ -773,7 +811,7 @@ export class ToolController {
     }
     const target = this.hitTest(data, hit.pdf);
     if (!target) return this.removeHover();
-    const rect = this.cssRect(hit.pageView, target.kind === "text" ? target.item.rect : target.image.rect);
+    const rect = this.cssRect(hit.pageView, target.kind === "text" ? target.line.rect : target.image.rect);
     const layer = this.overlayFor(hit);
     let box = layer.querySelector(".edit-hover");
     if (!box) {
@@ -794,11 +832,26 @@ export class ToolController {
       return;
     }
     const data = await this.pageData(hit.tab, hit.pageNumber);
+    // Enquanto lia a página, outra edição pode ter começado (ou a ferramenta mudou).
+    if (this.editing || this.tool !== "edit") return;
     const target = this.hitTest(data, hit.pdf);
     this.removeHover();
-    if (!target) return;
-    if (target.kind === "text") this.startTextEdit(hit, target.item);
+    if (!target) return this.explainNothingHere(data);
+    if (target.kind === "text") this.startTextEdit(hit, target.line);
     else this.startImageEdit(hit, target.image);
+  }
+
+  /** Clique fora de texto e de imagem: explica por que não há o que editar ali. */
+  explainNothingHere(data) {
+    const now = Date.now();
+    if (now - (this.lastExplain || 0) < 4000) return;
+    this.lastExplain = now;
+    toast(
+      data.scanned
+        ? "Esta página é uma imagem (documento escaneado ou foto), por isso o texto dela não é editável. Use Converter → Reconhecer texto (OCR) e depois edite."
+        : "Não há texto nem imagem para editar aqui. Se o texto foi salvo como desenho, use “Adicionar texto” para escrever por cima.",
+      { duration: 7000 },
+    );
   }
 
   /** Amostra as cores de fundo e do texto no canvas da página. */
@@ -856,56 +909,416 @@ export class ToolController {
     return { bg: bg.map((v) => v / 255), fg: fg.map((v) => v / 255) };
   }
 
-  startTextEdit(hit, item) {
-    const css = this.cssRect(hit.pageView, item.rect);
+  // ---- Caixa de texto (editar uma linha ou adicionar texto novo) ----
+
+  /** Estilo do texto novo: o último usado (fonte, negrito, itálico, tamanho e cor). */
+  newTextStyle() {
+    let saved = {};
+    try {
+      saved = JSON.parse(localStorage.getItem("texto-novo")) || {};
+    } catch {
+      saved = {};
+    }
+    return {
+      font: fontById(saved.font).id,
+      bold: saved.bold === true,
+      italic: saved.italic === true,
+      size: saved.size >= 4 && saved.size <= 300 ? saved.size : 14,
+      color: Array.isArray(saved.color) && saved.color.length === 3 ? saved.color : [0, 0, 0],
+      spacing: 0,
+    };
+  }
+
+  saveNewTextStyle({ font, bold, italic, size, color }) {
+    try {
+      localStorage.setItem("texto-novo", JSON.stringify({ font, bold, italic, size, color }));
+    } catch {
+      // Sem armazenamento: o próximo texto volta ao padrão.
+    }
+  }
+
+  async addTextAt(hit) {
+    if (this.editing) {
+      await this.finishEdit();
+      return;
+    }
+    this.openTextBox(hit, { mode: "add", text: "", state: this.newTextStyle(), anchor: [hit.x, hit.y] });
+  }
+
+  startTextEdit(hit, line) {
+    const css = this.cssRect(hit.pageView, line.rect);
     const { bg, fg } = this.sampleColors(hit, css);
+    const match = matchFont(line.realName);
+    const substitute = match || fallbackFont(line.style);
+    // A própria fonte do PDF, quando o catálogo não tem a mesma (Arial, Calibri, fontes do Canva...).
+    const original = line.original && line.face ? { label: prettyFontName(line.realName), family: `"${line.face}"` } : null;
+    const state = {
+      font: original && !match?.exact ? "original" : substitute.id,
+      substitute: substitute.id,
+      bold: substitute.bold,
+      italic: substitute.italic,
+      size: Math.round(line.size * 10) / 10,
+      color: line.color || fg,
+      spacing: line.spacing,
+    };
+    // O texto lido do próprio PDF quando o PDF.js separa as letras ("C L I Q U E").
+    const editing = this.openTextBox(hit, { mode: "edit", line, text: line.text || line.str, state, bg, original });
+    editing.originalStyle = { bold: substitute.bold, italic: substitute.italic };
+    if (line.runs) this.prepareTextPreview(editing);
+  }
+
+  /**
+   * Caixa de texto editável sobre a página, com a barra de formatação.
+   * `mode`: "edit" (troca a linha `line`) ou "add" (texto novo no ponto `anchor`).
+   */
+  openTextBox(hit, { mode, line = null, text, state, bg = null, original = null, anchor = null }) {
     const layer = this.overlayFor(hit);
-    const toCss = (c) => `rgb(${c.map((v) => Math.round(v * 255)).join(",")})`;
-    const families = { sans: "Helvetica, Arial, sans-serif", serif: "'Times New Roman', Times, serif", mono: "'Courier New', monospace" };
-    const editor = el("div", { class: "text-editor", contenteditable: "plaintext-only", spellcheck: "false" });
-    editor.textContent = item.str;
-    Object.assign(editor.style, {
-      left: `${css.left}px`,
-      top: `${css.top}px`,
-      minWidth: `${css.width}px`,
-      height: `${css.height}px`,
-      lineHeight: `${css.height}px`,
-      fontSize: `${item.size * hit.scale}px`,
-      fontFamily: families[item.style.family],
-      fontWeight: item.style.bold ? "700" : "400",
-      fontStyle: item.style.italic ? "italic" : "normal",
-      color: toCss(fg),
-      background: toCss(bg),
+    const editor = el("div", {
+      class: "text-editor",
+      spellcheck: "false",
+      role: "textbox",
+      "aria-multiline": "true",
+      "aria-label": mode === "add" ? "Texto novo" : "Texto",
     });
-    layer.append(editor);
-    this.editing = { kind: "text", hit, item, editor, bg, fg };
+    try {
+      editor.contentEditable = "plaintext-only";
+    } catch {
+      editor.contentEditable = "true";
+    }
+    editor.textContent = text;
+    if (mode === "add") editor.dataset.placeholder = "Digite o texto";
+    // Até a página sem o texto antigo ficar pronta, o fundo cobre o texto antigo.
+    if (mode === "edit") editor.style.background = cssColor(bg || [1, 1, 1]);
+    const grip = el("span", { class: "text-grip", title: "Arraste para mover", "aria-hidden": "true" });
+    const box = el("div", { class: "text-box" }, [grip, editor]);
+    const editing = {
+      kind: "text",
+      mode,
+      hit,
+      line,
+      layer,
+      box,
+      editor,
+      state,
+      initial: { ...state },
+      text0: text,
+      bg,
+      original,
+      anchor,
+      offset: [0, 0],
+      viewport: hit.pageView.viewport,
+    };
+    editing.bar = this.textBar(editing);
+    layer.append(box, editing.bar);
+    this.editing = editing;
+
     editor.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !e.shiftKey) {
+      const mod = e.ctrlKey || e.metaKey;
+      // Editando uma linha, Enter conclui (Shift+Enter quebra a linha); no texto novo, Enter quebra a linha.
+      if (e.key === "Enter" && (mode === "edit" ? !e.shiftKey : mod)) {
         e.preventDefault();
         this.finishEdit();
-      } else if (e.key === "Escape") {
+      } else if (mod && !e.altKey && /^[bi]$/i.test(e.key)) {
         e.preventDefault();
-        this.clearEdit();
+        this.toggleTextStyle(e.key.toLowerCase() === "b" ? "bold" : "italic");
       }
-      e.stopPropagation();
+      // Os atalhos com Ctrl (salvar, imprimir) continuam valendo; as outras teclas são do texto.
+      if (!mod && e.key !== "Escape") e.stopPropagation();
     });
-    editor.addEventListener("blur", () => setTimeout(() => this.editing?.editor === editor && this.finishEdit(), 0));
-    editor.focus();
+    editor.addEventListener("input", () => this.placeTextBar());
+    editor.addEventListener("paste", (e) => {
+      e.preventDefault();
+      const pasted = e.clipboardData?.getData("text/plain") ?? "";
+      document.execCommand("insertText", false, pasted.replace(/\r\n?/g, "\n"));
+    });
+    grip.addEventListener("pointerdown", (e) => this.startTextDrag(e));
+
+    this.styleTextEditor();
+    this.revealTextBox();
+    editor.focus({ preventScroll: true });
+    const selection = window.getSelection();
     const range = document.createRange();
     range.selectNodeContents(editor);
-    const selection = window.getSelection();
+    if (mode === "add") range.collapse(false);
     selection.removeAllRanges();
     selection.addRange(range);
+    return editing;
+  }
+
+  /** Barra de formatação: fonte, tamanho, negrito, itálico, cor, apagar e concluir. */
+  textBar(editing) {
+    const { state, mode } = editing;
+    // Clicar nos botões não tira o cursor do texto.
+    const keepFocus = (node) => {
+      node.addEventListener("mousedown", (e) => e.preventDefault());
+      return node;
+    };
+    const fontButton = keepFocus(
+      el("button", { class: "btn font-button", type: "button", title: "Fonte", "aria-haspopup": "dialog", onclick: () => this.pickFont() }, [
+        el("span", { class: "font-name" }),
+        el("span", { class: "font-caret", html: icon("caret") }),
+      ]),
+    );
+    const size = el("input", { class: "size-input", type: "number", min: "4", max: "300", step: "0.5", title: "Tamanho da letra (pt)", "aria-label": "Tamanho da letra" });
+    size.addEventListener("input", () => {
+      const value = Number(size.value);
+      if (value >= 4 && value <= 300) {
+        state.size = value;
+        this.styleTextEditor();
+      }
+    });
+    size.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        editing.editor.focus();
+      }
+    });
+    const bold = keepFocus(el("button", { class: "btn toggle", type: "button", title: "Negrito (Ctrl+B)", html: "<b>N</b>", onclick: () => this.toggleTextStyle("bold") }));
+    const italic = keepFocus(el("button", { class: "btn toggle", type: "button", title: "Itálico (Ctrl+I)", html: "<i>I</i>", onclick: () => this.toggleTextStyle("italic") }));
+    const color = el("input", { class: "color-input", type: "color", title: "Cor do texto", "aria-label": "Cor do texto" });
+    color.addEventListener("input", () => {
+      state.color = hexToRgb(color.value);
+      this.styleTextEditor();
+    });
+    const remove = keepFocus(
+      el("button", {
+        class: "btn icon-only",
+        type: "button",
+        title: mode === "add" ? "Descartar este texto" : "Apagar este texto do PDF",
+        html: icon("trash"),
+        onclick: () => this.deleteText(),
+      }),
+    );
+    const done = keepFocus(
+      el("button", { class: "btn primary", type: "button", text: "Concluir", title: mode === "add" ? "Concluir (Ctrl+Enter)" : "Concluir (Enter)", onclick: () => this.finishEdit() }),
+    );
+    editing.controls = { fontButton, size, bold, italic, color };
+    return el("div", { class: "float-bar text-bar" }, [fontButton, size, bold, italic, color, remove, done]);
+  }
+
+  updateTextBar() {
+    const { state, controls, original } = this.editing;
+    const name = state.font === "original" ? original.label : fontById(state.font).family;
+    controls.fontButton.querySelector(".font-name").textContent = name;
+    controls.fontButton.title = state.font === "original" ? `Fonte: ${name} (a original do PDF)` : `Fonte: ${name}`;
+    if (document.activeElement !== controls.size) controls.size.value = String(Math.round(state.size * 10) / 10);
+    controls.bold.setAttribute("aria-pressed", String(Boolean(state.bold)));
+    controls.italic.setAttribute("aria-pressed", String(Boolean(state.italic)));
+    controls.color.value = rgbToHex(state.color);
+  }
+
+  /** Aplica o estilo na caixa (fonte, tamanho, cor...) e a posiciona quando a fonte carrega. */
+  async styleTextEditor() {
+    const editing = this.editing;
+    if (editing?.kind !== "text") return;
+    const { editor, state, viewport } = editing;
+    const original = state.font === "original";
+    const catalogId = original ? state.substitute : state.font;
+    // Com a fonte original, as letras que ela não tem saem com a substituta (no estilo certo).
+    const family = original ? `${editing.original.family}, ${exactFamily(catalogId, state.bold)}` : cssFamily(catalogId);
+    Object.assign(editor.style, {
+      fontFamily: `${family}, sans-serif`,
+      fontSize: `${state.size * viewport.scale}px`,
+      lineHeight: String(LINE_HEIGHT),
+      fontWeight: !original && state.bold ? "700" : "400",
+      fontStyle: !original && state.italic ? "italic" : "normal",
+      color: cssColor(state.color),
+      letterSpacing: `${(state.spacing || 0) * viewport.scale}px`,
+    });
+    this.updateTextBar();
+    this.placeTextEditor();
+    const token = {};
+    editing.styleToken = token;
+    try {
+      await (original ? loadFontFace(catalogId, state.bold, { exact: true }) : loadFontFace(catalogId, state.bold));
+    } catch {
+      // Sem a fonte (sem internet na primeira vez, por exemplo), a prévia usa outra.
+    }
+    if (this.editing !== editing || editing.styleToken !== token) return;
+    if (state.spacing === null) {
+      // Linha com espaçamento entre letras que não deu para medir no PDF: estima pela largura.
+      state.spacing = editing.line?.letterSpaced ? estimateSpacing(editor, editing.line, viewport.scale) : 0;
+      editing.initial.spacing = state.spacing;
+      editor.style.letterSpacing = `${state.spacing * viewport.scale}px`;
+    }
+    this.placeTextEditor();
+  }
+
+  /** Põe a caixa com a linha de base no lugar do texto (ou no ponto clicado, no texto novo). */
+  placeTextEditor() {
+    const editing = this.editing;
+    if (editing?.kind !== "text") return;
+    const { box, editor, viewport, state } = editing;
+    const baseline = baselineOffset(editor);
+    let x;
+    let y;
+    let theta = 0;
+    if (editing.mode === "add") {
+      // O clique fica no meio da primeira linha.
+      x = editing.anchor[0];
+      y = editing.anchor[1] - (state.size * viewport.scale * LINE_HEIGHT) / 2 + baseline;
+    } else {
+      const { origin, angle } = editing.line;
+      [x, y] = viewport.convertToViewportPoint(...origin);
+      const [dx, dy] = viewport.convertToViewportPoint(origin[0] + Math.cos(angle), origin[1] + Math.sin(angle));
+      theta = Math.atan2(dy - y, dx - x);
+    }
+    x += editing.offset[0];
+    y += editing.offset[1];
+    Object.assign(box.style, {
+      left: `${x}px`,
+      top: `${y - baseline}px`,
+      transformOrigin: `0 ${baseline}px`,
+      transform: Math.abs(theta) > 1e-3 ? `rotate(${theta}rad)` : "",
+    });
+    editing.baselinePoint = [x, y];
+    this.placeTextBar();
+  }
+
+  /** Barra acima da caixa (abaixo, se não couber), sem passar da borda da página. */
+  placeTextBar() {
+    const editing = this.editing;
+    if (editing?.kind !== "text") return;
+    const { box, bar, layer } = editing;
+    bar.style.maxWidth = `${Math.max(220, layer.clientWidth)}px`;
+    const r = box.getBoundingClientRect();
+    const l = layer.getBoundingClientRect();
+    const left = Math.max(0, Math.min(r.left - l.left, layer.clientWidth - bar.offsetWidth));
+    const above = r.top - l.top - bar.offsetHeight - 8;
+    Object.assign(bar.style, { left: `${left}px`, top: `${above >= 0 ? above : r.bottom - l.top + 8}px` });
+  }
+
+  /** Rola a página para a caixa e a barra aparecerem inteiras (perto da borda, por exemplo). */
+  revealTextBox() {
+    const { box, bar, hit } = this.editing;
+    const container = hit.tab.container;
+    const view = container.getBoundingClientRect();
+    const rects = [box.getBoundingClientRect(), bar.getBoundingClientRect()];
+    const top = Math.min(...rects.map((r) => r.top));
+    const bottom = Math.max(...rects.map((r) => r.bottom));
+    if (top < view.top + 8) container.scrollTop -= view.top + 8 - top;
+    else if (bottom > view.bottom - 8 && bottom - top < view.height) container.scrollTop += bottom - (view.bottom - 8);
+  }
+
+  /** Arrastar pela alça move o texto. */
+  startTextDrag(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const editing = this.editing;
+    const start = [e.clientX, e.clientY];
+    const from = [...editing.offset];
+    const move = (ev) => {
+      if (this.editing !== editing) return;
+      editing.offset = [from[0] + ev.clientX - start[0], from[1] + ev.clientY - start[1]];
+      this.placeTextEditor();
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      if (this.editing === editing) editing.editor.focus({ preventScroll: true });
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+  }
+
+  toggleTextStyle(kind) {
+    const editing = this.editing;
+    if (editing?.kind !== "text") return;
+    // A fonte do PDF é como é: negrito ou itálico passam para a fonte do catálogo.
+    if (editing.state.font === "original") editing.state.font = editing.state.substitute;
+    editing.state[kind] = !editing.state[kind];
+    this.styleTextEditor();
+  }
+
+  pickFont() {
+    const editing = this.editing;
+    if (editing?.kind !== "text") return;
+    if (fontPickerOpen()) return closeFontPicker();
+    const selection = window.getSelection();
+    const range = selection.rangeCount && editing.editor.contains(selection.anchorNode) ? selection.getRangeAt(0).cloneRange() : null;
+    openFontPicker({
+      anchor: editing.controls.fontButton,
+      current: editing.state.font,
+      original: editing.original,
+      onPick: (id) => {
+        if (this.editing !== editing) return;
+        editing.state.font = id;
+        if (id === "original") Object.assign(editing.state, editing.originalStyle);
+        this.styleTextEditor();
+      },
+      onClose: () => {
+        if (this.editing !== editing) return;
+        editing.editor.focus({ preventScroll: true });
+        if (range) {
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+      },
+    });
+  }
+
+  deleteText() {
+    const editing = this.editing;
+    if (editing?.kind !== "text") return null;
+    if (editing.mode === "add") return this.clearEdit();
+    editing.editor.textContent = "";
+    return this.finishEdit();
+  }
+
+  /** Mostra a página sem o texto antigo por baixo da caixa (prévia exata). */
+  async prepareTextPreview(editing) {
+    const pageCanvas = editing.hit.pageDiv.querySelector(".canvasWrapper canvas");
+    if (!pageCanvas) return;
+    try {
+      const clean = await this.renderPageCopy(editing, pageCanvas, (doc, page) => {
+        const runs = lineRuns(findTextRuns(doc, page), editing.line);
+        if (!runs) return false;
+        removeRuns(doc, page, runs);
+        return true;
+      });
+      if (!clean || this.editing !== editing) return;
+      editing.layer.prepend(clean);
+      editing.clean = clean;
+      editing.editor.style.background = "transparent";
+    } catch (err) {
+      console.warn("Sem prévia do texto:", err);
+    }
   }
 
   async commitText() {
-    const { hit, item, editor, bg, fg } = this.editing;
-    const text = editor.textContent.replace(/\n/g, " ");
+    const editing = this.editing;
+    const { hit, mode, line, state, bg, viewport } = editing;
+    const text = editorText(editing.editor);
+    const [bx, by] = editing.baselinePoint;
+    const origin = viewport.convertToPdfPoint(bx, by);
     this.clearEdit();
-    if (text === item.str) return;
-    await this.run("Aplicando texto…", () =>
-      hit.tab.edit((doc) => replaceText(doc, hit.pageIndex, { item, text, bg, color: fg, style: item.style })),
-    );
+    const fontId = state.font === "original" ? state.substitute : state.font;
+    if (mode === "add") {
+      if (!text.trim()) return;
+      // Na direção do texto na tela (de pé, mesmo com a página girada).
+      const ahead = viewport.convertToPdfPoint(bx + 10, by);
+      const angle = Math.atan2(ahead[1] - origin[1], ahead[0] - origin[0]);
+      this.saveNewTextStyle(state);
+      rememberFont(fontId);
+      await this.run("Adicionando texto…", async () => {
+        const catalog = await catalogFont(fontId, state.bold);
+        await hit.tab.edit((doc) => addText(doc, hit.pageIndex, { origin, angle, text, style: state, catalog }));
+      });
+      return;
+    }
+    const moved = Math.hypot(...editing.offset) > 0.5;
+    const initial = editing.initial;
+    const restyled =
+      ["font", "bold", "italic", "size", "spacing"].some((k) => state[k] !== initial[k]) || state.color.some((v, i) => Math.abs(v - initial.color[i]) > 0.002);
+    if (text === editing.text0 && !moved && !restyled) return;
+    if (state.font !== "original") rememberFont(fontId);
+    await this.run(text.trim() ? "Aplicando texto…" : "Apagando texto…", async () => {
+      const catalog = await catalogFont(fontId, state.bold);
+      const style = { ...state, spacing: state.spacing || 0 };
+      await hit.tab.edit((doc) => editText(doc, hit.pageIndex, { line, text, style, catalog, bg, origin: moved ? origin : line.origin }));
+    });
   }
 
   /**
@@ -948,14 +1361,37 @@ export class ToolController {
    * com transparência quando ela tem.
    */
   async prepareImagePreview(editing, pageCanvas) {
-    const { hit, image, viewport } = editing;
+    const { hit, image } = editing;
+    try {
+      const clean = await this.renderPageCopy(editing, pageCanvas, (doc, page) => removeImage(doc, page, image.index));
+      if (!clean || this.editing !== editing) return;
+      const lib = await this.libDoc(hit.tab);
+      if (imageHasMask(lib, lib.getPage(hit.pageIndex), image.name)) {
+        const matte = transparentCrop(pageCanvas, clean, editing.original);
+        matte.classList.add("box-preview");
+        editing.preview.replaceWith(matte);
+        editing.preview = matte;
+      }
+      editing.layer.prepend(clean);
+      editing.clean = clean;
+    } catch (err) {
+      console.warn("Sem prévia da imagem:", err);
+    }
+  }
+
+  /**
+   * Desenha a página alterada por `change(doc, page)` (numa cópia) num canvas
+   * do tamanho do da tela. null se `change` devolver false (nada a mostrar).
+   */
+  async renderPageCopy(editing, pageCanvas, change) {
+    const { hit, viewport } = editing;
     let pdf = null;
     try {
-      const lib = await hit.tab.pageCache.get("lib");
+      const lib = await this.libDoc(hit.tab);
       const copy = await PDFDocument.create();
       const [page] = await copy.copyPages(lib, [hit.pageIndex]);
       copy.addPage(page);
-      removeImage(copy, copy.getPage(0), image.index);
+      if (change(copy, copy.getPage(0)) === false) return null;
       ({ doc: pdf } = await loadPdf(await copy.save()));
       const pdfPage = await pdf.getPage(1);
       const vp = pdfPage.getViewport({ scale: viewport.scale, rotation: viewport.rotation });
@@ -968,17 +1404,7 @@ export class ToolController {
         transform: [clean.width / vp.width, 0, 0, clean.height / vp.height, 0, 0],
         annotationMode: pdfjsLib.AnnotationMode.ENABLE_FORMS,
       }).promise;
-      if (this.editing !== editing) return;
-      if (imageHasMask(lib, lib.getPage(hit.pageIndex), image.name)) {
-        const matte = transparentCrop(pageCanvas, clean, editing.original);
-        matte.classList.add("box-preview");
-        editing.preview.replaceWith(matte);
-        editing.preview = matte;
-      }
-      editing.layer.prepend(clean);
-      editing.clean = clean;
-    } catch (err) {
-      console.warn("Sem prévia da imagem:", err);
+      return clean;
     } finally {
       pdf?.destroy();
     }
@@ -1003,6 +1429,18 @@ export class ToolController {
     const viewport = editing.hit.pageView.viewport;
     // Mesmo zoom (ex.: "Automático" reaplicado): as camadas não mudaram.
     if (viewport.scale === (editing.viewport?.scale ?? editing.hit.scale)) return;
+    if (editing.kind === "text") {
+      // O texto continua em edição, no mesmo lugar da página e na escala nova.
+      const ratio = viewport.scale / editing.viewport.scale;
+      if (editing.anchor) editing.anchor = editing.anchor.map((v) => v * ratio);
+      editing.offset = editing.offset.map((v) => v * ratio);
+      editing.viewport = viewport;
+      editing.layer = this.overlayFor(editing.hit);
+      editing.layer.append(...[editing.clean, editing.box, editing.bar].filter(Boolean));
+      this.styleTextEditor();
+      editing.editor.focus({ preventScroll: true });
+      return;
+    }
     if (editing.kind !== "signature") return this.finishEdit();
     const { viewport: old, rect } = editing;
     const a = viewport.convertToViewportPoint(...old.convertToPdfPoint(rect.left, rect.top));
@@ -1141,13 +1579,62 @@ export class ToolController {
 
   clearEdit() {
     if (!this.editing) return;
-    const { editor, box, bar, clean } = this.editing;
+    const { box, bar, clean } = this.editing;
     this.editing = null;
-    editor?.remove();
+    closeFontPicker();
     box?.remove();
     bar?.remove();
     clean?.remove();
   }
+}
+
+const cssColor = (rgb) => `rgb(${rgb.map((v) => Math.round(v * 255)).join(", ")})`;
+
+/** "ABCDEF+MontserratThin-Bold" -> "Montserrat Thin Bold". */
+function prettyFontName(name) {
+  return (
+    name
+      .replace(/^[A-Z]{6}\+/, "")
+      .replace(/-\d+$/, "")
+      .replace(/[-_,]+/g, " ")
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .trim() || "Fonte do documento"
+  );
+}
+
+/** Distância do topo da caixa até a linha de base da primeira linha, com a fonte atual. */
+function baselineOffset(editor) {
+  const style = getComputedStyle(editor);
+  const mark = el("span");
+  const probe = el("div", { class: "baseline-probe" }, [mark]);
+  Object.assign(probe.style, {
+    fontFamily: style.fontFamily,
+    fontSize: style.fontSize,
+    fontWeight: style.fontWeight,
+    fontStyle: style.fontStyle,
+    lineHeight: style.lineHeight,
+  });
+  document.body.append(probe);
+  const offset = mark.offsetTop;
+  probe.remove();
+  return offset;
+}
+
+/** Espaçamento entre letras (pt) que faz o texto ocupar a largura da linha original. */
+function estimateSpacing(editor, line, scale) {
+  const text = editorText(editor);
+  const count = [...text].length;
+  if (count < 2) return 0;
+  const style = getComputedStyle(editor);
+  const ctx = document.createElement("canvas").getContext("2d");
+  ctx.font = `${style.fontStyle} ${style.fontWeight} 100px ${style.fontFamily}`;
+  const natural = (ctx.measureText(text).width / 100) * line.size;
+  return Math.max(0, (line.width - natural) / (count - 1));
+}
+
+/** O texto da caixa, com as quebras de linha. */
+function editorText(editor) {
+  return editor.innerText.replace(/\u00a0/g, " ").replace(/\r\n?/g, "\n").replace(/\n$/, "");
 }
 
 /** Pixels de `canvas` dentro do retângulo CSS `css` (relativo à página). */

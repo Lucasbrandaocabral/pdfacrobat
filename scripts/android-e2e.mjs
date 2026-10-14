@@ -1,7 +1,8 @@
 // Teste do app Android num emulador (workflow "Testar o app Android").
 // Instala o APK assinado (precisa abrir sem travar) e depois o de teste, com
 // o WebView depurável, para usar o app de verdade: abre um PDF por "Abrir
-// com", assina, salva pelo seletor de arquivos do Android e confere o arquivo
+// com", assina, troca uma linha de texto (com outra fonte) e escreve texto
+// novo, salva pelo seletor de arquivos do Android e confere o arquivo
 // gravado; também imprime e usa o botão voltar do sistema. Quando um passo
 // falha, o log mostra o que estava na tela, e os passos seguintes continuam.
 //
@@ -184,6 +185,54 @@ await step("Assinatura aplicada", async () => {
   check("Assinatura aplicada", (await page.evaluate(() => window.__app.manager.active.dirty)) === true);
 });
 
+// 3b) Texto: troca uma linha (com outra fonte do catálogo) e escreve texto novo.
+/** Toca no ponto (x, y) do PDF na página n. */
+const tapPdf = async (n, x, y) => {
+  const [sx, sy] = await page.evaluate(
+    ({ n, x, y }) => {
+      const view = window.__app.manager.active.pageView(n);
+      view.div.scrollIntoView({ block: "center" });
+      const box = view.div.querySelector(".canvasWrapper").getBoundingClientRect();
+      const [vx, vy] = view.viewport.convertToViewportPoint(x, y);
+      return [box.left + vx, box.top + vy];
+    },
+    { n, x, y },
+  );
+  await sleep(500);
+  await page.mouse.click(sx, sy);
+};
+const pageText = (n) =>
+  page.evaluate(async (n) => {
+    const p = await window.__app.manager.active.doc.getPage(n);
+    return (await p.getTextContent()).items.map((i) => i.str).join(" ");
+  }, n);
+await step("Texto editado e adicionado", async () => {
+  await click('[data-category="edit"]');
+  await click('.tools[data-panel="edit"] [data-tool="edit"]');
+  await tapPdf(1, 120, 767);
+  await page.waitForSelector(".text-editor", { timeout: 15000 });
+  await sleep(800);
+  await page.keyboard.type("Pagina editada no Android");
+  await page.click(".text-bar .font-button");
+  await page.waitForSelector(".font-picker");
+  await page.fill(".font-picker .font-search", "lobster");
+  await page.click(".font-picker .font-option >> nth=0");
+  await sleep(800);
+  await shot("3b-editando-texto");
+  await page.click(".text-bar .btn.primary");
+  await idle();
+  await click('.tools[data-panel="edit"] [data-tool="addtext"]');
+  await tapPdf(1, 100, 600);
+  await page.waitForSelector(".text-editor", { timeout: 15000 });
+  await page.keyboard.type("Texto novo no celular");
+  await page.click(".text-bar .btn.primary");
+  await idle();
+  await shot("3c-texto-aplicado");
+  const text = await pageText(1);
+  check("Texto editado e adicionado", text.includes("Pagina editada no Android") && text.includes("Texto novo no celular") && !text.includes("teste do app Android"), text);
+  await page.evaluate(() => window.__app.tools.apply("select"));
+});
+
 // 4) Salvar: abre o seletor do Android; o arquivo gravado precisa ter a assinatura.
 let savedName = "";
 await step("Salvar pelo seletor do Android", async () => {
@@ -203,6 +252,9 @@ await step("Salvar pelo seletor do Android", async () => {
   const xobjects = doc.getPage(0).node.Resources()?.lookup(PDFName.of("XObject"));
   const images = xobjects instanceof PDFDict ? xobjects.keys().filter((k) => xobjects.lookup(k)?.dict?.get(PDFName.of("Subtype")) === PDFName.of("Image")) : [];
   check("PDF salvo é válido e tem a assinatura", doc.getPageCount() === 3 && images.length === 1, `${doc.getPageCount()} páginas, ${images.length} imagem(ns) na página 1`);
+  const fonts = doc.getPage(0).node.Resources()?.lookup(PDFName.of("Font"));
+  const fontNames = fonts instanceof PDFDict ? fonts.keys().map((k) => fonts.lookup(k)?.lookup?.(PDFName.of("BaseFont"))?.decodeText?.() || "") : [];
+  check("PDF salvo tem a fonte escolhida no texto", fontNames.some((name) => /Lobster/.test(name)), fontNames.join(", "));
   check("Aba passa a apontar para o arquivo salvo", (await page.evaluate(() => window.__app.manager.active.path || "")).startsWith("content://"));
 });
 

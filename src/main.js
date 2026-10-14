@@ -252,8 +252,8 @@ function zoom(direction) {
 async function undoRedo(kind) {
   const tab = manager.active;
   if (!tab) return;
-  // Desfazer com uma caixa aberta (assinatura ou imagem) só a descarta.
-  if (kind === "undo" && ["signature", "image"].includes(app.tools.editing?.kind)) return app.tools.clearEdit();
+  // Desfazer com uma caixa aberta (assinatura, imagem ou texto) só a descarta.
+  if (kind === "undo" && ["signature", "image", "text"].includes(app.tools.editing?.kind)) return app.tools.clearEdit();
   if (PDFJS_EDITOR_TOOLS.has(app.tools.tool)) {
     tab.eventBus.dispatch("editingaction", { source: window, name: kind });
     return;
@@ -501,7 +501,9 @@ function onKeyDown(e) {
     return;
   }
   if (!manager.active || isTyping(e.target) || e.altKey) return;
-  const tool = TOOL_KEYS[e.key.toLowerCase()];
+  let tool = TOOL_KEYS[e.key.toLowerCase()];
+  // T: texto na página em Editar e em Preencher e assinar; caixa de texto (comentário) em Comentar.
+  if (tool === "text" && $("[data-category].active")?.dataset.category !== "comment") tool = "addtext";
   if (tool) app.tools.select(tool);
 }
 
