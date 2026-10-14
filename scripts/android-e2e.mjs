@@ -291,6 +291,7 @@ await backToApp();
 await step("Voltar fecha a janela aberta", async () => {
   await page.evaluate(() => window.__app.tools.apply("select"));
   // Iniciais ainda não foram criadas: abre a janela (a assinatura já está salva).
+  await click('[data-category="fill"]');
   await click('.tools[data-panel="fill"] [data-action="sign-initials"]');
   await page.waitForSelector("dialog[open]", { timeout: 10000 });
   await pressBack();
