@@ -870,6 +870,12 @@ textarea:focus {
   cursor: text;
 }
 
+/* Editando, um link por cima do texto não abre: o clique é para editar. */
+.viewer-area.mode-edit .annotationLayer *,
+.viewer-area.mode-addtext .annotationLayer * {
+  pointer-events: none !important;
+}
+
 .overlay-layer {
   position: absolute;
   inset: 0;
