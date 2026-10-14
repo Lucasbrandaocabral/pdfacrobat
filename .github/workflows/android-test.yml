@@ -1,8 +1,8 @@
 name: Testar o app Android
 
 # Gera os APKs, liga um emulador e usa o app de verdade
-# (scripts/android-e2e.mjs). Roda sozinho quando muda algo do app Android e
-# também pelo botão Run workflow (Actions → Testar o app Android). As telas e o
+# (scripts/android-e2e.mjs). Roda sozinho quando muda algo que vai no APK (a
+# interface também) e pelo botão Run workflow (Actions → Testar o app Android). As telas e o
 # PDF salvo ficam nos Artifacts (teste-android).
 on:
   workflow_dispatch:
@@ -10,9 +10,10 @@ on:
     branches: ["**"]
     paths:
       - "android/**"
+      - "src/**"
+      - "index.html"
+      - "package.json"
       - "capacitor.config.json"
-      - "src/platform.js"
-      - "src/android.js"
       - "scripts/android-e2e.mjs"
       - ".github/workflows/android-test.yml"
 

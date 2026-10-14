@@ -322,7 +322,10 @@ export async function openSignatureDialog({ kind = "signature", text = "" } = {}
     $(".sig-inks", dialog).hidden = mode === "image";
     $(".sig-help", dialog).textContent = HELP[mode];
     render();
-    if (mode === "type") nameInput.focus();
+    // No celular o teclado cobriria os estilos: com o nome já preenchido, só
+    // aparece quando a pessoa toca no campo.
+    const touch = window.matchMedia?.("(pointer: coarse)").matches;
+    if (mode === "type" && !(touch && nameInput.value.trim())) nameInput.focus();
   }
 
   async function chooseImage() {
