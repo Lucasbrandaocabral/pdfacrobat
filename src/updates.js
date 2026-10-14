@@ -1,8 +1,9 @@
-// Aviso de atualização do app desktop. A versão nova é procurada pelo
-// processo principal (electron/updater.cjs); aqui aparecem o cartão com o
-// andamento e os botões e o resultado da verificação pedida pelo menu Ajuda.
+// Aviso de atualização dos apps desktop e Android. No desktop a versão nova é
+// procurada pelo processo principal (electron/updater.cjs); no Android, nas
+// Releases do GitHub (platform.js). Aqui aparecem o cartão com o andamento e
+// os botões e o resultado da verificação pedida pelo menu Ajuda.
 import { $, setBusy, toast } from "./ui.js";
-import { isDesktop, updates } from "./platform.js";
+import { isAndroid, isDesktop, updates } from "./platform.js";
 
 const VIEWS = {
   checking: () => ({ title: "Procurando atualizações…", progress: null }),
@@ -23,11 +24,17 @@ const VIEWS = {
       : `A versão ${version} está pronta para ser instalada.`,
     action: "Reiniciar e atualizar",
   }),
-  opened: () => ({
-    title: "Instalador aberto",
-    text: "Feche o PDF Acrobat e, na janela do instalador, arraste o app para a pasta Aplicativos, substituindo a versão antiga.",
-    action: "Fechar o programa",
-  }),
+  opened: () =>
+    isAndroid
+      ? {
+          title: "Baixando a versão nova",
+          text: "Salve os documentos abertos. Quando o download terminar, toque no arquivo baixado para instalar a atualização.",
+        }
+      : {
+          title: "Instalador aberto",
+          text: "Feche o PDF Acrobat e, na janela do instalador, arraste o app para a pasta Aplicativos, substituindo a versão antiga.",
+          action: "Fechar o programa",
+        },
 };
 
 // Avisos que aparecem mesmo sem o usuário ter pedido a verificação.
@@ -39,7 +46,7 @@ const NOTICES = new Set(["available", "ready", "opened"]);
  * procura atualizações a pedido do usuário (menu Ajuda).
  */
 export function setupUpdates({ closeDocuments }) {
-  if (!isDesktop) return () => {};
+  if (!isDesktop && !isAndroid) return () => {};
   const bar = $("#update-bar");
   const action = $(".update-action", bar);
   const progress = $(".update-progress", bar);
@@ -92,6 +99,7 @@ export function setupUpdates({ closeDocuments }) {
 
   updates.onStatus(render);
   updates.getStatus().then((status) => status && NOTICES.has(status.state) && render(status));
+  updates.autoCheck?.();
 
   return () => {
     dismissed = null;

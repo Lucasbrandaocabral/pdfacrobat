@@ -57,6 +57,11 @@ body {
 body {
   display: flex;
   flex-direction: column;
+  /* Fora da barra de status, do recorte da câmera e da barra de gestos
+     (celular com a página ocupando a tela toda). No app Android as medidas
+     vêm do Capacitor; no navegador, de env(). */
+  padding: var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) var(--safe-area-inset-right, env(safe-area-inset-right, 0px))
+    var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
   background: var(--bg);
   color: var(--text);
   font: 13px/1.4 "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -1159,7 +1164,7 @@ body.has-doc .welcome {
 .toast {
   position: fixed;
   left: 50%;
-  bottom: 24px;
+  bottom: calc(24px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
   transform: translateX(-50%);
   max-width: min(560px, calc(100vw - 32px));
   padding: 10px 16px;
@@ -1173,7 +1178,7 @@ body.has-doc .welcome {
 .update-bar {
   position: fixed;
   right: 16px;
-  bottom: 16px;
+  bottom: calc(16px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
   display: flex;
   align-items: flex-start;
   gap: 12px;

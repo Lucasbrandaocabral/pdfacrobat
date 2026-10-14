@@ -14,6 +14,7 @@ import { compare } from "./features/compare.js";
 import { certSign } from "./features/certsign.js";
 import * as fillSign from "./features/fillsign.js";
 import { setupUpdates } from "./updates.js";
+import { setupAndroid } from "./android.js";
 
 const PDFJS_EDITOR_TOOLS = new Set(["highlight", "text", "ink", "image"]);
 const manager = new TabManager($("#viewer-area"), $("#tabbar"));
@@ -111,7 +112,7 @@ async function saveTab(tab, { saveAs = false } = {}) {
     manager.render();
     updateTitle();
     if (result.path) addRecent(result);
-    toast(platform.isDesktop ? "Documento salvo." : "Download iniciado.");
+    toast(platform.isDesktop || platform.isAndroid ? "Documento salvo." : "Download iniciado.");
     return true;
   });
   return ok === true;
@@ -597,7 +598,8 @@ function renderRecent() {
 }
 
 function registerServiceWorker() {
-  if (platform.isDesktop || !("serviceWorker" in navigator) || !/^https?:$/.test(location.protocol)) return;
+  // O app Android já tem tudo dentro dele (e um cache antigo atrapalharia a atualização).
+  if (platform.isDesktop || platform.isAndroid || !("serviceWorker" in navigator) || !/^https?:$/.test(location.protocol)) return;
   if (location.hostname === "localhost" || location.hostname === "127.0.0.1") return;
   navigator.serviceWorker.register("./sw.js").catch(() => {});
 }
@@ -608,6 +610,7 @@ const checkForUpdates = setupUpdates({ closeDocuments: closeUnsaved });
 document.addEventListener("keydown", onKeyDown);
 platform.onMenu((action) => runAction(action));
 platform.onOpenFile((file) => openFiles([file]));
+if (platform.isAndroid) setupAndroid(app);
 window.addEventListener("beforeunload", (e) => {
   if (!platform.isDesktop && manager.tabs.some((t) => t.dirty)) e.preventDefault();
 });

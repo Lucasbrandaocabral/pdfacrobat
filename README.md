@@ -29,8 +29,9 @@ Os instaladores ficam na aba **Releases** do repositório. Baixe o arquivo do se
 | Windows | `PDF-Acrobat-<versão>-win-x64.exe` (instalador) |
 | macOS | `PDF-Acrobat-<versão>-mac-arm64.dmg` (Apple Silicon) ou `-x64.dmg` (Intel) |
 | Linux | `.AppImage` (portátil) ou `.deb` (Ubuntu/Debian) |
+| Android | `PDF-Acrobat-<versão>-android.apk` |
 
-Requer Windows 10 ou 11 (64 bits), macOS 13 ou mais novo, ou Linux de 64 bits.
+Requer Windows 10 ou 11 (64 bits), macOS 13 ou mais novo, Linux de 64 bits ou Android 7 ou mais novo.
 
 > Os instaladores não têm assinatura digital paga. Por isso, no **Windows** o SmartScreen pode avisar "O Windows protegeu o computador": clique em *Mais informações* → *Executar assim mesmo*. No **macOS**, na primeira vez, clique com o botão direito no app → *Abrir* (no macOS 15 ou mais novo: *Ajustes do Sistema* → *Privacidade e Segurança* → *Abrir Mesmo Assim*).
 
@@ -46,13 +47,27 @@ A partir da versão 1.2.0 o programa se atualiza sozinho, sem precisar entrar no
 
 Antes de reiniciar, o programa pede para salvar os documentos com alterações. Quem usa a versão 1.1.0 ou anterior precisa instalar a 1.2.0 manualmente uma vez; daí em diante as atualizações chegam sozinhas.
 
+### Android
+
+1. No celular, abra a última versão em **Releases** e toque em `PDF-Acrobat-<versão>-android.apk`.
+2. Ao abrir o arquivo baixado, o Android pede para permitir que o navegador (ou o app de arquivos) instale apps: toque em **Configurações**, ative **Permitir desta fonte** e volte para **Instalar**.
+
+Com o app instalado:
+
+- **Abrir com** e **Compartilhar**: PDFs do WhatsApp, do e-mail ou do gerenciador de arquivos abrem direto no PDF Acrobat.
+- **Salvar** abre o seletor de arquivos do Android (Downloads, Documentos, Google Drive...) e depois grava no mesmo arquivo; vários arquivos de uma vez vão para a pasta escolhida.
+- **Imprimir** usa o serviço de impressão do Android, que também salva como PDF.
+- Quando sai uma versão nova, o app avisa e o botão **Baixar** abre o download no navegador; é só tocar no arquivo baixado para instalar por cima, sem perder as assinaturas salvas.
+
+O APK é gerado pelo mesmo workflow e assinado sempre com a mesma chave, que fica nos *secrets* do repositório (**Settings → Secrets and variables → Actions**): `ANDROID_KEYSTORE_BASE64` (o arquivo da chave em base64) e `ANDROID_KEYSTORE_PASSWORD`. Guarde uma cópia do arquivo da chave: sem ela, uma versão nova não instala por cima da antiga. Sem os secrets, o workflow gera só um APK de teste (*Artifacts* → `apk-de-teste`), que não entra nas versões publicadas.
+
 ### Publicar uma versão nova
 
 1. Abra **Releases** → **Draft a new release**.
 2. Em **Tag: Select tag**, digite a versão nova, maior que a anterior (ex.: `v1.3.0` ou `1.3.0`), e escolha **Create new tag**.
 3. Clique em **Publish release**.
 
-Em poucos minutos os instaladores aparecem anexados à versão (workflow **Gerar instaladores**), e os programas já instalados passam a se atualizar para ela. O número da versão do app vem da tag; não é preciso mudar o `package.json`. Uma versão marcada como **Set as a pre-release** não é oferecida como atualização, o que serve para testar antes.
+Em poucos minutos os instaladores e o APK aparecem anexados à versão (workflow **Gerar instaladores**), e os programas já instalados passam a se atualizar para ela. O número da versão do app vem da tag; não é preciso mudar o `package.json`. Uma versão marcada como **Set as a pre-release** não é oferecida como atualização, o que serve para testar antes.
 
 Todo envio de código também gera os instaladores como *Artifacts* na aba **Actions** (vêm em `.zip`), útil para testar antes de publicar.
 
@@ -91,6 +106,7 @@ A arquitetura segue a do Acrobat moderno: um núcleo que interpreta e desenha o 
 | Camada | No Adobe Acrobat | Neste projeto |
 |---|---|---|
 | Aplicativo desktop / janela | C++ nativo + Chromium Embedded Framework | **Electron** (Node.js + Chromium) — `electron/` |
+| App Android | App nativo | **Capacitor** (a mesma interface num WebView) — `android/` |
 | Interface | HTML/CSS/JS em partes da UI | **HTML, CSS e JavaScript** — `index.html`, `src/` |
 | Interpretação e renderização do PDF | AGM + CoolType (C++) | **PDF.js** (Mozilla, o mesmo motor do Firefox) |
 | Edição estrutural, anotações e criptografia | Camadas PD / Cos do SDK | **pdf-lib** (versão `@cantoo/pdf-lib`, com AES-256) — `src/pdf/` |
@@ -98,7 +114,7 @@ A arquitetura segue a do Acrobat moderno: um núcleo que interpreta e desenha o 
 | Assinatura digital | PKI própria | **@signpdf** + **node-forge** (PKCS#7) |
 | Conversão para Word | Serviço na nuvem | **docx** |
 | Atualização automática | Adobe Updater (ARM) | **electron-updater**, a partir das Releases do GitHub — `electron/updater.cjs` |
-| Build, instaladores e web | — | **Vite**, **electron-builder**, GitHub Actions e GitHub Pages |
+| Build, instaladores e web | — | **Vite**, **electron-builder**, **Gradle**, GitHub Actions e GitHub Pages |
 
 ### Estrutura
 
@@ -106,11 +122,13 @@ A arquitetura segue a do Acrobat moderno: um núcleo que interpreta e desenha o 
 electron/main.cjs        processo principal: janela, menus, diálogos, abrir/salvar arquivos
 electron/preload.cjs     ponte segura entre a interface e o sistema
 electron/updater.cjs     atualização automática (procura, baixa e instala versões novas)
+android/                 app Android (Capacitor); NativeFilesPlugin.java: salvar, abrir com, imprimir
+src/android.js           só no Android: botão voltar do sistema
 src/main.js              inicialização, ações, atalhos, arrastar e soltar, recentes
 src/tabs.js              abas (um visualizador do PDF.js por documento), desfazer/refazer, permissões
 src/tools.js             ferramentas na página: comentar, formas, carimbos, assinar, editar texto e imagens
 src/sidebar.js           miniaturas, marcadores e lista de comentários
-src/updates.js           aviso de atualização e botão "Reiniciar e atualizar"
+src/updates.js           aviso de atualização (desktop e Android)
 src/signature.js         criar assinatura e iniciais (digitar, desenhar, imagem) e as salvas
 src/features/            janelas e fluxos: documento, converter, OCR, comparar, certificado
 src/pdf/                 operações no arquivo: anotações, conteúdo da página, marcas, segurança, compressão
@@ -119,7 +137,7 @@ public/                  manifesto e service worker da versão web
 
 ## Desenvolvimento
 
-Requer Node.js 20 ou superior.
+Requer Node.js 22 ou superior.
 
 ```bash
 npm install
@@ -127,6 +145,8 @@ npm run dev          # interface no navegador (http://localhost:5173)
 npm start            # app desktop
 npm run dist         # gera o instalador do sistema atual em release/
 npm run dist:win     # ou :mac / :linux
+npm run android      # copia a interface para o app Android (android/)
+cd android && ./gradlew assembleDebug   # APK de teste (precisa do JDK 21 e do Android SDK)
 ```
 
 ## Limitações
@@ -143,4 +163,4 @@ Projeto de [@Lucasbrandaocabral](https://github.com/Lucasbrandaocabral), desenvo
 
 ## Licença
 
-MIT. Usa [PDF.js](https://github.com/mozilla/pdf.js) (Apache-2.0), [pdf-lib](https://github.com/cantoo-scribe/pdf-lib) (MIT), [Tesseract.js](https://github.com/naptha/tesseract.js) (Apache-2.0), [signpdf](https://github.com/vbuch/node-signpdf) (MIT), [node-forge](https://github.com/digitalbazaar/forge) (BSD/GPL), [docx](https://github.com/dolanmiu/docx) (MIT), [jsdiff](https://github.com/kpdecker/jsdiff) (BSD), [fflate](https://github.com/101arrowz/fflate) (MIT), [Electron](https://www.electronjs.org/) (MIT) e [electron-updater](https://github.com/electron-userland/electron-builder) (MIT). Fontes da assinatura digitada: [Dancing Script](https://fonts.google.com/specimen/Dancing+Script), [Great Vibes](https://fonts.google.com/specimen/Great+Vibes) e [Caveat](https://fonts.google.com/specimen/Caveat) (OFL) e [Homemade Apple](https://fonts.google.com/specimen/Homemade+Apple) (Apache-2.0).
+MIT. Usa [PDF.js](https://github.com/mozilla/pdf.js) (Apache-2.0), [pdf-lib](https://github.com/cantoo-scribe/pdf-lib) (MIT), [Tesseract.js](https://github.com/naptha/tesseract.js) (Apache-2.0), [signpdf](https://github.com/vbuch/node-signpdf) (MIT), [node-forge](https://github.com/digitalbazaar/forge) (BSD/GPL), [docx](https://github.com/dolanmiu/docx) (MIT), [jsdiff](https://github.com/kpdecker/jsdiff) (BSD), [fflate](https://github.com/101arrowz/fflate) (MIT), [Electron](https://www.electronjs.org/) (MIT), [Capacitor](https://capacitorjs.com/) (MIT) e [electron-updater](https://github.com/electron-userland/electron-builder) (MIT). Fontes da assinatura digitada: [Dancing Script](https://fonts.google.com/specimen/Dancing+Script), [Great Vibes](https://fonts.google.com/specimen/Great+Vibes) e [Caveat](https://fonts.google.com/specimen/Caveat) (OFL) e [Homemade Apple](https://fonts.google.com/specimen/Homemade+Apple) (Apache-2.0).

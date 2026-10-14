@@ -72,14 +72,72 @@ jobs:
             release/*.blockmap
           if-no-files-found: error
 
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - run: npm ci
+      - name: Usar o número da versão da tag
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [[ "$version" =~ ^[0-9]+\.[0-9]+$ ]]; then version="$version.0"; fi
+          npm version "$version" --no-git-tag-version --allow-same-version
+      - run: npm run build
+      - run: npx cap sync android
+      # O APK publicado é assinado sempre com a mesma chave (secrets do
+      # repositório, ver o README): sem isso o Android não aceita a versão nova
+      # por cima da antiga. Sem os secrets sai só um APK de teste.
+      - name: Gerar o APK
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          mkdir -p release
+          cd android
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/pdfacrobat.p12"
+            export ANDROID_KEYSTORE_FILE="$RUNNER_TEMP/pdfacrobat.p12"
+            ./gradlew assembleRelease --no-daemon
+            cp app/build/outputs/apk/release/app-release.apk "../release/PDF-Acrobat-$version-android.apk"
+          else
+            echo "::warning title=APK sem a chave de assinatura::Cadastre os secrets ANDROID_KEYSTORE_BASE64 e ANDROID_KEYSTORE_PASSWORD (veja o README) para o APK entrar nas versões publicadas."
+            ./gradlew assembleDebug --no-daemon
+            cp app/build/outputs/apk/debug/app-debug.apk "../release/PDF-Acrobat-$version-android-teste.apk"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: hashFiles('release/*-android.apk') != ''
+        with:
+          name: instalador-Android
+          path: release/*-android.apk
+      - uses: actions/upload-artifact@v4
+        if: hashFiles('release/*-android-teste.apk') != ''
+        with:
+          name: apk-de-teste
+          path: release/*-android-teste.apk
+
   release:
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: build
+    # O APK não segura a publicação dos instaladores de computador.
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/') && needs.build.result == 'success' }}
+    needs: [build, android]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
+          pattern: instalador-*
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">PDF Acrobat</string>
+    <string name="title_activity_main">PDF Acrobat</string>
+    <string name="package_name">com.lucasbrandaocabral.pdfacrobat</string>
+    <string name="custom_url_scheme">com.lucasbrandaocabral.pdfacrobat</string>
+</resources>

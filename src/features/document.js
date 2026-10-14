@@ -297,6 +297,14 @@ export async function compress(app) {
 export async function print(app) {
   const tab = requireTab(app);
   if (!(await app.guard(tab, Perm.PRINT, "imprimir"))) return;
+  if (platform.isAndroid) {
+    // O serviço de impressão do Android recebe o próprio PDF (sem a senha de abertura).
+    await app.run("Preparando impressão…", async () => {
+      const bytes = tab.encrypted ? await (await tab.loadEditable()).save() : await tab.currentBytes();
+      await platform.printPdf(bytes, tab.name);
+    });
+    return;
+  }
   const container = $("#print-container");
   let doc = null;
   await app.run("Preparando impressão…", async () => {
