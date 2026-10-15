@@ -16,6 +16,7 @@ import * as fillSign from "./features/fillsign.js";
 import * as printing from "./features/print.js";
 import * as splitting from "./features/split.js";
 import { removePages } from "./features/pagetools.js";
+import { crop } from "./features/crop.js";
 import { setupUpdates } from "./updates.js";
 import { setupAndroid } from "./android.js";
 
@@ -311,6 +312,7 @@ const actions = {
   "insert-files": () => documentFeatures.insertFiles(app),
   extract: () => splitting.extract(app),
   split: () => splitting.split(app),
+  crop: () => crop(app),
   watermark: () => documentFeatures.watermark(app),
   "header-footer": () => documentFeatures.headerFooter(app),
   protect: () => documentFeatures.protect(app),

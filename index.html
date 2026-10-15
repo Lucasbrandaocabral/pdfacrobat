@@ -122,6 +122,7 @@
           <button class="tool" data-action="delete-page" data-icon="trash" title="Excluir páginas: escolha nas miniaturas as que vão sair"><span>Excluir</span></button>
           <button class="tool" data-action="blank-page" data-icon="blank" title="Inserir página em branco depois da atual"><span>Em branco</span></button>
           <button class="tool" data-action="insert-files" data-icon="insert" title="Inserir PDF ou imagem depois da página atual"><span>Inserir arquivo</span></button>
+          <button class="tool" data-action="crop" data-icon="crop" title="Recortar as páginas: tirar margens ou ficar só com uma parte"><span>Recortar</span></button>
           <button class="tool" data-action="extract" data-icon="extract" title="Extrair páginas para um novo PDF"><span>Extrair</span></button>
           <button class="tool" data-action="split" data-icon="split" title="Dividir em vários arquivos: por intervalos, páginas ou tamanho"><span>Dividir</span></button>
           <span class="hint muted">Arraste as miniaturas no painel lateral para reordenar.</span>
@@ -402,6 +403,71 @@
           </div>
           <div class="tool-panel-foot">
             <button type="button" class="btn primary tool-go" data-go><span>Dividir PDF</span><span class="tool-go-arrow" data-icon="next"></span></button>
+          </div>
+        </form>
+      </div>
+    </dialog>
+
+    <!-- Recortar páginas: moldura ajustável sobre a página e margens em cm -->
+    <dialog id="crop-tool" class="tool-screen" aria-labelledby="crop-title">
+      <div class="tool-screen-body">
+        <section class="tool-main">
+          <header class="tool-head">
+            <button type="button" class="btn icon-only" data-tool-close data-icon="prev" title="Voltar ao documento" aria-label="Voltar ao documento"></button>
+            <div class="tool-head-text">
+              <h2 id="crop-title">Recortar páginas</h2>
+              <span class="muted small" data-doc></span>
+            </div>
+            <span class="spacer"></span>
+            <div class="crop-nav">
+              <button type="button" class="btn icon-only" data-step="-1" data-icon="prev" title="Página anterior" aria-label="Página anterior"></button>
+              <span data-page-label></span>
+              <button type="button" class="btn icon-only" data-step="1" data-icon="next" title="Próxima página" aria-label="Próxima página"></button>
+            </div>
+          </header>
+          <div class="crop-stage" data-stage>
+            <div class="crop-page">
+              <canvas class="crop-canvas" width="1" height="1"></canvas>
+              <div class="crop-shade-clip"><div class="crop-shade"></div></div>
+              <div class="crop-box" data-handle="move" title="Arraste para mover a área que fica">
+                <span class="crop-handle" data-handle="nw"></span>
+                <span class="crop-handle" data-handle="n"></span>
+                <span class="crop-handle" data-handle="ne"></span>
+                <span class="crop-handle" data-handle="e"></span>
+                <span class="crop-handle" data-handle="se"></span>
+                <span class="crop-handle" data-handle="s"></span>
+                <span class="crop-handle" data-handle="sw"></span>
+                <span class="crop-handle" data-handle="w"></span>
+              </div>
+            </div>
+          </div>
+        </section>
+        <form class="tool-panel" novalidate>
+          <div class="tool-panel-body">
+            <h3 class="tool-panel-title">Recortar</h3>
+            <p class="muted">Arraste os cantos da moldura sobre a página, ou digite quanto cortar de cada lado. O que fica fora da moldura some da página.</p>
+            <div class="crop-margins">
+              <label class="field">Em cima (cm)<input type="number" name="top" min="0" step="0.1" /></label>
+              <label class="field">Embaixo (cm)<input type="number" name="bottom" min="0" step="0.1" /></label>
+              <label class="field">À esquerda (cm)<input type="number" name="left" min="0" step="0.1" /></label>
+              <label class="field">À direita (cm)<input type="number" name="right" min="0" step="0.1" /></label>
+            </div>
+            <div class="panel-row">
+              <button type="button" class="btn" data-auto data-icon="sparkle"><span>Tirar as margens brancas</span></button>
+              <button type="button" class="btn" data-reset><span>Sem corte</span></button>
+            </div>
+            <span class="tool-label">Recortar</span>
+            <label class="check"><input type="radio" name="scope" value="current" checked /> Só esta página</label>
+            <label class="check"><input type="radio" name="scope" value="all" /> Todas as páginas</label>
+            <div class="panel-row">
+              <label class="check"><input type="radio" name="scope" value="range" /> Páginas</label>
+              <input type="text" name="pages" class="inline-text" placeholder="ex.: 1-3, 5" autocomplete="off" aria-label="Páginas a recortar" />
+            </div>
+            <label class="check"><input type="checkbox" name="autoEach" /> Tirar as margens brancas de cada página (cada uma do seu jeito)</label>
+            <div class="tool-info" role="status"></div>
+          </div>
+          <div class="tool-panel-foot">
+            <button type="button" class="btn primary tool-go" data-go><span>Recortar</span><span class="tool-go-arrow" data-icon="next"></span></button>
           </div>
         </form>
       </div>

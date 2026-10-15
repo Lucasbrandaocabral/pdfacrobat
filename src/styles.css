@@ -2279,6 +2279,97 @@ button.page-card:focus-visible {
   }
 }
 
+/* Recortar: a página com a moldura da área que fica. */
+.crop-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.crop-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  overflow: hidden;
+}
+
+.crop-page {
+  position: relative;
+  background: #fff;
+  box-shadow: 0 2px 12px rgb(0 0 0 / 0.3);
+  touch-action: none;
+  user-select: none;
+}
+
+.crop-canvas {
+  display: block;
+}
+
+/* O escurecimento fora da moldura fica recortado na página; as alças, não. */
+.crop-shade-clip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.crop-shade {
+  position: absolute;
+  box-shadow: 0 0 0 9999px rgb(0 0 0 / 0.5);
+}
+
+.crop-box {
+  position: absolute;
+  outline: 2px solid #fff;
+  cursor: move;
+}
+
+.crop-box::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px dashed var(--accent);
+  pointer-events: none;
+}
+
+.crop-handle {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  background: #fff;
+  z-index: 1;
+}
+
+.crop-handle[data-handle="nw"] { left: 0; top: 0; cursor: nwse-resize; }
+.crop-handle[data-handle="n"] { left: 50%; top: 0; cursor: ns-resize; }
+.crop-handle[data-handle="ne"] { left: 100%; top: 0; cursor: nesw-resize; }
+.crop-handle[data-handle="e"] { left: 100%; top: 50%; cursor: ew-resize; }
+.crop-handle[data-handle="se"] { left: 100%; top: 100%; cursor: nwse-resize; }
+.crop-handle[data-handle="s"] { left: 50%; top: 100%; cursor: ns-resize; }
+.crop-handle[data-handle="sw"] { left: 0; top: 100%; cursor: nesw-resize; }
+.crop-handle[data-handle="w"] { left: 0; top: 50%; cursor: ew-resize; }
+
+.crop-margins {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+@media (pointer: coarse) {
+  .crop-handle {
+    width: 26px;
+    height: 26px;
+    margin: -13px 0 0 -13px;
+  }
+}
+
 /* ---- Janela de impressão ---- */
 
 .dialog.print-dialog {
@@ -2586,6 +2677,14 @@ button.page-card:focus-visible {
 
   .tool-screen-body {
     flex-direction: column;
+  }
+
+  .crop-stage {
+    padding: 16px;
+  }
+
+  .crop-nav span {
+    font-size: 12px;
   }
 
   .tool-grid {

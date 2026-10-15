@@ -244,6 +244,7 @@ function buildMenu() {
             item("Girar para a direita", "rotate-cw"),
             item("Girar para a esquerda", "rotate-ccw"),
             item("Excluir páginas…", "delete-page"),
+            item("Recortar páginas…", "crop"),
             item("Inserir página em branco", "blank-page"),
             item("Inserir arquivo…", "insert-files"),
             item("Extrair páginas…", "extract"),
