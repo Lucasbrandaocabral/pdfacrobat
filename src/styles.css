@@ -2370,6 +2370,174 @@ button.page-card:focus-visible {
   }
 }
 
+/* Tarjar: a página (com zoom e rolagem) e as marcas por cima. */
+.redact-stage {
+  position: relative;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 20px;
+  overflow: auto;
+}
+
+/* Centraliza sem cortar o começo da página quando ela passa do tamanho da tela. */
+.redact-stage > .crop-page {
+  flex: none;
+  margin: auto;
+}
+
+.redact-zoom span {
+  min-width: 44px;
+  text-align: center;
+  font-size: 13px;
+}
+
+.redact-pan {
+  display: none;
+}
+
+.redact-pan[aria-pressed="true"] {
+  background: var(--active-bg);
+  color: var(--accent);
+}
+
+.redact-layer {
+  position: absolute;
+  inset: 0;
+  cursor: crosshair;
+  outline: none;
+  touch-action: none;
+}
+
+.redact-stage.panning .crop-page,
+.redact-stage.panning .redact-layer {
+  cursor: grab;
+  touch-action: pan-x pan-y;
+}
+
+.redact-mark {
+  position: absolute;
+  background: rgb(0 0 0 / 0.45);
+  outline: 2px solid #e11d48;
+}
+
+.redact-mark.selected {
+  background: rgb(0 0 0 / 0.75);
+  outline-width: 3px;
+}
+
+.redact-mark.drawing {
+  background: rgb(225 29 72 / 0.18);
+  outline-style: dashed;
+  pointer-events: none;
+}
+
+/* O × aparece na marca sob o mouse ou selecionada (tocada), sem cobrir as outras. */
+.redact-remove {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  z-index: 1;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #e11d48;
+  color: #fff;
+  cursor: pointer;
+}
+
+.redact-mark:hover .redact-remove,
+.redact-mark.selected .redact-remove {
+  display: flex;
+}
+
+.redact-remove .icon {
+  width: 12px;
+  height: 12px;
+  stroke-width: 3;
+}
+
+.redact-chips,
+.redact-pages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.redact-pages:empty {
+  display: none;
+}
+
+.redact-chips .chip,
+.redact-page-link {
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--panel-2);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.redact-chips .chip:hover:not(:disabled),
+.redact-page-link:hover,
+.redact-page-link.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.redact-chips .chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.redact-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
+}
+
+@media (pointer: coarse) {
+  /* Acima da marca: o toque que seleciona não cai no ×. */
+  .redact-remove {
+    top: -36px;
+    right: -14px;
+    width: 28px;
+    height: 28px;
+  }
+
+  .redact-pan {
+    display: inline-flex;
+  }
+}
+
+@media (max-width: 760px) {
+  /* No celular o zoom flutua no canto da página: o cabeçalho não tem espaço. */
+  .tool-main {
+    position: relative;
+  }
+
+  .redact-zoom {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    z-index: 2;
+    padding: 4px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--panel);
+    box-shadow: var(--shadow);
+  }
+}
+
 /* ---- Janela de impressão ---- */
 
 .dialog.print-dialog {

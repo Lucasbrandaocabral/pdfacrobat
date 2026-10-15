@@ -334,7 +334,22 @@ await step("Tela Dividir PDF", async () => {
   check("Tela Dividir PDF", await page.evaluate(() => !document.querySelector("#split-tool[open]")), info);
 });
 
-// 8) Botão voltar: fecha a janela aberta; sem nada aberto, o app vai para segundo plano.
+// 8) Tarjar: procura um texto em todas as páginas, aplica e confere que ele saiu.
+await step("Tarjar", async () => {
+  await click('[data-category="protect"]');
+  await click('.tools[data-panel="protect"] [data-action="redact"]');
+  await page.waitForSelector("#redact-tool[open]", { timeout: 15000 });
+  await page.fill('#redact-tool [name="term"]', "teste do app");
+  await click("#redact-tool [data-search]");
+  await page.waitForFunction(() => /2 marcas em 2 páginas/.test(document.querySelector("#redact-tool [data-count]").textContent), null, { timeout: 30000 });
+  await shot("8-tarjar");
+  await click("#redact-tool [data-go]");
+  await idle();
+  const text = await pageText(2);
+  check("Tarjar", !text.includes("teste do app") && text.includes("Pagina 2"), text);
+});
+
+// 9) Botão voltar: fecha a janela aberta; sem nada aberto, o app vai para segundo plano.
 await step("Voltar fecha a janela aberta", async () => {
   await page.evaluate(() => window.__app.tools.apply("select"));
   // Iniciais ainda não foram criadas: abre a janela (a assinatura já está salva).

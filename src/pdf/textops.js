@@ -355,6 +355,8 @@ function measure(content, op, metrics, state, decode) {
   let lead = null;
   let inkEnd = 0;
   const codes = [];
+  // Letras (com onde começam e terminam no trecho) e compensações do TJ, na ordem.
+  const layout = [];
   const blank = (code) => {
     const text = decode?.(code);
     return text === undefined ? !metrics.twoByte && code === 32 : !text.trim();
@@ -364,6 +366,7 @@ function measure(content, op, metrics, state, decode) {
     else if (token.type === "arrayEnd") depth--;
     else if (token.type === "number" && depth > 0) {
       advance -= (token.value / 1000) * state.size * state.th;
+      layout.push({ kern: token.value });
     } else if (token.type === "string" || token.type === "hex") {
       const raw = token.type === "string" ? literalBytes(bytes, token.start, token.end) : hexBytes(bytes, token.start, token.end);
       const step = metrics.twoByte ? 2 : 1;
@@ -373,14 +376,16 @@ function measure(content, op, metrics, state, decode) {
         const wordSpace = step === 1 && code === 32 ? state.tw : 0;
         const visible = !blank(code);
         if (visible && lead === null) lead = advance;
+        const from = advance;
         advance += (w0 * state.size + state.tc + wordSpace) * state.th;
         natural += w0 * state.size * state.th;
         if (visible) inkEnd = advance - state.tc * state.th;
         codes.push(code);
+        layout.push({ code, from, to: advance, width: w0 * state.size * state.th, visible });
       }
     }
   }
-  return { advance, natural, glyphs: codes.length, codes, lead: lead ?? advance, inkEnd: lead === null ? advance : inkEnd };
+  return { advance, natural, glyphs: codes.length, codes, layout, lead: lead ?? advance, inkEnd: lead === null ? advance : inkEnd };
 }
 
 const metricsCache = new WeakMap();
@@ -454,8 +459,26 @@ export function findTextRuns(doc, page, content = readPageContent(doc, page)) {
     fill: [0, 0, 0],
     space: 1,
   };
+  runs.skipped = [];
   scan(doc, content, page.node.Resources(), null, state, runs, 0);
   return runs;
+}
+
+/** Caixa [x0, y0, x1, y1] na página de um formulário desenhado com a matriz `ctm`. */
+function formBox(doc, stream, ctm) {
+  const bbox = stream.dict.lookup(key("BBox"));
+  const box = bbox instanceof PDFArray ? bbox.asArray().map((v) => num(doc.context.lookup(v))) : null;
+  const matrix = stream.dict.lookup(key("Matrix"));
+  const m = matrix instanceof PDFArray ? matrix.asArray().map((v) => num(doc.context.lookup(v))) : IDENTITY;
+  if (!box || box.length !== 4 || box.some((v) => !Number.isFinite(v))) return null;
+  const t = multiply(m.length === 6 && m.every(Number.isFinite) ? m : IDENTITY, ctm);
+  const pts = [
+    [box[0], box[1]],
+    [box[2], box[1]],
+    [box[0], box[3]],
+    [box[2], box[3]],
+  ].map(([x, y]) => transformPoint(t, x, y));
+  return [Math.min(...pts.map((q) => q[0])), Math.min(...pts.map((q) => q[1])), Math.max(...pts.map((q) => q[0])), Math.max(...pts.map((q) => q[1]))];
 }
 
 function scan(doc, content, resources, scope, initial, runs, depth) {
@@ -554,9 +577,14 @@ function scan(doc, content, resources, scope, initial, runs, depth) {
         break;
       case "Do": {
         const name = o.operands[0]?.type === "name" ? o.operands[0].value : null;
-        if (!name || depth >= MAX_DEPTH || uses.get(name) !== 1 || !(xobjects instanceof PDFDict)) break;
+        if (!name || !(xobjects instanceof PDFDict)) break;
         const stream = xobjects.lookup(key(name));
         if (!(stream instanceof PDFStream) || nameOf(stream.dict.lookup(key("Subtype"))) !== "Form") break;
+        if (depth >= MAX_DEPTH || uses.get(name) !== 1) {
+          // Formulário que fica de fora (repetido ou fundo demais): onde ele aparece na página.
+          runs.skipped.push(formBox(doc, stream, gs.ctm));
+          break;
+        }
         let formContent;
         try {
           formContent = decodeStream(stream);
@@ -595,6 +623,12 @@ function scan(doc, content, resources, scope, initial, runs, depth) {
             inkStart: measured ? transformPoint(trm, measured.lead, gs.rise) : null,
             inkEnd: measured ? transformPoint(trm, measured.inkEnd, gs.rise) : null,
             codes: measured?.codes ?? [],
+            // Para tarjar: matriz do trecho, deslocamento vertical e cada letra.
+            trm,
+            rise: gs.rise,
+            layout: measured?.layout ?? [],
+            twoByte: Boolean(metrics?.twoByte),
+            positioned: known,
             size: Math.abs(gs.size) * Math.hypot(trm[2], trm[3]),
             // Quantos pontos da página vale uma unidade de texto ao longo da linha.
             unit: Math.hypot(trm[0], trm[1]),
@@ -687,19 +721,28 @@ export function lineRuns(runs, line) {
 
 const fmt = (v) => String(Math.round(v * 1000) / 1000);
 
-/** Conteúdo com os trechos `runs` trocados por avanços vazios do mesmo tamanho. */
-export function blankRuns(content, runs) {
+/** O operador do trecho com `array` (o miolo do TJ) no lugar do texto, mantendo a mudança de linha de ' e ". */
+function showWith(run, array) {
+  const show = array ? `[${array}] TJ` : "";
+  if (run.op === "'") return `T* ${show}`;
+  if (run.op === '"') return `${fmt(run.tw)} Tw ${fmt(run.tc)} Tc T* ${show}`;
+  return show;
+}
+
+/** Avanço vazio do mesmo tamanho do trecho: o texto some e o resto fica no lugar. */
+function blankReplacement(run) {
+  const unit = run.fontSize * run.th;
+  return showWith(run, unit ? fmt((-run.advance * 1000) / unit) : "");
+}
+
+/** Conteúdo com os trechos [start, end) de `edits` trocados pelo texto de cada um. */
+function rewrite(content, edits) {
   const parts = [];
   let at = 0;
-  for (const run of [...runs].sort((a, b) => a.start - b.start)) {
-    parts.push(content.subarray(at, run.start));
-    const unit = run.fontSize * run.th;
-    const kern = unit ? `[${fmt((-run.advance * 1000) / unit)}] TJ` : "";
-    let replacement = kern;
-    if (run.op === "'") replacement = `T* ${kern}`;
-    else if (run.op === '"') replacement = `${fmt(run.tw)} Tw ${fmt(run.tc)} Tc T* ${kern}`;
-    parts.push(encoder.encode(` ${replacement} `));
-    at = run.end;
+  for (const edit of [...edits].sort((a, b) => a.start - b.start)) {
+    parts.push(content.subarray(at, edit.start));
+    parts.push(encoder.encode(` ${edit.text} `));
+    at = edit.end;
   }
   parts.push(content.subarray(at));
   const out = new Uint8Array(parts.reduce((sum, p) => sum + p.length, 0));
@@ -709,6 +752,14 @@ export function blankRuns(content, runs) {
     offset += part.length;
   }
   return out;
+}
+
+/** Conteúdo com os trechos `runs` trocados por avanços vazios do mesmo tamanho. */
+export function blankRuns(content, runs, replacement = blankReplacement) {
+  return rewrite(
+    content,
+    runs.map((run) => ({ start: run.start, end: run.end, text: replacement(run) })),
+  );
 }
 
 /** Stream novo (comprimido) com o conteúdo `bytes` e as demais entradas do dicionário `dict`. */
@@ -722,14 +773,16 @@ function restream(doc, dict, bytes) {
 }
 
 /**
- * Apaga da página os trechos `runs` (de findTextRuns), onde quer que estejam.
- * Um formulário com texto apagado vira uma cópia só desta página: o mesmo
- * formulário pode aparecer em outras páginas, que continuam como estavam.
+ * Cópias, só desta página, dos formulários que vão mudar: o mesmo formulário
+ * pode aparecer em outras páginas, que continuam como estavam. Cada formulário
+ * é identificado pelo caminho de nomes desde a página, e a cópia é feita uma
+ * vez só, mesmo quando o texto e as imagens dele mudam em passos separados.
  */
-export function removeRuns(doc, page, runs) {
+export function pageCopies(doc, page) {
   const { context } = doc;
   const copies = new Map();
   let pageResources = null;
+  const pathOf = (scope) => (scope ? `${pathOf(scope.parent)}/${scope.name}` : "");
   // Recursos próprios (copiados) de quem desenha o formulário, com a lista de XObjects também copiada.
   const ownResources = (holder, current) => {
     const resources = current instanceof PDFDict ? current.clone(context) : context.obj({});
@@ -739,13 +792,14 @@ export function removeRuns(doc, page, runs) {
     return resources;
   };
   const copyOf = (scope) => {
-    if (!copies.has(scope)) {
+    const path = pathOf(scope);
+    if (!copies.has(path)) {
       const stream = restream(doc, scope.stream.dict, decodeStream(scope.stream));
       const copy = { stream, ref: context.register(stream), resources: null };
-      copies.set(scope, copy);
+      copies.set(path, copy);
       resourcesOf(scope.parent).lookup(key("XObject"), PDFDict).set(key(scope.name), copy.ref);
     }
-    return copies.get(scope);
+    return copies.get(path);
   };
   const resourcesOf = (scope) => {
     if (!scope) return (pageResources ||= ownResources(page.node, page.node.Resources()));
@@ -753,19 +807,265 @@ export function removeRuns(doc, page, runs) {
     copy.resources ||= ownResources(copy.stream.dict, scope.resources);
     return copy.resources;
   };
+  /** Troca o conteúdo da página (scope null) ou da cópia do formulário. */
+  const setContent = (scope, bytes) => {
+    if (!scope) return writePageContent(doc, page, bytes);
+    const copy = copyOf(scope);
+    const stream = restream(doc, copy.stream.dict, bytes);
+    context.assign(copy.ref, stream);
+    copy.stream = stream;
+  };
+  return { resourcesOf, setContent };
+}
+
+/**
+ * Apaga da página os trechos `runs` (de findTextRuns), onde quer que estejam.
+ * Um formulário com texto apagado vira uma cópia só desta página. `edits`
+ * (por formulário, como em `run.scope`) traz outras trocas no mesmo conteúdo.
+ */
+export function removeRuns(doc, page, runs, replacement = blankReplacement, { copies = pageCopies(doc, page), edits = new Map() } = {}) {
   const groups = new Map();
   for (const run of runs) {
     if (!groups.has(run.scope)) groups.set(run.scope, []);
-    groups.get(run.scope).push(run);
+    groups.get(run.scope).push({ start: run.start, end: run.end, text: replacement(run) });
+  }
+  for (const [scope, list] of edits) {
+    if (!groups.has(scope)) groups.set(scope, []);
+    groups.get(scope).push(...list);
   }
   for (const [scope, list] of groups) {
-    if (!scope) {
-      writePageContent(doc, page, blankRuns(readPageContent(doc, page), list));
+    const content = scope ? decodeStream(scope.stream) : readPageContent(doc, page);
+    copies.setContent(scope, rewrite(content, list));
+  }
+}
+
+// ---- Tarjar: as letras debaixo de uma área ----
+
+const area = ([x0, y0, x1, y1]) => Math.max(0, x1 - x0) * Math.max(0, y1 - y0);
+const intersection = (a, b) => [Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.min(a[2], b[2]), Math.min(a[3], b[3])];
+
+/** Caixa [x0, y0, x1, y1] na página de cada letra do trecho (null nas compensações do TJ). */
+export function glyphBoxes(run) {
+  const low = run.rise - 0.2 * run.fontSize;
+  const high = run.rise + 0.8 * run.fontSize;
+  return run.layout.map((item) => {
+    if (item.code === undefined) return null;
+    const x0 = item.from;
+    const x1 = item.from + (item.width || item.to - item.from);
+    const pts = [
+      [x0, low],
+      [x1, low],
+      [x0, high],
+      [x1, high],
+    ].map(([x, y]) => transformPoint(run.trm, x, y));
+    return [Math.min(...pts.map((p) => p[0])), Math.min(...pts.map((p) => p[1])), Math.max(...pts.map((p) => p[0])), Math.max(...pts.map((p) => p[1]))];
+  });
+}
+
+/** O trecho sem as letras `removed` (índices do layout): cada uma vira um avanço vazio do mesmo tamanho. */
+function partialReplacement(run, removed) {
+  const unit = run.fontSize * run.th;
+  const digits = run.twoByte ? 4 : 2;
+  const parts = [];
+  let pending = [];
+  const flush = () => {
+    if (pending.length) parts.push(`<${pending.map((c) => c.toString(16).padStart(digits, "0")).join("")}>`);
+    pending = [];
+  };
+  run.layout.forEach((item, k) => {
+    if (item.code === undefined) {
+      flush();
+      parts.push(fmt(item.kern));
+    } else if (removed.has(k)) {
+      flush();
+      if (unit) parts.push(fmt((-(item.to - item.from) * 1000) / unit));
+    } else pending.push(item.code);
+  });
+  flush();
+  return showWith(run, parts.join(" "));
+}
+
+/**
+ * Apaga da página as letras que ficam debaixo das áreas `rects` ([x0, y0, x1,
+ * y1] em coordenadas da página): sai a letra com pelo menos `share` dela
+ * coberta, e o resto da linha fica no lugar. Vale também para o texto
+ * invisível do OCR. `unsure` diz que pode ter sobrado texto que não dá para
+ * localizar (fonte sem medidas, formulário repetido debaixo de uma área).
+ */
+export function redactText(doc, page, rects, { share = 0.3, copies = pageCopies(doc, page) } = {}) {
+  const runs = findTextRuns(doc, page);
+  const changes = new Map();
+  let removed = 0;
+  let unsure = false;
+  for (const run of runs) {
+    if (!run.known) {
+      if (!run.positioned) {
+        unsure = true;
+        continue;
+      }
+      // Sem as medidas das letras: sai o trecho inteiro se ele pode chegar a uma área.
+      const [x, y] = run.origin;
+      const pad = run.size || 12;
+      if (rects.some((r) => y >= r[1] - pad && y <= r[3] + pad && x <= r[2] + pad)) {
+        changes.set(run, "all");
+        removed += run.codes.length || 1;
+      }
       continue;
     }
-    const copy = copyOf(scope);
-    const stream = restream(doc, copy.stream.dict, blankRuns(decodeStream(scope.stream), list));
-    context.assign(copy.ref, stream);
-    copy.stream = stream;
+    const hit = new Set();
+    glyphBoxes(run).forEach((box, k) => {
+      if (box && rects.some((r) => area(intersection(box, r)) >= share * Math.max(area(box), 1e-6))) hit.add(k);
+    });
+    if (!hit.size) continue;
+    const count = run.layout.filter((item) => item.code !== undefined).length;
+    changes.set(run, hit.size === count ? "all" : hit);
+    removed += hit.size;
   }
+  if (changes.size) {
+    // O texto alternativo (ActualText) das marcações em volta das letras apagadas sai junto.
+    const edits = new Map();
+    const byScope = new Map();
+    for (const run of changes.keys()) {
+      if (!byScope.has(run.scope)) byScope.set(run.scope, []);
+      byScope.get(run.scope).push(run);
+    }
+    for (const [scope, list] of byScope) {
+      const content = scope ? decodeStream(scope.stream) : readPageContent(doc, page);
+      const resources = scope ? scope.resources : page.node.Resources();
+      const found = markedTextEdits(doc, content, resources, list);
+      if (found.length) edits.set(scope, found);
+    }
+    const replacement = (run) => (changes.get(run) === "all" ? blankReplacement(run) : partialReplacement(run, changes.get(run)));
+    removeRuns(doc, page, [...changes.keys()], replacement, { copies, edits });
+  }
+  if (runs.skipped.some((box) => box && rects.some((r) => area(intersection(box, r)) > 0))) unsure = true;
+  return { removed, unsure };
+}
+
+const ALTERNATE_TEXT = new Set(["ActualText", "Alt", "E"]);
+const rawText = (bytes) => String.fromCharCode(...bytes);
+
+/**
+ * Propriedades de uma marcação (BDC) com texto alternativo: a etiqueta, o
+ * número (MCID) que a liga à estrutura do documento e se há texto alternativo,
+ * no dicionário dentro do conteúdo ou na lista de propriedades da página.
+ */
+function markedProperties(doc, content, op, resources) {
+  const tokens = [...tokenize(content.subarray(op.start, op.end))];
+  const tag = tokens[0]?.type === "name" ? tokens[0] : null;
+  if (!tag) return null;
+  const result = { tag: rawText(content.subarray(op.start + tag.start, op.start + tag.end)), mcid: null, alternate: false };
+  if (tokens[1]?.type === "name") {
+    const properties = resources?.lookup(key("Properties"));
+    const dict = properties instanceof PDFDict ? properties.lookup(key(tokens[1].value)) : null;
+    if (!(dict instanceof PDFDict)) return result;
+    for (const [name, value] of dict.entries()) {
+      if (ALTERNATE_TEXT.has(name.decodeText())) result.alternate = true;
+      if (name.decodeText() === "MCID") result.mcid = num(doc.context.lookup(value)) ?? null;
+    }
+    return result;
+  }
+  // Dicionário dentro do conteúdo: chaves e valores no primeiro nível.
+  let depth = 0;
+  let pending = null;
+  for (const token of tokens.slice(1)) {
+    if (token.type === "op") break;
+    if (token.type === "dictStart" || token.type === "arrayStart") {
+      depth++;
+      continue;
+    }
+    if (token.type === "dictEnd" || token.type === "arrayEnd") {
+      depth--;
+      // Terminou um valor composto: o próximo é uma chave.
+      if (depth === 1) pending = null;
+      continue;
+    }
+    if (depth !== 1) continue;
+    if (pending === null) {
+      if (token.type !== "name") continue;
+      pending = token.value;
+      if (ALTERNATE_TEXT.has(pending)) result.alternate = true;
+    } else {
+      if (pending === "MCID" && token.type === "number") result.mcid = token.value;
+      pending = null;
+    }
+  }
+  return result;
+}
+
+/** Trocas que tiram o texto alternativo das marcações (BDC ... EMC) que envolvem os trechos `runs`. */
+function markedTextEdits(doc, content, resources, runs) {
+  const edits = [];
+  const stack = [];
+  for (const o of parseOperations(content)) {
+    if (o.op === "BDC" || o.op === "BMC") stack.push(o);
+    else if (o.op === "EMC") {
+      const open = stack.pop();
+      if (open?.op !== "BDC" || !runs.some((run) => run.start >= open.end && run.end <= o.start)) continue;
+      const props = markedProperties(doc, content, open, resources);
+      if (!props?.alternate) continue;
+      const text = props.mcid === null ? `${props.tag} BMC` : `${props.tag} <</MCID ${props.mcid}>> BDC`;
+      edits.push({ start: open.start, end: open.end, text });
+    }
+  }
+  // Marcação aberta e não fechada até o fim do conteúdo.
+  for (const open of stack) {
+    if (open.op !== "BDC" || !runs.some((run) => run.start >= open.end)) continue;
+    const props = markedProperties(doc, content, open, resources);
+    if (props?.alternate) edits.push({ start: open.start, end: open.end, text: props.mcid === null ? `${props.tag} BMC` : `${props.tag} <</MCID ${props.mcid}>> BDC` });
+  }
+  return edits;
+}
+
+/**
+ * Linhas de texto da página, para procurar o que tarjar: o texto de cada
+ * linha (com espaço entre as palavras) e, para cada caractere dele, a caixa da
+ * letra de onde veio (null nos espaços acrescentados) e se ela é invisível
+ * (camada de OCR).
+ */
+export function textLines(doc, page) {
+  const glyphs = [];
+  for (const run of findTextRuns(doc, page)) {
+    if (!run.known) continue;
+    const decode = decoderFor(doc, run.fontDict);
+    if (!decode) continue;
+    const boxes = glyphBoxes(run);
+    const angle = Math.atan2(run.trm[1], run.trm[0]);
+    run.layout.forEach((item, k) => {
+      if (item.code === undefined) return;
+      const text = decode(item.code);
+      if (!text) return;
+      glyphs.push({ text, box: boxes[k], angle, p: transformPoint(run.trm, item.from, run.rise), size: run.size || 1, advance: (item.to - item.from) * run.unit, hidden: invisible(run) });
+    });
+  }
+  const lines = [];
+  for (const g of glyphs) {
+    const cos = Math.cos(g.angle);
+    const sin = Math.sin(g.angle);
+    const v = -g.p[0] * sin + g.p[1] * cos;
+    let line = lines.find((l) => Math.abs(l.angle - g.angle) < 0.03 && Math.abs(l.v - v) < 0.3 * Math.max(l.size, g.size));
+    if (!line) lines.push((line = { angle: g.angle, v, size: g.size, items: [] }));
+    line.items.push({ ...g, u: g.p[0] * cos + g.p[1] * sin });
+  }
+  return lines.map((line) => {
+    line.items.sort((a, b) => a.u - b.u);
+    let text = "";
+    const boxes = [];
+    const hidden = [];
+    let end = null;
+    for (const g of line.items) {
+      if (end !== null && g.u - end > 0.25 * g.size && text && !/\s$/.test(text) && g.text.trim()) {
+        text += " ";
+        boxes.push(null);
+        hidden.push(false);
+      }
+      text += g.text;
+      for (let i = 0; i < g.text.length; i++) {
+        boxes.push(g.box);
+        hidden.push(g.hidden);
+      }
+      end = g.u + g.advance;
+    }
+    return { text, boxes, hidden };
+  });
 }

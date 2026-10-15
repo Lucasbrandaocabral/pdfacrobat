@@ -257,6 +257,8 @@ function buildMenu() {
             item("Proteger com senha…", "protect"),
             item("Remover senha", "unprotect"),
             item("Assinatura digital com certificado…", "cert-sign"),
+            sep,
+            item("Tarjar informações…", "redact"),
           ],
         },
         {

@@ -131,6 +131,8 @@
           <button class="tool" data-action="protect" data-icon="lock" title="Proteger com senha e restrições"><span>Proteger com senha</span></button>
           <button class="tool" data-action="unprotect" data-icon="unlock" title="Remover senha e restrições"><span>Remover senha</span></button>
           <button class="tool" data-action="cert-sign" data-icon="certificate" title="Assinatura digital com certificado (.pfx/.p12)"><span>Assinatura digital</span></button>
+          <span class="divider"></span>
+          <button class="tool" data-action="redact" data-icon="redact" title="Tarjar: apagar de verdade textos, imagens e dados pessoais (CPF, e-mail…)"><span>Tarjar</span></button>
         </div>
         <div class="tools" data-panel="convert" hidden>
           <button class="tool" data-action="export-images" data-icon="exportImage" title="Salvar páginas como imagens"><span>Imagens</span></button>
@@ -468,6 +470,69 @@
           </div>
           <div class="tool-panel-foot">
             <button type="button" class="btn primary tool-go" data-go><span>Recortar</span><span class="tool-go-arrow" data-icon="next"></span></button>
+          </div>
+        </form>
+      </div>
+    </dialog>
+    <dialog id="redact-tool" class="tool-screen" aria-labelledby="redact-title">
+      <div class="tool-screen-body">
+        <section class="tool-main">
+          <header class="tool-head">
+            <button type="button" class="btn icon-only" data-tool-close data-icon="prev" title="Voltar ao documento" aria-label="Voltar ao documento"></button>
+            <div class="tool-head-text">
+              <h2 id="redact-title">Tarjar informações</h2>
+              <span class="muted small" data-doc></span>
+            </div>
+            <span class="spacer"></span>
+            <div class="crop-nav redact-zoom">
+              <button type="button" class="btn icon-only redact-pan" data-pan data-icon="hand" title="Mover a página com o dedo (em vez de marcar)" aria-label="Mover a página" aria-pressed="false"></button>
+              <button type="button" class="btn icon-only" data-zoom="-1" data-icon="zoomOut" title="Menos zoom" aria-label="Menos zoom"></button>
+              <span data-zoom-label></span>
+              <button type="button" class="btn icon-only" data-zoom="1" data-icon="zoomIn" title="Mais zoom" aria-label="Mais zoom"></button>
+            </div>
+            <div class="crop-nav">
+              <button type="button" class="btn icon-only" data-step="-1" data-icon="prev" title="Página anterior" aria-label="Página anterior"></button>
+              <span data-page-label></span>
+              <button type="button" class="btn icon-only" data-step="1" data-icon="next" title="Próxima página" aria-label="Próxima página"></button>
+            </div>
+          </header>
+          <div class="crop-stage redact-stage" data-stage>
+            <div class="crop-page">
+              <canvas class="crop-canvas" width="1" height="1"></canvas>
+              <div class="redact-layer" data-layer tabindex="-1"></div>
+            </div>
+          </div>
+        </section>
+        <form class="tool-panel" novalidate>
+          <div class="tool-panel-body">
+            <h3 class="tool-panel-title">Tarjar</h3>
+            <p class="muted">Arraste sobre a página para marcar o que esconder, ou procure abaixo. Ao tarjar, o que está debaixo das marcas sai do arquivo de verdade: não dá para recuperar copiando, pesquisando ou editando.</p>
+            <span class="tool-label">Procurar e marcar em todas as páginas</span>
+            <div class="panel-row redact-search">
+              <input type="search" name="term" class="inline-text" placeholder="Nome, número, palavra…" autocomplete="off" aria-label="Texto a procurar" />
+              <button type="button" class="btn" data-search data-icon="search"><span>Marcar</span></button>
+            </div>
+            <label class="check"><input type="checkbox" name="whole" checked /> Só palavras inteiras</label>
+            <div class="redact-chips" role="group" aria-label="Marcar dados pessoais">
+              <button type="button" class="chip" data-pattern="cpf">CPF</button>
+              <button type="button" class="chip" data-pattern="cnpj">CNPJ</button>
+              <button type="button" class="chip" data-pattern="email">E-mail</button>
+              <button type="button" class="chip" data-pattern="phone">Telefone</button>
+              <button type="button" class="chip" data-pattern="cep">CEP</button>
+              <button type="button" class="chip" data-pattern="date">Datas</button>
+            </div>
+            <div class="redact-summary">
+              <span class="tool-label" data-count></span>
+              <button type="button" class="btn" data-clear><span>Limpar marcas</span></button>
+            </div>
+            <div class="redact-pages" data-pages></div>
+            <span class="tool-label">Ao tarjar</span>
+            <label class="check"><input type="checkbox" name="metadata" checked /> Tirar também título, autor e outros dados do arquivo</label>
+            <label class="check"><input type="checkbox" name="asImage" /> Transformar as páginas tarjadas em imagem (some também o que for desenho; o texto delas deixa de ser selecionável)</label>
+            <div class="tool-info" role="status"></div>
+          </div>
+          <div class="tool-panel-foot">
+            <button type="button" class="btn primary tool-go" data-go><span data-go-label>Tarjar</span><span class="tool-go-arrow" data-icon="next"></span></button>
           </div>
         </form>
       </div>

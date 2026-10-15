@@ -17,6 +17,7 @@ import * as printing from "./features/print.js";
 import * as splitting from "./features/split.js";
 import { removePages } from "./features/pagetools.js";
 import { crop } from "./features/crop.js";
+import { redact } from "./features/redact.js";
 import { setupUpdates } from "./updates.js";
 import { setupAndroid } from "./android.js";
 
@@ -319,6 +320,7 @@ const actions = {
   unprotect: () => documentFeatures.unprotect(app),
   compress: () => documentFeatures.compress(app),
   "cert-sign": () => certSign(app),
+  redact: () => redact(app),
   "export-images": () => convert.exportImages(app),
   "export-text": () => convert.exportText(app),
   "export-word": () => convert.exportWord(app),

@@ -74,6 +74,8 @@ const paths = {
   multiple: '<rect x="2" y="5" width="20" height="14" rx="1.5"/><rect x="5" y="8" width="5.5" height="8" rx=".5"/><rect x="13.5" y="8" width="5.5" height="8" rx=".5"/>',
   booklet: '<path d="M12 6.5C10 5 7 4.5 3 4.5v13c4 0 7 .5 9 2 2-1.5 5-2 9-2v-13c-4 0-7 .5-9 2z"/><path d="M12 6.5v13"/>',
   crop: '<path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/>',
+  redact: '<rect x="3" y="4.5" width="18" height="4.5" rx="1" fill="currentColor"/><path d="M3 13.5h6"/><rect x="11" y="11.5" width="10" height="4" rx="1" fill="currentColor"/><path d="M3 19.5h18"/>',
+  hand: '<path d="M18 11V6a2 2 0 0 0-4 0v5"/><path d="M14 10V4a2 2 0 0 0-4 0v6"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.9-6-2.3l-3.6-3.6a2 2 0 0 1 2.8-2.8L7 15"/>',
   sparkle: '<path d="M11 3.5 12.8 9 18 10.8 12.8 12.6 11 18l-1.8-5.4L4 10.8 9.2 9z"/><path d="m18.5 15 .8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/>',
 };
 
