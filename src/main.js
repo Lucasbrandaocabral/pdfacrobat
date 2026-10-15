@@ -14,6 +14,8 @@ import { compare } from "./features/compare.js";
 import { certSign } from "./features/certsign.js";
 import * as fillSign from "./features/fillsign.js";
 import * as printing from "./features/print.js";
+import * as splitting from "./features/split.js";
+import { removePages } from "./features/pagetools.js";
 import { setupUpdates } from "./updates.js";
 import { setupAndroid } from "./android.js";
 
@@ -304,11 +306,11 @@ const actions = {
   "next-page": () => manager.active?.viewer.nextPage(),
   "rotate-cw": () => documentFeatures.rotate(app, 90),
   "rotate-ccw": () => documentFeatures.rotate(app, -90),
-  "delete-page": () => documentFeatures.deletePage(app),
+  "delete-page": () => removePages(app),
   "blank-page": () => documentFeatures.insertBlank(app),
   "insert-files": () => documentFeatures.insertFiles(app),
-  extract: () => documentFeatures.extract(app),
-  split: () => documentFeatures.split(app),
+  extract: () => splitting.extract(app),
+  split: () => splitting.split(app),
   watermark: () => documentFeatures.watermark(app),
   "header-footer": () => documentFeatures.headerFooter(app),
   protect: () => documentFeatures.protect(app),

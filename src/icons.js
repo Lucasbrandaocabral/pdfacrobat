@@ -73,6 +73,7 @@ const paths = {
   poster: '<rect x="3" y="3" width="18" height="18" rx="1.5"/><path d="M12 3v18M3 12h18"/>',
   multiple: '<rect x="2" y="5" width="20" height="14" rx="1.5"/><rect x="5" y="8" width="5.5" height="8" rx=".5"/><rect x="13.5" y="8" width="5.5" height="8" rx=".5"/>',
   booklet: '<path d="M12 6.5C10 5 7 4.5 3 4.5v13c4 0 7 .5 9 2 2-1.5 5-2 9-2v-13c-4 0-7 .5-9 2z"/><path d="M12 6.5v13"/>',
+  sparkle: '<path d="M11 3.5 12.8 9 18 10.8 12.8 12.6 11 18l-1.8-5.4L4 10.8 9.2 9z"/><path d="m18.5 15 .8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/>',
 };
 
 export function icon(name) {

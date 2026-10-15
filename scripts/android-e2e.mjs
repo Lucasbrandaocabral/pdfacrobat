@@ -317,7 +317,24 @@ await step("Imprimir abre a impressão do Android", async () => {
 });
 await backToApp();
 
-// 7) Botão voltar: fecha a janela aberta; sem nada aberto, o app vai para segundo plano.
+// 7) Dividir PDF: a tela de miniaturas abre, mostra quantos arquivos e o voltar do Android a fecha.
+await step("Tela Dividir PDF", async () => {
+  await click('[data-category="pages"]');
+  await click('.tools[data-panel="pages"] [data-action="split"]');
+  await page.waitForSelector("#split-tool[open]", { timeout: 15000 });
+  await click('#split-tool [data-tab="ranges"]');
+  await click('#split-tool [data-mode="fixed"]');
+  await page.fill('#split-tool [name="every"]', "1");
+  await page.waitForFunction(() => /3 PDFs serão criados/.test(document.querySelector("#split-tool .tool-info").textContent), null, { timeout: 15000 });
+  await page.waitForFunction(() => document.querySelector("#split-tool .page-thumb[src]"), null, { timeout: 20000 });
+  await shot("7-dividir");
+  const info = await page.evaluate(() => document.querySelector("#split-tool .tool-info").textContent);
+  await pressBack();
+  await sleep(1000);
+  check("Tela Dividir PDF", await page.evaluate(() => !document.querySelector("#split-tool[open]")), info);
+});
+
+// 8) Botão voltar: fecha a janela aberta; sem nada aberto, o app vai para segundo plano.
 await step("Voltar fecha a janela aberta", async () => {
   await page.evaluate(() => window.__app.tools.apply("select"));
   // Iniciais ainda não foram criadas: abre a janela (a assinatura já está salva).

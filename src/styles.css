@@ -232,6 +232,7 @@ body:not(.has-doc) [data-needs-doc] {
 }
 
 .dialog .btn:not(.primary):not(.danger),
+.tool-panel .btn:not(.primary):not(.danger),
 .welcome-actions .btn:not(.primary),
 .file-row .btn {
   border-color: var(--border);
@@ -1822,6 +1823,462 @@ div[data-group] {
   word-break: break-word;
 }
 
+/* ---- Telas de páginas (dividir, remover) ---- */
+
+.tool-screen {
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.tool-screen[open] {
+  display: flex;
+  overflow: hidden;
+}
+
+.tool-screen-body {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  /* Fora da barra de status e da barra de gestos, como o resto do app. */
+  padding: var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) var(--safe-area-inset-right, env(safe-area-inset-right, 0px))
+    var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
+}
+
+.tool-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--canvas);
+}
+
+.tool-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.tool-head h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.tool-head-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tool-head-text span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-grid {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  justify-content: center;
+  gap: 28px 24px;
+  user-select: none;
+}
+
+.tool-grid.pick {
+  gap: 16px;
+}
+
+.split-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.split-group-label {
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+}
+
+.split-group-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px;
+  border: 1.5px dashed color-mix(in srgb, var(--text) 40%, transparent);
+  border-radius: 4px;
+}
+
+.page-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 154px;
+  padding: 12px 12px 8px;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.12);
+  color: inherit;
+  font: inherit;
+}
+
+button.page-card {
+  cursor: pointer;
+}
+
+button.page-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+button.page-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.page-card-image {
+  width: 126px;
+  height: 168px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.page-thumb {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.14);
+}
+
+.page-thumb:not([src]) {
+  width: 118px;
+  height: 160px;
+}
+
+.page-card-number {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Marca no canto: escolhida (✓) ou que vai sair (lixeira). */
+.page-card-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+
+.page-card-badge .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.page-card.selected {
+  border-color: var(--accent);
+}
+
+.page-card.selected .page-card-badge {
+  display: flex;
+  background: var(--accent);
+}
+
+.page-card.removed {
+  border-color: #c62828;
+  background: color-mix(in srgb, #c62828 8%, var(--panel));
+}
+
+.page-card.removed .page-thumb {
+  opacity: 0.35;
+}
+
+.page-card.removed .page-card-badge {
+  display: flex;
+  background: #c62828;
+}
+
+.split-more {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 54px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.split-more strong {
+  font-size: 22px;
+  letter-spacing: 3px;
+  line-height: 1;
+}
+
+.tool-grid-message {
+  align-self: center;
+  margin: auto;
+  max-width: 420px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 15px;
+}
+
+.tool-panel {
+  width: 400px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+}
+
+.tool-panel-title {
+  margin: 4px 0 0;
+  text-align: center;
+  font-size: 22px;
+}
+
+.tool-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-bottom: 1px solid var(--border);
+}
+
+.tool-tabs button {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 6px 14px;
+  border: 0;
+  border-right: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.tool-tabs button:last-child {
+  border-right: 0;
+}
+
+.tool-tabs button .icon {
+  width: 34px;
+  height: 34px;
+  stroke-width: 1.4;
+}
+
+.tool-tabs button.active {
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: inset 0 3px 0 var(--accent);
+}
+
+.tool-tabs button:focus-visible,
+.tool-modes button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.tool-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tool-pane,
+.tool-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tool-label {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.tool-modes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.tool-modes.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.tool-modes button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 52px;
+  padding: 8px 6px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2);
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.tool-modes button .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.tool-modes button.active {
+  border-color: var(--accent);
+  background: var(--panel);
+  color: var(--accent);
+}
+
+.panel-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.range-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.range-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.range-row strong {
+  flex: 1 0 100%;
+  font-size: 13px;
+}
+
+.range-row input {
+  width: 72px;
+}
+
+.range-row .btn {
+  margin-left: auto;
+}
+
+.range-add {
+  align-self: flex-start;
+}
+
+.tool-info {
+  padding: 12px 14px 12px 40px;
+  border: 1px solid #7fb7e8;
+  border-radius: 8px;
+  background: #eaf4fd url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232379c9' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 16v-5M12 8h.01'/%3E%3C/svg%3E") no-repeat 13px 13px / 18px;
+  color: #17324d;
+  line-height: 1.5;
+}
+
+.tool-info.error {
+  border-color: #e7a0a0;
+  background-color: #fdeeee;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c62828' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 8v5M12 16h.01'/%3E%3C/svg%3E");
+  color: #5c1717;
+}
+
+.tool-info:empty {
+  display: none;
+}
+
+.tool-panel-foot {
+  padding: 16px 22px 20px;
+  border-top: 1px solid var(--border);
+}
+
+.tool-go {
+  width: 100%;
+  height: 56px;
+  justify-content: center;
+  gap: 12px;
+  border-radius: 10px;
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.tool-go-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+}
+
+.tool-go-arrow .icon {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.6;
+}
+
+@media (prefers-color-scheme: dark) {
+  .tool-info {
+    border-color: #2f5f8a;
+    background-color: #132637;
+    color: #d6e8f8;
+  }
+
+  .tool-info.error {
+    border-color: #8a3030;
+    background-color: #3a1616;
+    color: #f6d6d6;
+  }
+}
+
 /* ---- Janela de impressão ---- */
 
 .dialog.print-dialog {
@@ -2125,6 +2582,77 @@ div[data-group] {
 
   .welcome-card {
     padding: 24px 18px;
+  }
+
+  .tool-screen-body {
+    flex-direction: column;
+  }
+
+  .tool-grid {
+    padding: 14px 10px;
+    gap: 18px 10px;
+  }
+
+  .tool-panel {
+    width: auto;
+    max-height: 55%;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .tool-tabs button {
+    flex-direction: row;
+    justify-content: center;
+    padding: 10px 4px;
+    font-size: 14px;
+  }
+
+  .tool-tabs button .icon {
+    width: 22px;
+    height: 22px;
+  }
+
+  .tool-panel-body {
+    padding: 14px 16px;
+    gap: 12px;
+  }
+
+  .tool-modes button {
+    min-height: 44px;
+    font-size: 13px;
+  }
+
+  .tool-panel-foot {
+    padding: 10px 16px 12px;
+  }
+
+  .tool-go {
+    height: 48px;
+    font-size: 17px;
+  }
+
+  .page-card {
+    width: 116px;
+    padding: 8px 8px 6px;
+  }
+
+  .page-card-image {
+    width: 96px;
+    height: 128px;
+  }
+
+  .page-thumb:not([src]) {
+    width: 90px;
+    height: 122px;
+  }
+
+  .split-group-box {
+    padding: 8px;
+    gap: 4px;
+  }
+
+  .split-more {
+    width: 34px;
   }
 
   .dialog.print-dialog {

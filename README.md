@@ -12,7 +12,7 @@ Leitor e editor de PDF para Windows, macOS, Linux, navegador e celular, inspirad
 | **Comentar e revisar** | Destacar, sublinhar e tachar texto; notas adesivas; caixas de texto; desenho à mão livre; retângulo, elipse, linha e seta; carimbos (Aprovado, Reprovado, Confidencial, Rascunho, Recebido, Revisado, Pago); painel com todos os comentários para ir até cada um, editar ou excluir |
 | **Editar** | Editar o texto do PDF clicando na linha: o texto antigo sai de verdade da página (sem caixa por cima, mesmo sobre fotos e fundos coloridos) e o novo fica no mesmo lugar, com a fonte original quando ela tem as letras; trocar a fonte, o tamanho, a cor, negrito e itálico, apagar a linha ou arrastá-la para outro lugar; adicionar texto com qualquer uma das 127 fontes do Google Fonts que vêm com o app (pesquisa por nome e por categoria); mover, redimensionar, substituir e excluir imagens, vendo como fica antes de concluir; adicionar imagens; marca d'água; cabeçalho, rodapé e numeração de páginas |
 | **Preencher e assinar** | Preencher os campos de formulários; pôr texto (com a fonte que quiser), ✓, ✗, ● e a data de hoje em qualquer ponto da página; assinar digitando o nome (4 estilos de letra manuscrita), desenhando com o mouse, a caneta ou o dedo, ou com a foto da assinatura feita no papel (o fundo branco é removido); antes de concluir, dá para arrastar a assinatura e mudar o tamanho dela pelos cantos (ou com as setas do teclado), já vendo como vai ficar; iniciais; a assinatura e as iniciais ficam salvas no aparelho para usar de novo; assinatura digital com certificado A1 (.pfx/.p12, como e-CPF e e-CNPJ) |
-| **Páginas** | Girar, excluir, inserir em branco e reordenar, pelos botões de cada miniatura (subir, descer, girar, excluir) ou arrastando as miniaturas; inserir outros PDFs ou imagens, extrair páginas e dividir em vários arquivos |
+| **Páginas** | Girar, excluir, inserir em branco e reordenar, pelos botões de cada miniatura (subir, descer, girar, excluir) ou arrastando as miniaturas; inserir outros PDFs ou imagens; excluir várias páginas de uma vez, marcando nas miniaturas; **Dividir PDF** numa tela como a do iLovePDF, com as miniaturas agrupadas em cada arquivo que vai ser criado: por intervalos (personalizados, fixos ou **inteligente**, que acha sozinho onde começa cada documento — pelos marcadores, pelas páginas em branco, pela numeração "Página 1 de..." ou por uma palavra como "Nota Fiscal" — e dá a cada arquivo o título do documento), por páginas (todas ou escolhidas nas miniaturas, juntas ou separadas) ou pelo tamanho máximo de cada arquivo (bom para e-mail) |
 | **Proteger** | Senha para abrir (AES-256) e restrições de impressão, edição e cópia; remover senha; respeita as restrições de PDFs protegidos (pede a senha de permissões) |
 | **Converter** | Para imagens (PNG/JPG), texto (.txt) e Word (.docx); comprimir o PDF; reconhecer texto em páginas escaneadas (OCR, em português e inglês, sem internet); comparar duas versões, com as diferenças destacadas |
 | **Criar** | Combinar vários PDFs e imagens num arquivo só, ou criar um PDF a partir de imagens |
@@ -139,10 +139,14 @@ src/fonts.js             catálogo de fontes: carregar na tela, embutir no PDF, 
 src/fontpicker.js        lista de fontes com pesquisa e categorias
 src/features/            janelas e fluxos: documento, converter, OCR, comparar, certificado
 src/features/print.js    janela de impressão: opções, visualização das folhas, envio para a impressora
+src/features/split.js    tela Dividir PDF (intervalos, inteligente, páginas, tamanho) e Extrair páginas
+src/features/pagetools.js tela Excluir páginas (marcando nas miniaturas)
+src/thumbs.js            miniaturas das telas de páginas, desenhadas só quando aparecem
 src/pdf/                 operações no arquivo: anotações, conteúdo da página, marcas, segurança, compressão
 src/pdf/textops.js       lê os comandos de texto da página (e dos formulários internos) e apaga uma linha
 src/pdf/textedit.js      linhas editáveis, escrever texto novo com a fonte do catálogo ou a original
 src/pdf/imposition.js    monta as folhas de impressão (tamanho, pôster, várias por folha, livreto)
+src/pdf/split.js         como dividir: intervalos, inícios de documento, tamanho de cada página
 public/                  manifesto e service worker da versão web; public/fonts: as fontes e suas licenças
 scripts/build-fonts.py   baixa as fontes do Google Fonts e monta o catálogo
 ```

@@ -119,11 +119,11 @@
         <div class="tools" data-panel="pages" hidden>
           <button class="tool" data-action="rotate-ccw" data-icon="rotateCcw" title="Girar para a esquerda"><span>Girar ↺</span></button>
           <button class="tool" data-action="rotate-cw" data-icon="rotateCw" title="Girar para a direita"><span>Girar ↻</span></button>
-          <button class="tool" data-action="delete-page" data-icon="trash" title="Excluir a página atual"><span>Excluir</span></button>
+          <button class="tool" data-action="delete-page" data-icon="trash" title="Excluir páginas: escolha nas miniaturas as que vão sair"><span>Excluir</span></button>
           <button class="tool" data-action="blank-page" data-icon="blank" title="Inserir página em branco depois da atual"><span>Em branco</span></button>
           <button class="tool" data-action="insert-files" data-icon="insert" title="Inserir PDF ou imagem depois da página atual"><span>Inserir arquivo</span></button>
           <button class="tool" data-action="extract" data-icon="extract" title="Extrair páginas para um novo PDF"><span>Extrair</span></button>
-          <button class="tool" data-action="split" data-icon="split" title="Dividir em vários arquivos"><span>Dividir</span></button>
+          <button class="tool" data-action="split" data-icon="split" title="Dividir em vários arquivos: por intervalos, páginas ou tamanho"><span>Dividir</span></button>
           <span class="hint muted">Arraste as miniaturas no painel lateral para reordenar.</span>
         </div>
         <div class="tools" data-panel="protect" hidden>
@@ -318,39 +318,127 @@
       </form>
     </dialog>
 
-    <dialog id="extract-dialog" class="dialog small">
-      <form method="dialog">
-        <h2>Extrair páginas</h2>
-        <label class="field">Páginas (ex.: 1-3, 5, 8)
-          <input name="range" type="text" autocomplete="off" />
-        </label>
-        <label class="check"><input name="remove" type="checkbox" /> Excluir essas páginas deste documento depois de extrair</label>
-        <p class="muted small" data-total></p>
-        <div class="dialog-actions">
-          <span class="spacer"></span>
-          <button class="btn" value="cancel" formnovalidate>Cancelar</button>
-          <button class="btn primary" value="ok">Extrair</button>
-        </div>
-      </form>
+    <!-- Dividir PDF (e extrair páginas): miniaturas agrupadas por arquivo e o painel de opções -->
+    <dialog id="split-tool" class="tool-screen" aria-labelledby="split-title">
+      <div class="tool-screen-body">
+        <section class="tool-main">
+          <header class="tool-head">
+            <button type="button" class="btn icon-only" data-tool-close data-icon="prev" title="Voltar ao documento" aria-label="Voltar ao documento"></button>
+            <div class="tool-head-text">
+              <h2 id="split-title">Dividir PDF</h2>
+              <span class="muted small" data-doc></span>
+            </div>
+          </header>
+          <div class="tool-grid" data-grid></div>
+        </section>
+        <form class="tool-panel" novalidate>
+          <div class="tool-tabs" role="tablist" aria-label="Como dividir">
+            <button type="button" role="tab" data-tab="ranges" data-icon="split"><span>Intervalos</span></button>
+            <button type="button" role="tab" data-tab="pages" data-icon="extract"><span>Páginas</span></button>
+            <button type="button" role="tab" data-tab="size" data-icon="compress"><span>Tamanho</span></button>
+          </div>
+          <div class="tool-panel-body">
+            <div class="tool-pane" data-pane="ranges">
+              <span class="tool-label">Modo dos intervalos</span>
+              <div class="tool-modes" data-modes="range">
+                <button type="button" data-mode="custom">Personalizados</button>
+                <button type="button" data-mode="fixed">Fixos</button>
+                <button type="button" data-mode="smart" data-icon="sparkle"><span>Inteligente</span></button>
+              </div>
+              <div class="tool-sub" data-sub="custom">
+                <div class="range-list"></div>
+                <button type="button" class="btn range-add" data-icon="plus"><span>Adicionar intervalo</span></button>
+                <label class="check"><input type="checkbox" name="mergeRanges" /> Juntar todos os intervalos num único PDF</label>
+              </div>
+              <div class="tool-sub" data-sub="fixed">
+                <label class="panel-row">Dividir em intervalos de
+                  <input type="number" name="every" min="1" value="1" class="inline-number" /> página(s)</label>
+              </div>
+              <div class="tool-sub" data-sub="smart">
+                <label class="field">Onde começa cada documento
+                  <select name="smartBy">
+                    <option value="auto">Automático</option>
+                    <option value="outline">Nos marcadores (sumário)</option>
+                    <option value="numbering">Onde a numeração recomeça ("Página 1 de...")</option>
+                    <option value="blank">Nas páginas em branco (que ficam de fora)</option>
+                    <option value="keyword">Na página que tem a palavra...</option>
+                  </select>
+                </label>
+                <input type="text" name="keyword" placeholder="Ex.: Nota Fiscal, Contrato, Recibo" aria-label="Palavra que marca o começo de cada documento" />
+                <label class="check"><input type="checkbox" name="smartNames" checked /> Dar a cada arquivo o título do documento</label>
+                <p class="muted small">Funciona no próprio aparelho, sem internet. Em PDF escaneado, use antes o Reconhecer texto (OCR).</p>
+              </div>
+            </div>
+            <div class="tool-pane" data-pane="pages" hidden>
+              <span class="tool-label">Modo de extração</span>
+              <div class="tool-modes two" data-modes="pages">
+                <button type="button" data-mode="all">Extrair todas as páginas</button>
+                <button type="button" data-mode="select">Selecionar páginas</button>
+              </div>
+              <div class="tool-sub" data-sub="select">
+                <label class="field">Páginas a extrair
+                  <input type="text" name="pages" placeholder="Ex.: 1, 3-5" autocomplete="off" />
+                </label>
+                <p class="muted small">Ou clique nas miniaturas para escolher (Shift + clique escolhe uma sequência).</p>
+                <label class="check"><input type="checkbox" name="mergePages" checked /> Juntar as páginas extraídas num único PDF</label>
+                <label class="check"><input type="checkbox" name="removeAfter" /> Depois, excluir essas páginas deste documento</label>
+              </div>
+            </div>
+            <div class="tool-pane" data-pane="size" hidden>
+              <span class="tool-label">Tamanho máximo de cada arquivo</span>
+              <div class="panel-row">
+                <input type="number" name="maxSize" min="0.1" step="0.1" value="5" class="inline-number" aria-label="Tamanho máximo" />
+                <select name="unit" aria-label="Unidade">
+                  <option value="MB">MB</option>
+                  <option value="KB">KB</option>
+                </select>
+              </div>
+              <p class="muted small">Bom para mandar por e-mail ou para sites com limite de tamanho.</p>
+            </div>
+            <label class="field">Nome dos arquivos
+              <input type="text" name="prefix" autocomplete="off" />
+            </label>
+            <div class="tool-info" role="status"></div>
+          </div>
+          <div class="tool-panel-foot">
+            <button type="button" class="btn primary tool-go" data-go><span>Dividir PDF</span><span class="tool-go-arrow" data-icon="next"></span></button>
+          </div>
+        </form>
+      </div>
     </dialog>
 
-    <dialog id="split-dialog" class="dialog small">
-      <form method="dialog">
-        <h2>Dividir documento</h2>
-        <label class="check"><input type="radio" name="mode" value="every" checked /> A cada
-          <input name="every" type="number" min="1" value="1" class="inline-number" /> página(s)</label>
-        <label class="check"><input type="radio" name="mode" value="ranges" /> Por intervalos</label>
-        <input name="ranges" type="text" placeholder="Ex.: 1-3; 4-6; 7-10 (um arquivo para cada intervalo)" class="indent" />
-        <label class="field">Nome dos arquivos
-          <input name="prefix" type="text" />
-        </label>
-        <p class="muted small" data-total></p>
-        <div class="dialog-actions">
-          <span class="spacer"></span>
-          <button class="btn" value="cancel" formnovalidate>Cancelar</button>
-          <button class="btn primary" value="ok">Dividir</button>
-        </div>
-      </form>
+    <!-- Remover páginas: clicar nas miniaturas das que vão sair -->
+    <dialog id="remove-tool" class="tool-screen" aria-labelledby="remove-title">
+      <div class="tool-screen-body">
+        <section class="tool-main">
+          <header class="tool-head">
+            <button type="button" class="btn icon-only" data-tool-close data-icon="prev" title="Voltar ao documento" aria-label="Voltar ao documento"></button>
+            <div class="tool-head-text">
+              <h2 id="remove-title">Remover páginas</h2>
+              <span class="muted small" data-doc></span>
+            </div>
+          </header>
+          <div class="tool-grid pick" data-grid></div>
+        </section>
+        <form class="tool-panel" novalidate>
+          <div class="tool-panel-body">
+            <h3 class="tool-panel-title">Remover páginas</h3>
+            <p class="muted">Clique nas páginas que vão sair do documento (Shift + clique marca uma sequência) ou digite os números.</p>
+            <label class="field">Páginas a remover
+              <input type="text" name="pages" placeholder="Ex.: 2, 5-7" autocomplete="off" />
+            </label>
+            <div class="panel-row">
+              <button type="button" class="btn" data-pick="odd">Ímpares</button>
+              <button type="button" class="btn" data-pick="even">Pares</button>
+              <button type="button" class="btn" data-pick="none">Limpar</button>
+            </div>
+            <div class="tool-info" role="status"></div>
+          </div>
+          <div class="tool-panel-foot">
+            <button type="button" class="btn primary tool-go" data-go><span>Remover páginas</span><span class="tool-go-arrow" data-icon="next"></span></button>
+          </div>
+        </form>
+      </div>
     </dialog>
 
     <dialog id="watermark-dialog" class="dialog">

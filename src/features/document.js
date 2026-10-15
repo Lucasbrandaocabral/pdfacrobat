@@ -1,7 +1,7 @@
-// Ações sobre o documento aberto: páginas, extrair/dividir, marca d'água,
-// cabeçalho/rodapé, proteção, compressão e propriedades.
+// Ações sobre o documento aberto: páginas, marca d'água, cabeçalho/rodapé,
+// proteção, compressão e propriedades.
 import { pdfjsLib } from "../pdfjs.js";
-import { $, UserError, baseName, el, formValues, formatBytes, hexToRgb, openDialog, parsePageRange, setBusy, toast, confirmAction } from "../ui.js";
+import { $, UserError, baseName, el, formValues, formatBytes, hexToRgb, openDialog, parsePageRange, setBusy, toast } from "../ui.js";
 import * as ops from "../pdf/ops.js";
 import { addHeaderFooter, addWatermark } from "../pdf/marks.js";
 import { compressDocument } from "../pdf/compress.js";
@@ -31,17 +31,6 @@ export async function rotate(app, delta) {
 export async function rotatePageAt(app, tab, index, delta) {
   if (!(await app.guard(tab, Perm.ASSEMBLE, "reorganizar páginas"))) return;
   await app.run("Girando página…", () => tab.edit((doc) => ops.rotatePages(doc, [index], delta), { keepView: false, page: index + 1 }));
-}
-
-export async function deletePage(app) {
-  const tab = requireTab(app);
-  if (!(await app.guard(tab, Perm.ASSEMBLE, "reorganizar páginas"))) return;
-  if (tab.doc.numPages <= 1) return toast("Um PDF precisa ter pelo menos uma página.");
-  const n = tab.viewer.currentPageNumber;
-  if (!(await confirmAction({ title: "Excluir página", message: `Excluir a página ${n}?`, ok: "Excluir", danger: true }))) return;
-  await app.run("Excluindo página…", () =>
-    tab.edit((doc) => ops.deletePages(doc, [n - 1]), { keepView: false, page: Math.min(n, tab.doc.numPages - 1) }),
-  );
 }
 
 /** Exclui a página `index` (contando do 0) sem perguntar: Desfazer traz de volta. */
@@ -75,61 +64,6 @@ export async function insertFiles(app) {
   if (!files.length) return;
   const at = current(tab) + 1;
   await app.run("Inserindo arquivos…", () => tab.edit((doc) => ops.insertFiles(doc, files, at), { keepView: false, page: at + 1 }));
-}
-
-export async function extract(app) {
-  const tab = requireTab(app);
-  if (!(await app.guard(tab, Perm.ASSEMBLE, "extrair páginas"))) return;
-  const dialog = $("#extract-dialog");
-  const form = $("form", dialog);
-  form.elements.range.value = String(tab.viewer.currentPageNumber);
-  form.elements.remove.checked = false;
-  $("[data-total]", dialog).textContent = `O documento tem ${tab.doc.numPages} página(s).`;
-  if (!(await openDialog(dialog, { focus: '[name="range"]' }))) return;
-  const values = formValues(form);
-  await app.run("Extraindo páginas…", async () => {
-    const indices = parsePageRange(values.range, tab.doc.numPages);
-    const doc = await tab.loadEditable();
-    const out = await ops.extractPages(doc, indices);
-    const label = values.range.replace(/\s+/g, "");
-    const saved = await platform.saveFile(out, { suggestedName: `${baseName(tab.name)} (páginas ${label}).pdf`, saveAs: true });
-    if (!saved) return;
-    if (values.remove) await tab.edit((d) => ops.deletePages(d, indices), { keepView: false, page: indices[0] + 1 });
-    toast(`${indices.length} página(s) extraída(s).`);
-  });
-}
-
-export async function split(app) {
-  const tab = requireTab(app);
-  if (!(await app.guard(tab, Perm.ASSEMBLE, "dividir o documento"))) return;
-  const dialog = $("#split-dialog");
-  const form = $("form", dialog);
-  form.elements.prefix.value = baseName(tab.name);
-  $("[data-total]", dialog).textContent = `O documento tem ${tab.doc.numPages} página(s).`;
-  if (!(await openDialog(dialog))) return;
-  const values = formValues(form);
-  await app.run("Dividindo…", async () => {
-    const total = tab.doc.numPages;
-    let groups;
-    if (values.mode === "ranges") {
-      const parts = values.ranges.split(/[;\n]/).map((s) => s.trim()).filter(Boolean);
-      if (!parts.length) throw new UserError("Informe os intervalos, separados por ponto e vírgula.");
-      groups = parts.map((part) => parsePageRange(part, total));
-    } else {
-      const every = Math.max(1, parseInt(values.every, 10) || 1);
-      groups = [];
-      for (let i = 0; i < total; i += every) groups.push(Array.from({ length: Math.min(every, total - i) }, (_, k) => i + k));
-    }
-    if (groups.length < 2 && groups[0]?.length === total) throw new UserError("Com essas opções o documento não seria dividido.");
-    const doc = await tab.loadEditable();
-    const parts = await ops.splitDocument(doc, groups);
-    const prefix = values.prefix.trim() || baseName(tab.name);
-    const label = (indices) =>
-      indices.length === 1 ? `página ${indices[0] + 1}` : `páginas ${indices[0] + 1}-${indices[indices.length - 1] + 1}`;
-    const files = parts.map((p) => ({ name: `${prefix} (${label(p.indices)}).pdf`, data: p.bytes }));
-    const result = await platform.saveFiles(files, { zipName: `${prefix} (dividido).zip` });
-    if (result) toast(`${files.length} arquivos salvos em ${result.where}.`, { duration: 6000 });
-  });
 }
 
 // ---- Marca d'água e cabeçalho/rodapé ----

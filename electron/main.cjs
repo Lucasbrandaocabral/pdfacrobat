@@ -243,7 +243,7 @@ function buildMenu() {
           submenu: [
             item("Girar para a direita", "rotate-cw"),
             item("Girar para a esquerda", "rotate-ccw"),
-            item("Excluir página", "delete-page"),
+            item("Excluir páginas…", "delete-page"),
             item("Inserir página em branco", "blank-page"),
             item("Inserir arquivo…", "insert-files"),
             item("Extrair páginas…", "extract"),
