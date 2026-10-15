@@ -16,7 +16,8 @@ Leitor e editor de PDF para Windows, macOS, Linux, navegador e celular, inspirad
 | **Proteger** | Senha para abrir (AES-256) e restrições de impressão, edição e cópia; remover senha; respeita as restrições de PDFs protegidos (pede a senha de permissões) |
 | **Converter** | Para imagens (PNG/JPG), texto (.txt) e Word (.docx); comprimir o PDF; reconhecer texto em páginas escaneadas (OCR, em português e inglês, sem internet); comparar duas versões, com as diferenças destacadas |
 | **Criar** | Combinar vários PDFs e imagens num arquivo só, ou criar um PDF a partir de imagens |
-| **Outros** | Desfazer e refazer, imprimir, propriedades do documento, arquivos recentes, abrir PDFs com duplo clique, arrastar e soltar, tema claro e escuro |
+| **Imprimir** | Janela de impressão própria, como a do Acrobat, mostrando cada folha antes de imprimir: impressora, cópias, frente e verso e tons de cinza; páginas (todas, a atual, intervalos, só ímpares ou pares, ordem inversa); **Tamanho** (ajustar ao papel, tamanho real, reduzir as páginas grandes ou escala personalizada), **Pôster** (uma página dividida em várias folhas, com sobreposição, marcas de corte e rótulos), **Múltiplas** (2, 4, 6, 9, 16 ou colunas × linhas por folha, na ordem e com as bordas que quiser) e **Livreto** (folhas para dobrar ao meio, frente e verso, encadernação à esquerda ou à direita); papel, orientação, comentários e formulários; salvar as folhas como PDF. No app desktop a impressão vai direto para a impressora, vetorial, sem passar pela janela do sistema |
+| **Outros** | Desfazer e refazer, propriedades do documento, arquivos recentes, abrir PDFs com duplo clique, arrastar e soltar, tema claro e escuro |
 
 Os comentários, carimbos e formas são gravados como anotações PDF padrão e aparecem em qualquer leitor. Os documentos nunca saem do seu computador ou celular: tudo, inclusive o OCR, roda localmente.
 
@@ -56,7 +57,7 @@ Com o app instalado:
 
 - **Abrir com** e **Compartilhar**: PDFs do WhatsApp, do e-mail ou do gerenciador de arquivos abrem direto no PDF Acrobat.
 - **Salvar** abre o seletor de arquivos do Android (Downloads, Documentos, Google Drive...) e depois grava no mesmo arquivo; vários arquivos de uma vez vão para a pasta escolhida.
-- **Imprimir** usa o serviço de impressão do Android, que também salva como PDF.
+- **Imprimir** abre a janela de impressão do app (tamanho, pôster, várias páginas por folha, livreto) e depois o serviço de impressão do Android, onde se escolhe a impressora (ou salvar como PDF).
 - Quando sai uma versão nova, o app avisa e o botão **Baixar** abre o download no navegador; é só tocar no arquivo baixado para instalar por cima, sem perder as assinaturas salvas.
 
 O APK é gerado pelo mesmo workflow e assinado sempre com a mesma chave, que fica nos *secrets* do repositório (**Settings → Secrets and variables → Actions**): `ANDROID_KEYSTORE_BASE64` (o arquivo da chave em base64) e `ANDROID_KEYSTORE_PASSWORD`. Guarde uma cópia do arquivo da chave: sem ela, uma versão nova não instala por cima da antiga. Sem os secrets, o workflow gera só um APK de teste (*Artifacts* → `apk-de-teste`), que não entra nas versões publicadas.
@@ -137,9 +138,11 @@ src/signature.js         criar assinatura e iniciais (digitar, desenhar, imagem)
 src/fonts.js             catálogo de fontes: carregar na tela, embutir no PDF, reconhecer a fonte de um PDF
 src/fontpicker.js        lista de fontes com pesquisa e categorias
 src/features/            janelas e fluxos: documento, converter, OCR, comparar, certificado
+src/features/print.js    janela de impressão: opções, visualização das folhas, envio para a impressora
 src/pdf/                 operações no arquivo: anotações, conteúdo da página, marcas, segurança, compressão
 src/pdf/textops.js       lê os comandos de texto da página (e dos formulários internos) e apaga uma linha
 src/pdf/textedit.js      linhas editáveis, escrever texto novo com a fonte do catálogo ou a original
+src/pdf/imposition.js    monta as folhas de impressão (tamanho, pôster, várias por folha, livreto)
 public/                  manifesto e service worker da versão web; public/fonts: as fontes e suas licenças
 scripts/build-fonts.py   baixa as fontes do Google Fonts e monta o catálogo
 ```
@@ -163,6 +166,7 @@ cd android && ./gradlew assembleDebug   # APK de teste (precisa do JDK 21 e do A
 
 - **Editar texto:** a edição é por linha (um parágrafo não se reorganiza sozinho, e uma linha justificada fica com o espaçamento normal). Letras que a fonte original do PDF não tem saem com a fonte parecida do catálogo. Texto que faz parte de uma imagem (documento escaneado) é coberto com a cor do fundo; use antes o OCR. Texto transformado em desenho (curvas) não é editável como texto.
 - **Word:** a conversão leva o texto em parágrafos, sem o layout original (colunas, tabelas e imagens).
+- **Imprimir no navegador:** a versão web entrega as folhas como imagem (até 300 DPI) à janela de impressão do navegador, onde se escolhem a impressora, as cópias e o frente e verso. O app desktop imprime direto e vetorial; a impressão em tons de cinza depende do driver da impressora.
 - **Assinatura digital:** só certificados A1 (arquivo). Certificados A3 (token ou cartão) não são suportados.
 - **Comparar:** compara o texto; mudanças só em imagens não aparecem.
 - **Restrições de senha** são respeitadas por leitores como o Acrobat, mas não impedem totalmente que alguém determinado copie o conteúdo.

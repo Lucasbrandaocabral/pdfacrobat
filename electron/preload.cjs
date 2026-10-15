@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld("pdfApi", {
   readPath: (filePath) => ipcRenderer.invoke("read-path", filePath),
   getInitialFile: () => ipcRenderer.invoke("get-initial-file"),
   getUserName: () => ipcRenderer.invoke("get-user-name"),
+  listPrinters: () => ipcRenderer.invoke("list-printers"),
+  printPdf: (options) => ipcRenderer.invoke("print-pdf", options),
   addRecent: (filePath) => ipcRenderer.send("add-recent", filePath),
   getPathForFile: (file) => {
     try {

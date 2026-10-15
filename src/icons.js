@@ -69,6 +69,10 @@ const paths = {
   dot: '<circle cx="12" cy="12" r="4.5" fill="currentColor"/>',
   calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
   initials: '<path d="m3 18 4-12 4 12M4.4 14h5.2"/><path d="M14 6h3.5a3 3 0 0 1 0 6H14zm0 6h4a3 3 0 0 1 0 6h-4z"/>',
+  printSize: '<rect x="5" y="3" width="14" height="18" rx="1.5"/><path d="m9 15 6-6M11 9h4v4M9 11v4h4"/>',
+  poster: '<rect x="3" y="3" width="18" height="18" rx="1.5"/><path d="M12 3v18M3 12h18"/>',
+  multiple: '<rect x="2" y="5" width="20" height="14" rx="1.5"/><rect x="5" y="8" width="5.5" height="8" rx=".5"/><rect x="13.5" y="8" width="5.5" height="8" rx=".5"/>',
+  booklet: '<path d="M12 6.5C10 5 7 4.5 3 4.5v13c4 0 7 .5 9 2 2-1.5 5-2 9-2v-13c-4 0-7 .5-9 2z"/><path d="M12 6.5v13"/>',
 };
 
 export function icon(name) {

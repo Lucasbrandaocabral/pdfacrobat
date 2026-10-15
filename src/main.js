@@ -13,6 +13,7 @@ import { ocr } from "./features/ocr.js";
 import { compare } from "./features/compare.js";
 import { certSign } from "./features/certsign.js";
 import * as fillSign from "./features/fillsign.js";
+import * as printing from "./features/print.js";
 import { setupUpdates } from "./updates.js";
 import { setupAndroid } from "./android.js";
 
@@ -283,7 +284,7 @@ const actions = {
   "close-tab": () => closeTab(manager.active),
   "next-tab": () => manager.cycle(1),
   "prev-tab": () => manager.cycle(-1),
-  print: () => documentFeatures.print(app),
+  print: () => printing.print(app),
   properties: () => documentFeatures.properties(app),
   undo: () => undoRedo("undo"),
   redo: () => undoRedo("redo"),

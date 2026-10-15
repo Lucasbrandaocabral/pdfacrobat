@@ -197,10 +197,19 @@ public class NativeFilesPlugin extends Plugin {
 
     // ---- Imprimir e abrir links ----
 
-    /** Imprime o PDF `data` (base64) pelo serviço de impressão do Android. */
+    /**
+     * Imprime o PDF `data` (base64) pelo serviço de impressão do Android, que
+     * abre com o papel (`paper`) e a orientação (`landscape`) sugeridos.
+     */
     @PluginMethod
     public void print(PluginCall call) {
         String name = call.getString("name", "documento.pdf");
+        PrintAttributes.Builder attributes = new PrintAttributes.Builder();
+        PrintAttributes.MediaSize media = mediaSize(call.getString("paper", ""));
+        if (media != null) {
+            boolean landscape = Boolean.TRUE.equals(call.getBoolean("landscape", false));
+            attributes.setMediaSize(landscape ? media.asLandscape() : media.asPortrait());
+        }
         File file = new File(getContext().getCacheDir(), "impressao.pdf");
         try (OutputStream out = new FileOutputStream(file)) {
             out.write(Base64.decode(call.getString("data", ""), Base64.DEFAULT));
@@ -211,9 +220,31 @@ public class NativeFilesPlugin extends Plugin {
         getActivity()
             .runOnUiThread(() -> {
                 PrintManager printManager = (PrintManager) getActivity().getSystemService(Context.PRINT_SERVICE);
-                printManager.print(name, new PdfPrintAdapter(file, name), new PrintAttributes.Builder().build());
+                printManager.print(name, new PdfPrintAdapter(file, name), attributes.build());
                 call.resolve();
             });
+    }
+
+    /** Papel com a chave usada na janela de impressão do app (PAPERS em imposition.js). */
+    private static PrintAttributes.MediaSize mediaSize(String paper) {
+        switch (paper == null ? "" : paper) {
+            case "a4":
+                return PrintAttributes.MediaSize.ISO_A4;
+            case "a3":
+                return PrintAttributes.MediaSize.ISO_A3;
+            case "a5":
+                return PrintAttributes.MediaSize.ISO_A5;
+            case "carta":
+                return PrintAttributes.MediaSize.NA_LETTER;
+            case "oficio":
+                return PrintAttributes.MediaSize.NA_LEGAL;
+            case "tabloide":
+                return PrintAttributes.MediaSize.NA_TABLOID;
+            case "oficio2":
+                return new PrintAttributes.MediaSize("OFICIO_II", "Ofício II", 8504, 12992);
+            default:
+                return null;
+        }
     }
 
     /** Abre um endereço https no navegador (ex.: o download da versão nova). */

@@ -1,6 +1,6 @@
 // Ações sobre o documento aberto: páginas, extrair/dividir, marca d'água,
-// cabeçalho/rodapé, proteção, compressão, impressão e propriedades.
-import { LOAD_OPTIONS, pdfjsLib } from "../pdfjs.js";
+// cabeçalho/rodapé, proteção, compressão e propriedades.
+import { pdfjsLib } from "../pdfjs.js";
 import { $, UserError, baseName, el, formValues, formatBytes, hexToRgb, openDialog, parsePageRange, setBusy, toast, confirmAction } from "../ui.js";
 import * as ops from "../pdf/ops.js";
 import { addHeaderFooter, addWatermark } from "../pdf/marks.js";
@@ -289,55 +289,6 @@ export async function compress(app) {
     }
     const saved = Math.round((1 - out.length / before.length) * 100);
     toast(`${formatBytes(before.length)} → ${formatBytes(out.length)} (${saved}% menor). Salve para gravar o arquivo comprimido.`, { duration: 7000 });
-  });
-}
-
-// ---- Impressão ----
-
-export async function print(app) {
-  const tab = requireTab(app);
-  if (!(await app.guard(tab, Perm.PRINT, "imprimir"))) return;
-  if (platform.isAndroid) {
-    // O serviço de impressão do Android recebe o próprio PDF (sem a senha de abertura).
-    await app.run("Preparando impressão…", async () => {
-      const bytes = tab.encrypted ? await (await tab.loadEditable()).save() : await tab.currentBytes();
-      await platform.printPdf(bytes, tab.name);
-    });
-    return;
-  }
-  const container = $("#print-container");
-  let doc = null;
-  await app.run("Preparando impressão…", async () => {
-    const bytes = await tab.currentBytes();
-    doc = await pdfjsLib.getDocument({ ...LOAD_OPTIONS, data: bytes.slice(), password: tab.security?.userPassword ?? tab.password ?? undefined }).promise;
-    const urls = [];
-    try {
-      for (let n = 1; n <= doc.numPages; n++) {
-        setBusy(`Preparando impressão… ${n}/${doc.numPages}`);
-        const page = await doc.getPage(n);
-        const viewport = page.getViewport({ scale: 150 / 72 });
-        const canvas = document.createElement("canvas");
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        const ctx = canvas.getContext("2d");
-        ctx.fillStyle = "#fff";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        await page.render({ canvasContext: ctx, viewport, intent: "print" }).promise;
-        const blob = await new Promise((r) => canvas.toBlob(r, "image/png"));
-        const url = URL.createObjectURL(blob);
-        urls.push(url);
-        const img = new Image();
-        img.src = url;
-        container.append(el("div", { class: "print-page" }, img));
-        await img.decode();
-      }
-      setBusy(false);
-      window.print();
-    } finally {
-      urls.forEach((u) => URL.revokeObjectURL(u));
-      container.replaceChildren();
-      doc?.destroy();
-    }
   });
 }
 

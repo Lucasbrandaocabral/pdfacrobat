@@ -600,6 +600,193 @@
       </form>
     </dialog>
 
+    <dialog id="print-dialog" class="dialog print-dialog" aria-labelledby="print-title">
+      <form method="dialog">
+        <h2 id="print-title">Imprimir</h2>
+        <div class="print-layout">
+          <div class="print-options">
+            <div class="grid two" data-only="desktop">
+              <label class="field span2">Impressora
+                <select name="printer"><option value="">Impressora padrão do sistema</option></select>
+              </label>
+              <label class="field">Cópias
+                <input name="copies" type="number" min="1" max="999" value="1" />
+              </label>
+              <label class="field">Frente e verso
+                <select name="duplex">
+                  <option value="simplex">Não, só a frente</option>
+                  <option value="longEdge">Sim, virar na borda longa</option>
+                  <option value="shortEdge">Sim, virar na borda curta</option>
+                </select>
+              </label>
+            </div>
+            <div class="print-row" data-only="desktop web">
+              <label class="check" data-only="desktop"><input name="collate" type="checkbox" checked /> Agrupar as cópias</label>
+              <label class="check" data-only="desktop web"><input name="grayscale" type="checkbox" /> Imprimir em tons de cinza (preto e branco)</label>
+            </div>
+            <p class="muted small" data-only="web">A impressora, as cópias e a impressão frente e verso são escolhidas na janela de impressão do navegador, que abre em seguida.</p>
+            <p class="muted small" data-only="android">A impressora, as cópias, a cor e a impressão frente e verso são escolhidas na tela de impressão do Android, que abre em seguida.</p>
+
+            <fieldset class="print-pages">
+              <legend>Páginas a imprimir</legend>
+              <div class="print-row">
+                <label class="check"><input type="radio" name="range" value="all" checked /> Todas</label>
+                <label class="check"><input type="radio" name="range" value="current" /> Página atual</label>
+                <label class="check"><input type="radio" name="range" value="pages" /> Páginas</label>
+                <input name="pages" type="text" class="inline-text" placeholder="ex.: 1-3, 5" aria-label="Páginas a imprimir" />
+              </div>
+              <div class="print-row">
+                <label class="field print-subset">Ímpares ou pares
+                  <select name="subset">
+                    <option value="all">Todas as páginas</option>
+                    <option value="odd">Só as ímpares</option>
+                    <option value="even">Só as pares</option>
+                  </select>
+                </label>
+                <label class="check"><input name="reverse" type="checkbox" /> Ordem inversa</label>
+              </div>
+            </fieldset>
+
+            <fieldset class="print-handling">
+              <legend>Tamanho e manuseio das páginas</legend>
+              <input type="hidden" name="mode" value="size" />
+              <div class="print-modes" role="tablist" aria-label="Manuseio das páginas">
+                <button type="button" role="tab" data-mode="size" data-icon="printSize"><span>Tamanho</span></button>
+                <button type="button" role="tab" data-mode="poster" data-icon="poster"><span>Pôster</span></button>
+                <button type="button" role="tab" data-mode="multiple" data-icon="multiple" title="Várias páginas por folha"><span>Múltiplas</span></button>
+                <button type="button" role="tab" data-mode="booklet" data-icon="booklet"><span>Livreto</span></button>
+              </div>
+              <div class="print-pane" data-pane="size">
+                <label class="check"><input type="radio" name="sizing" value="fit" checked /> Ajustar ao papel</label>
+                <label class="check"><input type="radio" name="sizing" value="actual" /> Tamanho real</label>
+                <label class="check"><input type="radio" name="sizing" value="shrink" /> Reduzir páginas grandes demais</label>
+                <div class="print-row">
+                  <label class="check"><input type="radio" name="sizing" value="custom" /> Escala personalizada</label>
+                  <input name="scale" type="number" class="inline-number" min="1" max="1000" value="100" aria-label="Escala personalizada (%)" /> %
+                </div>
+              </div>
+              <div class="print-pane" data-pane="poster" hidden>
+                <div class="grid two">
+                  <label class="field">Escala das partes (%)
+                    <input name="tileScale" type="number" min="1" max="1000" value="100" />
+                  </label>
+                  <label class="field">Sobreposição (cm)
+                    <input name="overlap" type="number" min="0" max="10" step="0.1" value="0" />
+                  </label>
+                </div>
+                <label class="check"><input name="cutMarks" type="checkbox" checked /> Marcas de corte</label>
+                <label class="check"><input name="labels" type="checkbox" checked /> Rótulos (página e parte)</label>
+                <label class="check"><input name="largeOnly" type="checkbox" /> Dividir só as páginas grandes</label>
+              </div>
+              <div class="print-pane" data-pane="multiple" hidden>
+                <div class="grid two">
+                  <label class="field">Páginas por folha
+                    <select name="perSheet">
+                      <option value="2">2</option>
+                      <option value="4">4</option>
+                      <option value="6">6</option>
+                      <option value="9">9</option>
+                      <option value="16">16</option>
+                      <option value="custom">Personalizado…</option>
+                    </select>
+                  </label>
+                  <div class="field print-custom-grid">
+                    <span>Colunas × linhas</span>
+                    <div class="print-row">
+                      <input name="cols" type="number" class="inline-number" min="1" max="10" value="2" aria-label="Colunas" />
+                      <span>×</span>
+                      <input name="rows" type="number" class="inline-number" min="1" max="10" value="2" aria-label="Linhas" />
+                    </div>
+                  </div>
+                  <label class="field span2">Ordem das páginas
+                    <select name="order">
+                      <option value="horizontal">Horizontal</option>
+                      <option value="horizontal-reverse">Horizontal invertida</option>
+                      <option value="vertical">Vertical</option>
+                      <option value="vertical-reverse">Vertical invertida</option>
+                    </select>
+                  </label>
+                </div>
+                <label class="check"><input name="borders" type="checkbox" /> Imprimir a borda das páginas</label>
+                <label class="check"><input name="autoRotate" type="checkbox" checked /> Girar as páginas automaticamente</label>
+              </div>
+              <div class="print-pane" data-pane="booklet" hidden>
+                <div class="grid two">
+                  <label class="field">Lados
+                    <select name="bookletSides">
+                      <option value="both">Frente e verso</option>
+                      <option value="front">Só a frente</option>
+                      <option value="back">Só o verso</option>
+                    </select>
+                  </label>
+                  <label class="field">Encadernação
+                    <select name="binding">
+                      <option value="left">Esquerda</option>
+                      <option value="right">Direita</option>
+                      <option value="left-tall">Esquerda (alta)</option>
+                      <option value="right-tall">Direita (alta)</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="print-row">
+                  <span>Folhas de</span>
+                  <input name="sheetFrom" type="number" class="inline-number" min="1" value="1" aria-label="Primeira folha" />
+                  <span>até</span>
+                  <input name="sheetTo" type="number" class="inline-number" min="1" aria-label="Última folha" />
+                </div>
+                <label class="check"><input name="bookletRotate" type="checkbox" checked /> Girar as páginas automaticamente</label>
+                <p class="muted small print-booklet-hint"></p>
+              </div>
+            </fieldset>
+
+            <div class="grid two">
+              <label class="field">Papel
+                <select name="paper"></select>
+              </label>
+              <label class="field">Orientação
+                <select name="orientation">
+                  <option value="auto">Automática (retrato ou paisagem)</option>
+                  <option value="portrait">Retrato</option>
+                  <option value="landscape">Paisagem</option>
+                </select>
+              </label>
+              <label class="field span2">Comentários e formulários
+                <select name="annotations">
+                  <option value="markups">Documento e comentários</option>
+                  <option value="stamps">Documento e carimbos</option>
+                  <option value="document">Só o documento</option>
+                  <option value="forms">Só os campos de formulário</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div class="print-preview">
+            <div class="print-info">
+              <span class="print-paper"></span>
+              <span class="print-scale"></span>
+            </div>
+            <div class="print-sheet-area">
+              <canvas class="print-sheet" width="1" height="1"></canvas>
+              <div class="print-preview-message" hidden></div>
+            </div>
+            <div class="print-nav">
+              <button type="button" class="btn icon-only small" data-sheet="-1" data-icon="prev" title="Folha anterior" aria-label="Folha anterior"></button>
+              <span class="print-count" aria-live="polite"></span>
+              <button type="button" class="btn icon-only small" data-sheet="1" data-icon="next" title="Próxima folha" aria-label="Próxima folha"></button>
+            </div>
+          </div>
+        </div>
+        <p class="print-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button type="button" class="btn" data-print-pdf data-icon="save"><span>Salvar como PDF</span></button>
+          <span class="spacer"></span>
+          <button class="btn" value="cancel" formnovalidate>Cancelar</button>
+          <button class="btn primary" value="ok" data-icon="print"><span>Imprimir</span></button>
+        </div>
+      </form>
+    </dialog>
+
     <dialog id="properties-dialog" class="dialog">
       <form method="dialog">
         <h2>Propriedades do documento</h2>

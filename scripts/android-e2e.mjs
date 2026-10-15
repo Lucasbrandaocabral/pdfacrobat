@@ -277,9 +277,21 @@ async function backToApp() {
 }
 await backToApp();
 
-// 6) Imprimir abre o serviço de impressão do Android.
-await step("Imprimir abre a impressão do Android", async () => {
+// 6) Imprimir: a janela de impressão do app (duas páginas por folha, com a
+// visualização) e depois o serviço de impressão do Android.
+await step("Janela de impressão do app", async () => {
   await click('.topbar [data-action="print"]');
+  await page.waitForSelector("#print-dialog[open]", { timeout: 15000 });
+  await click('#print-dialog [data-mode="multiple"]');
+  await page.selectOption('#print-dialog [name="perSheet"]', "2");
+  await page.waitForFunction(() => /Folha 1 de 2/.test(document.querySelector("#print-dialog .print-count").textContent), null, { timeout: 30000 });
+  await page.waitForFunction(() => document.querySelector("#print-dialog .print-sheet").width > 50, null, { timeout: 30000 });
+  await shot("6-janela-de-impressao");
+  const count = await page.evaluate(() => document.querySelector("#print-dialog .print-count").textContent);
+  check("Janela de impressão do app", true, count);
+});
+await step("Imprimir abre a impressão do Android", async () => {
+  await click('#print-dialog button[value="ok"]');
   const focus = await waitForFocus(/printspooler/, 30000);
   await sleep(2500);
   await describeScreen("6-imprimir");

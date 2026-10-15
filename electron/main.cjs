@@ -399,6 +399,100 @@ ipcMain.on("close-window", () => {
   mainWindow?.close();
 });
 
+// ---- Impressão direta ----
+// A interface monta as folhas num PDF; ele abre numa janela escondida, no
+// visualizador de PDF do Chromium, e vai direto para a impressora escolhida,
+// sem a janela de impressão do sistema. Assim a impressão sai vetorial.
+
+// Bit de printer-type que o CUPS (Linux e macOS) usa para a impressora padrão.
+const CUPS_DEFAULT_PRINTER = 0x20000;
+
+ipcMain.handle("list-printers", async () => {
+  if (!mainWindow) return [];
+  const printers = await mainWindow.webContents.getPrintersAsync();
+  return printers.map((p) => ({
+    name: p.name,
+    displayName: p.displayName || p.name,
+    isDefault: (Number(p.options?.["printer-type"]) & CUPS_DEFAULT_PRINTER) !== 0,
+  }));
+});
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Antes de o visualizador terminar de abrir o documento, a impressão sai em branco.
+const PDF_VIEWER_STATE = `(() => {
+  const viewer = document.querySelector("pdf-viewer");
+  return viewer ? ("loadState_" in viewer ? String(viewer.loadState_) : "unknown") : "";
+})()`;
+
+async function waitForPdfViewer(contents) {
+  const start = Date.now();
+  let unknownSince = 0;
+  while (Date.now() - start < 60_000) {
+    const frame = contents.mainFrame.framesInSubtree.find((f) => f.url.startsWith("chrome-extension://"));
+    const state = frame ? await frame.executeJavaScript(PDF_VIEWER_STATE).catch(() => "") : "";
+    if (state === "success") return;
+    if (state === "failed") throw new Error("O visualizador de PDF não abriu as folhas.");
+    // Visualizador de outra versão do Chromium, sem esse estado: dá um tempo e segue.
+    if (state === "unknown") {
+      unknownSince ||= Date.now();
+      if (Date.now() - unknownSince > 3000) return;
+    }
+    await wait(50);
+  }
+  throw new Error("O visualizador de PDF demorou demais para abrir as folhas.");
+}
+
+const PAGE_SIZES = new Set(["A0", "A1", "A2", "A3", "A4", "A5", "A6", "Legal", "Letter", "Tabloid"]);
+
+function printOptions(o) {
+  const options = {
+    silent: true,
+    printBackground: true,
+    margins: { marginType: "none" },
+    copies: Math.min(999, Math.max(1, Math.round(Number(o.copies) || 1))),
+    collate: o.collate !== false,
+    color: o.color !== false,
+    landscape: Boolean(o.landscape),
+    duplexMode: ["simplex", "shortEdge", "longEdge"].includes(o.duplexMode) ? o.duplexMode : "simplex",
+  };
+  if (typeof o.deviceName === "string" && o.deviceName) options.deviceName = o.deviceName;
+  // Papel com nome conhecido ou medidas em mícrons.
+  if (PAGE_SIZES.has(o.pageSize)) options.pageSize = o.pageSize;
+  else if (o.pageSize?.width > 0 && o.pageSize?.height > 0) options.pageSize = { width: Math.round(o.pageSize.width), height: Math.round(o.pageSize.height) };
+  return options;
+}
+
+// O nome do arquivo vira o nome do trabalho na fila da impressora.
+function jobFileName(name) {
+  const clean = String(name || "documento").replace(/[\\/:*?"<>|\x00-\x1f]/g, "_").slice(-120);
+  return /\.pdf$/i.test(clean) ? clean : `${clean}.pdf`;
+}
+
+ipcMain.handle("print-pdf", async (_e, request) => {
+  const dir = await fs.mkdtemp(path.join(app.getPath("temp"), "pdfacrobat-impressao-"));
+  const file = path.join(dir, jobFileName(request.name));
+  await fs.writeFile(file, Buffer.from(request.data));
+  const win = new BrowserWindow({
+    show: false,
+    webPreferences: { plugins: true, contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  win.webContents.on("will-navigate", (event) => event.preventDefault());
+  try {
+    await win.loadFile(file);
+    await waitForPdfViewer(win.webContents);
+    return await new Promise((resolve) => {
+      win.webContents.print(printOptions(request), (ok, reason) => resolve({ ok, reason: reason || "" }));
+    });
+  } catch (err) {
+    return { ok: false, reason: err.message };
+  } finally {
+    win.destroy();
+    fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+});
+
 ipcMain.handle("update-status", () => updater.getStatus());
 ipcMain.on("update-check", () => updater.check({ manual: true }));
 ipcMain.on("update-download", () => updater.downloadInstaller());

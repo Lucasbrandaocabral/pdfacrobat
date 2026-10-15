@@ -1650,6 +1650,10 @@ body.has-doc .welcome {
   width: 100%;
 }
 
+.grid .check input {
+  width: auto;
+}
+
 div[data-group] {
   display: flex;
   flex-direction: column;
@@ -1818,6 +1822,189 @@ div[data-group] {
   word-break: break-word;
 }
 
+/* ---- Janela de impressão ---- */
+
+.dialog.print-dialog {
+  width: min(1060px, calc(100vw - 32px));
+  /* Altura fixa: a janela não pula ao trocar de modo. */
+  height: min(780px, calc(100vh - 32px));
+  padding: 18px 20px;
+}
+
+.print-dialog[open] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.print-dialog form {
+  flex: 1;
+  min-height: 0;
+}
+
+.print-dialog h2 {
+  margin-bottom: 4px;
+}
+
+.print-layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 400px);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 20px;
+}
+
+.print-options {
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 2px 6px 2px 2px;
+}
+
+.print-options fieldset,
+.print-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.print-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+.print-row .inline-text {
+  max-width: 200px;
+}
+
+.print-subset {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.print-subset select {
+  width: auto;
+}
+
+.print-modes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.print-modes button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.print-modes .icon {
+  width: 24px;
+  height: 24px;
+}
+
+.print-modes button:hover {
+  background: var(--hover);
+}
+
+.print-modes button.active {
+  background: var(--active-bg);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.print-modes button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.print-pane {
+  padding-top: 4px;
+}
+
+.print-preview {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.print-info {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  min-height: 17px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.print-sheet-area {
+  position: relative;
+  flex: 1;
+  min-height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--canvas);
+  overflow: hidden;
+}
+
+.print-sheet {
+  display: block;
+  background: #fff;
+  box-shadow: 0 1px 6px rgb(0 0 0 / 0.3);
+}
+
+.print-sheet.gray {
+  filter: grayscale(1);
+}
+
+.print-sheet-area.loading .print-sheet {
+  opacity: 0.55;
+}
+
+.print-preview-message {
+  position: absolute;
+  inset: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--muted);
+}
+
+.print-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.print-count {
+  min-width: 150px;
+  text-align: center;
+}
+
+.print-error {
+  color: #c62828;
+}
+
 /* ---- Impressão ---- */
 
 .print-container {
@@ -1833,9 +2020,15 @@ div[data-group] {
     display: none !important;
   }
 
+  html,
+  body {
+    height: auto;
+  }
+
   body {
     display: block;
     overflow: visible;
+    padding: 0;
     background: #fff;
   }
 
@@ -1843,15 +2036,24 @@ div[data-group] {
     display: block;
   }
 
+  /* Cada folha ocupa uma página do tamanho do papel (o @page vem da janela de impressão). */
   .print-page {
+    width: var(--sheet-width, 100%);
+    height: calc(var(--sheet-height, 100vh) - 1px);
+    overflow: hidden;
     page-break-after: always;
     break-after: page;
+  }
+
+  .print-page:last-child {
+    page-break-after: auto;
+    break-after: auto;
   }
 
   .print-page img {
     display: block;
     width: 100%;
-    height: auto;
+    height: 100%;
   }
 }
 
@@ -1923,5 +2125,34 @@ div[data-group] {
 
   .welcome-card {
     padding: 24px 18px;
+  }
+
+  .dialog.print-dialog {
+    width: calc(100vw - 16px);
+    height: auto;
+    max-height: calc(100vh - 16px);
+    padding: 14px;
+  }
+
+  .print-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    overflow: auto;
+    gap: 12px;
+  }
+
+  .print-options {
+    overflow: visible;
+    padding: 0;
+  }
+
+  .print-preview {
+    order: -1;
+  }
+
+  .print-sheet-area {
+    flex: none;
+    height: 230px;
+    min-height: 0;
   }
 }

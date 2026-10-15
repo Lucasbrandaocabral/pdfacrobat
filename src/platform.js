@@ -178,9 +178,26 @@ export function onOpenFile(callback) {
   });
 }
 
-/** Imprime pelo serviço de impressão do Android. */
-export async function printPdf(data, name) {
-  await nativeFiles.print({ name, data: toBase64(data) });
+/**
+ * Imprime pelo serviço de impressão do Android, que já abre com o papel
+ * (`paper`, chave de PAPERS) e a orientação sugeridos.
+ */
+export async function printPdf(data, name, { paper = null, landscape = false } = {}) {
+  await nativeFiles.print({ name, data: toBase64(data), paper, landscape });
+}
+
+/** Impressoras do sistema, no app desktop: [{ name, displayName, isDefault }]. */
+export async function listPrinters() {
+  if (!api?.listPrinters) return [];
+  return api.listPrinters().catch(() => []);
+}
+
+/**
+ * App desktop: manda o PDF direto para a impressora, sem a janela de
+ * impressão do sistema. Retorna { ok, reason }.
+ */
+export function printDirect(options) {
+  return api.printPdf(options);
 }
 
 export async function getInitialFile() {
