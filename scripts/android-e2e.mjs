@@ -55,6 +55,7 @@ async function screenNodes() {
 async function waitForNode(match, timeout = 20000) {
   const end = Date.now() + timeout;
   for (;;) {
+    await dismissOtherAnr();
     const node = (await screenNodes().catch(() => [])).find(match);
     if (node) return node;
     if (Date.now() > end) throw new Error("elemento não apareceu na tela");
@@ -66,9 +67,24 @@ const tapNode = (node) => sh(`input tap ${node.center[0]} ${node.center[1]}`);
 const pressBack = () => sh("input keyevent KEYCODE_BACK");
 const focusedWindow = async () => /mCurrentFocus=.*$/m.exec(await sh("dumpsys window"))?.[0] || "";
 
+// O emulador do CI às vezes mostra "<app do sistema> isn't responding" (o
+// launcher, por exemplo) por cima de tudo. Se o aviso não for do nosso app,
+// toca em "Wait" e segue; um travamento do próprio app continua sendo falha.
+async function dismissOtherAnr() {
+  const anr = /Application Not Responding: ([\w.]+)/.exec(await focusedWindow().catch(() => ""));
+  if (!anr || anr[1].startsWith(PKG)) return false;
+  const wait = (await screenNodes().catch(() => [])).find((n) => n.id === "android:id/aerr_wait" && n.clickable);
+  if (!wait) return false;
+  log(`   (aviso de travamento de ${anr[1]} fechado com "Wait")`);
+  await tapNode(wait);
+  await sleep(1500);
+  return true;
+}
+
 async function waitForFocus(pattern, timeout = 20000) {
   const end = Date.now() + timeout;
   for (;;) {
+    await dismissOtherAnr();
     const focus = await focusedWindow();
     if (pattern.test(focus)) return focus;
     if (Date.now() > end) throw new Error(`janela esperada não apareceu (${focus})`);
@@ -107,6 +123,7 @@ async function describeScreen(name) {
 /** Executa um passo; se der erro, registra a falha, mostra a tela e segue. */
 async function step(name, fn) {
   try {
+    await dismissOtherAnr();
     await fn();
   } catch (error) {
     check(name, false, error.message.split("\n")[0]);
@@ -270,6 +287,7 @@ if (savedName) {
 
 // Volta para o app se uma tela do sistema ficou por cima.
 async function backToApp() {
+  await dismissOtherAnr();
   for (let i = 0; i < 3 && !(await focusedWindow()).includes(PKG); i++) {
     await pressBack();
     await sleep(1500);
