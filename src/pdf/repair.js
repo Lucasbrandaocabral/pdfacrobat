@@ -39,15 +39,26 @@ const encoder = new TextEncoder();
 export async function loadDamaged(bytes, { password } = {}) {
   const options = { updateMetadata: false, throwOnInvalidObject: false };
   if (password !== undefined) options.password = password;
+  let result;
   try {
-    return { doc: await PDFDocument.load(bytes, options), header: false };
+    result = { doc: await PDFDocument.load(bytes, options), header: false };
   } catch (err) {
     if (!/header/i.test(err?.message)) throw err;
     const fixed = new Uint8Array(bytes.length + 9);
     fixed.set(encoder.encode("%PDF-1.7\n"), 0);
     fixed.set(bytes, 9);
-    return { doc: await PDFDocument.load(fixed, options), header: true };
+    result = { doc: await PDFDocument.load(fixed, options), header: true };
   }
+  // Arquivo cifrado que não foi decifrado (sem a senha, ou sem o trailer que diz
+  // como decifrar): consertar daria um arquivo de lixo.
+  const { context } = result.doc;
+  const cipher = (obj) => obj instanceof PDFDict && obj.lookup(key("Filter")) === key("Standard") && obj.has(key("O")) && obj.has(key("U"));
+  if (!context.isDecrypted && context.enumerateIndirectObjects().some(([, obj]) => cipher(obj))) {
+    const error = new Error("encrypted document");
+    error.name = "EncryptedPDFError";
+    throw error;
+  }
+  return result;
 }
 
 const latin1 = (bytes) => {
@@ -202,9 +213,11 @@ function readStream(stream) {
   let decoder;
   try {
     decoder = decodePDFRawStream(stream);
-  } catch {
+  } catch (err) {
     // Filtro que não se conhece aqui (não é dano): fica como está.
-    return null;
+    if (/not supported/i.test(err?.message)) return null;
+    // Começo da compressão ilegível (cabeçalho errado, dados cifrados): nada se aproveita.
+    return { bytes: new Uint8Array(), damaged: true };
   }
   try {
     return { bytes: decoder.decode(), damaged: false };
@@ -416,11 +429,15 @@ function dropBrokenLinks(doc) {
  */
 export function repairDocument(doc) {
   const { context } = doc;
-  const report = { pages: 0, catalog: false, tree: false, recovered: 0, missing: 0, sizes: 0, salvaged: 0, lost: 0, invalid: 0, links: 0, dropped: 0 };
+  const report = { pages: 0, catalog: false, tree: false, recovered: 0, missing: 0, sizes: 0, contents: 0, salvaged: 0, lost: 0, invalid: 0, links: 0, dropped: 0 };
   for (const [ref, obj] of [...context.enumerateIndirectObjects()]) {
     // Índices (XRef) e pacotes de objetos (ObjStm) do arquivo antigo: o arquivo novo tem os seus.
+    // Num arquivo decifrado, o índice também aparece ilegível (o pdf-lib tenta decifrá-lo), e o
+    // dicionário da cifra antiga fica sem uso: nenhum dos dois é dano.
     const type = obj instanceof PDFStream ? obj.dict.lookup(key("Type")) : null;
-    if (type === key("XRef") || type === key("ObjStm")) context.delete(ref);
+    const raw = obj instanceof PDFInvalidObject ? latin1((obj.data ?? new Uint8Array()).subarray(0, 512)) : "";
+    const cipher = obj instanceof PDFDict && obj.lookup(key("Filter")) === key("Standard") && obj.has(key("O")) && obj.has(key("U"));
+    if (type === key("XRef") || type === key("ObjStm") || /\/Type\s*\/XRef/.test(raw) || (cipher && context.isDecrypted)) context.delete(ref);
     else if (obj instanceof PDFInvalidObject) {
       context.delete(ref);
       report.invalid++;
@@ -456,8 +473,13 @@ export function repairDocument(doc) {
   }
   report.links = dropBrokenLinks(doc);
   for (const page of pages) {
-    for (const [ref, own] of contentRefs(doc, page)) salvageContent(doc, ref, report, own, page.lookup(key("Resources")));
+    for (const [ref, own] of contentRefs(doc, page)) {
+      report.contents++;
+      salvageContent(doc, ref, report, own, page.lookup(key("Resources")));
+    }
   }
+  // Nenhum conteúdo legível: cifrado sem a senha ou danificado demais (o resultado seriam páginas em branco).
+  report.unreadable = report.contents > 0 && report.lost === report.contents;
   report.dropped = dropUnreachable(doc);
   return report;
 }

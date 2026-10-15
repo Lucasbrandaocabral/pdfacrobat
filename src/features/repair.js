@@ -16,6 +16,7 @@ async function rebuild(bytes, security = null) {
   const { doc, header } = await loadDamaged(bytes, { password });
   const report = { ...repairDocument(doc), header, ...inspectBytes(bytes) };
   if (!report.pages) throw new UserError("Nenhuma página do arquivo pôde ser lida.");
+  if (report.unreadable) throw new UserError("O conteúdo das páginas não pôde ser lido (o arquivo pode estar protegido por senha ou danificado demais).");
   // Índice clássico (sem pacotes de objetos), que qualquer leitor entende.
   const out = await saveFromEdit(doc, security, { useObjectStreams: false });
   return { bytes: out, pages: report.pages, parts: describeRepair(report) };
@@ -26,7 +27,7 @@ async function rebuild(bytes, security = null) {
  * as páginas: cada página vira uma imagem num PDF novo (o texto deixa de ser
  * selecionável; o OCR devolve).
  */
-async function rebuildAsImages(pdf) {
+async function rebuildAsImages(pdf, security = null) {
   const doc = await PDFDocument.create();
   let lost = 0;
   for (let n = 1; n <= pdf.numPages; n++) {
@@ -54,7 +55,8 @@ async function rebuildAsImages(pdf) {
   if (lost === pdf.numPages) throw new UserError("Nenhuma página do arquivo pôde ser lida.");
   const parts = ["a estrutura do arquivo não dava para refazer: as páginas foram recuperadas como imagem (o texto delas deixa de ser selecionável; use Reconhecer texto (OCR) para trazê-lo de volta)"];
   if (lost) parts.push(`${plural(lost, "página não pôde ser lida", "páginas não puderam ser lidas")}`);
-  return { bytes: await doc.save(), pages: pdf.numPages - lost, parts };
+  // Um documento protegido por senha continua protegido.
+  return { bytes: await saveFromEdit(doc, security), pages: pdf.numPages - lost, parts };
 }
 
 /** Mostra o que foi consertado. */
@@ -76,11 +78,12 @@ export async function repair(app) {
   let result = null;
   await app.run("Reparando o arquivo…", async () => {
     const before = await tab.currentBytes();
+    const security = tab.encrypted ? tab.security : null;
     try {
-      result = await rebuild(before, tab.encrypted ? tab.security : null);
+      result = await rebuild(before, security);
     } catch (err) {
       console.warn("refazer a estrutura", err);
-      result = await rebuildAsImages(tab.doc);
+      result = await rebuildAsImages(tab.doc, security);
     }
     setBusy("Reparando o arquivo…");
     await tab.replace(result.bytes, { keepView: true, previous: before });
@@ -109,6 +112,7 @@ export async function repairAndOpen(app, bytes, name) {
       result = await rebuild(bytes);
     } catch (err) {
       console.warn("refazer a estrutura", err);
+      if (/encrypt/i.test(`${err?.name} ${err?.message}`)) throw new UserError(`“${name}” é protegido por senha e está danificado: sem abrir com a senha, não dá para reparar.`);
       throw new UserError(`Não foi possível reparar “${name}”: ${err?.userMessage || "o arquivo está danificado demais."}`);
     }
     // Confere que o leitor abre a versão reparada.
