@@ -2538,6 +2538,17 @@ button.page-card:focus-visible {
   }
 }
 
+/* Reparar: o que foi consertado. */
+.repair-list {
+  margin: 0 0 4px;
+  padding-left: 20px;
+  line-height: 1.5;
+}
+
+.repair-list:empty {
+  display: none;
+}
+
 /* ---- Janela de impressão ---- */
 
 .dialog.print-dialog {

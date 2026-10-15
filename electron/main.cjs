@@ -271,6 +271,7 @@ function buildMenu() {
         },
         sep,
         item("Comprimir PDF…", "compress"),
+        item("Reparar PDF…", "repair"),
         item("Reconhecer texto (OCR)…", "ocr"),
       ],
     },

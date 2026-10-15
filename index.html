@@ -140,6 +140,7 @@
           <button class="tool" data-action="export-word" data-icon="word" title="Salvar como Word (.docx)"><span>Word</span></button>
           <span class="divider"></span>
           <button class="tool" data-action="compress" data-icon="compress" title="Diminuir o tamanho do arquivo"><span>Comprimir</span></button>
+          <button class="tool" data-action="repair" data-icon="repair" title="Reparar um PDF danificado ou que dá erro em outros programas"><span>Reparar</span></button>
           <button class="tool" data-action="ocr" data-icon="ocr" title="Reconhecer texto em páginas escaneadas"><span>Reconhecer texto (OCR)</span></button>
           <button class="tool" data-action="compare" data-icon="compare" title="Comparar duas versões"><span>Comparar</span></button>
         </div>
@@ -253,6 +254,18 @@
         <div class="dialog-actions">
           <span class="spacer"></span>
           <button class="btn" value="cancel" formnovalidate>Cancelar</button>
+          <button class="btn primary" value="ok">OK</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="repair-dialog" class="dialog small">
+      <form method="dialog">
+        <h2>Arquivo reparado</h2>
+        <p class="message"></p>
+        <ul class="repair-list"></ul>
+        <div class="dialog-actions">
+          <span class="spacer"></span>
           <button class="btn primary" value="ok">OK</button>
         </div>
       </form>

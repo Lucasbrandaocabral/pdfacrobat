@@ -18,6 +18,7 @@ import * as splitting from "./features/split.js";
 import { removePages } from "./features/pagetools.js";
 import { crop } from "./features/crop.js";
 import { redact } from "./features/redact.js";
+import { repair, repairAndOpen } from "./features/repair.js";
 import { setupUpdates } from "./updates.js";
 import { setupAndroid } from "./android.js";
 
@@ -66,10 +67,14 @@ async function openDocument(bytes, { name, path = null, dirty = false } = {}) {
     if (path) addRecent({ name, path });
     return tab;
   } catch (err) {
-    if (!/AbortException|destroyed|terminated/i.test(`${err?.name} ${err?.message}`)) {
-      console.error(err);
-      toast(`Não foi possível abrir "${name}": ${err.message}`, { duration: 6000 });
+    if (/AbortException|destroyed|terminated/i.test(`${err?.name} ${err?.message}`)) return null;
+    console.error(err);
+    // Arquivo danificado: oferece reparar (a senha recusada não é dano).
+    if (bytes?.length && !/Password/i.test(err?.name)) {
+      setBusy(false);
+      return repairAndOpen(app, bytes, name);
     }
+    toast(`Não foi possível abrir "${name}": ${err.message}`, { duration: 6000 });
     return null;
   } finally {
     setBusy(false);
@@ -321,6 +326,7 @@ const actions = {
   compress: () => documentFeatures.compress(app),
   "cert-sign": () => certSign(app),
   redact: () => redact(app),
+  repair: () => repair(app),
   "export-images": () => convert.exportImages(app),
   "export-text": () => convert.exportText(app),
   "export-word": () => convert.exportWord(app),
