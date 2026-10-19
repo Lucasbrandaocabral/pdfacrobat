@@ -1724,6 +1724,8 @@ body.has-doc .welcome {
   z-index: 40;
 }
 
+/* Sem desfoque no fundo: com o anel girando, ele seria refeito a cada quadro,
+   e sem GPU (celulares simples, o emulador do Android) isso trava o aparelho. */
 .busy {
   position: absolute;
   inset: 0;
@@ -1732,7 +1734,6 @@ body.has-doc .welcome {
   justify-content: center;
   padding: 24px;
   background: rgb(12 12 18 / 0.28);
-  backdrop-filter: blur(2px);
   z-index: 50;
 }
 
@@ -1941,7 +1942,13 @@ body.has-doc .welcome {
 
 .dialog::backdrop {
   background: rgb(12 12 18 / 0.42);
-  backdrop-filter: blur(3px);
+}
+
+/* O desfoque atrás das janelas fica só no computador; no celular ele pesa. */
+@media (hover: hover) and (pointer: fine) {
+  .dialog::backdrop {
+    backdrop-filter: blur(3px);
+  }
 }
 
 .dialog[open]::backdrop {
