@@ -9,7 +9,9 @@
 // node scripts/android-e2e.mjs <apk assinado> <apk de teste> <pasta de saída>
 // A variável PLAYWRIGHT aponta para o pacote playwright instalado à parte.
 import { PDFDocument, PDFDict, PDFName, StandardFonts } from "@cantoo/pdf-lib";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 const playwright = await import(process.env.PLAYWRIGHT || "playwright");
@@ -32,6 +34,44 @@ device.setDefaultTimeout(30000);
 const sh = async (command) => (await device.shell(command)).toString().trim();
 const shot = (name) => device.screenshot({ path: path.join(out, `${name}.png`) }).catch(() => {});
 let page = null;
+
+// Para quando o emulador cai: o logcat vai inteiro para um arquivo, pelo adb do
+// computador (que continua de pé), e a memória do computador é anotada a cada
+// 5 s; se o emulador parar de responder, o log mostra o final dos dois.
+const adb = path.join(process.env.ANDROID_HOME || "", "platform-tools", "adb");
+const logcatFile = path.join(out, "logcat.txt");
+const logcatAll = spawn(fs.existsSync(adb) ? adb : "adb", ["-s", device.serial(), "logcat", "-v", "time"], { stdio: ["ignore", fs.openSync(logcatFile, "w"), "ignore"] });
+logcatAll.on("error", () => {});
+const memoryFile = path.join(out, "memoria.txt");
+const memoryTimer = setInterval(() => {
+  const emulator = spawnSync("sh", ["-c", "ps -eo rss=,pcpu=,comm= | grep -i qemu | head -1"], { encoding: "utf8" }).stdout.trim();
+  const line = `${new Date().toISOString().slice(11, 19)} livre ${Math.round(os.freemem() / 2 ** 20)} MB | carga ${os.loadavg()[0].toFixed(1)} | emulador (KB, %CPU): ${emulator}`;
+  fs.appendFileSync(memoryFile, `${line}\n`);
+}, 5000);
+const tail = (file, n, keep = () => true) =>
+  (fs.existsSync(file) ? fs.readFileSync(file, "utf8").split("\n") : [])
+    .filter((line) => line && keep(line))
+    .slice(-n)
+    .map((line) => `     | ${line.slice(0, 300)}`)
+    .join("\n");
+
+/** Se o emulador parou de responder, mostra o que se sabe (logcat, memória, kernel) e encerra. */
+async function stopIfEmulatorDied() {
+  const alive = await Promise.race([sh("echo ok").then(() => true, () => false), sleep(15000).then(() => false)]);
+  if (alive) return;
+  log("   O emulador parou de responder. Final do logcat (sem as mensagens do Capacitor de teste):");
+  log(tail(logcatFile, 150, (line) => !/Capacitor\/Plugin|V\/Capacitor|methodData|document_style_environment/.test(line)));
+  log("   Memória do computador:");
+  log(tail(memoryFile, 30));
+  log("   Kernel do computador:");
+  log(spawnSync("sh", ["-c", "sudo -n dmesg 2>&1 | tail -n 40"], { encoding: "utf8" }).stdout.split("\n").map((line) => `     | ${line}`).join("\n"));
+  process.exit(1);
+}
+process.on("uncaughtException", async (error) => {
+  log("ERRO", error.message.split("\n")[0]);
+  await stopIfEmulatorDied();
+  process.exit(1);
+});
 
 // A tela é lida com o uiautomator e os toques vão pelo adb ("input tap"): o
 // controlador de toque do Playwright disputa o uiautomator e demora a iniciar.
@@ -127,6 +167,7 @@ async function step(name, fn) {
     await fn();
   } catch (error) {
     check(name, false, error.message.split("\n")[0]);
+    await stopIfEmulatorDied();
     await describeScreen(`erro-${name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`);
   }
 }
@@ -375,5 +416,7 @@ check("Sem erros de JavaScript", pageErrors.length === 0, pageErrors.join(" | ")
 const crashesAfter = await sh("logcat -d -b crash");
 check("Sem travamentos do app", !crashesAfter.includes(`(${PKG})`) && !crashesAfter.includes(`Process: ${PKG}`), crashesAfter.slice(0, 400));
 await device.close();
+clearInterval(memoryTimer);
+logcatAll.kill();
 log(failures ? `${failures} verificação(ões) falharam.` : "Tudo certo.");
 process.exit(failures ? 1 : 0);
