@@ -59,12 +59,16 @@ const tail = (file, n, keep = () => true) =>
 async function stopIfEmulatorDied() {
   const alive = await Promise.race([sh("echo ok").then(() => true, () => false), sleep(15000).then(() => false)]);
   if (alive) return;
-  log("   O emulador parou de responder. Final do logcat (sem as mensagens do Capacitor de teste):");
-  log(tail(logcatFile, 150, (line) => !/Capacitor\/Plugin|V\/Capacitor|methodData|document_style_environment/.test(line)));
+  log("   O emulador parou de responder. Logcat do app, do WebView, da tela e de travamentos:");
+  const relevant = new RegExp(`${PKG}|chromium|cr_|WebView|ActivityTaskManager|ActivityManager: (Start|Kill|Process)|SurfaceFlinger|EGL|gralloc|goldfish|gfxstream|RenderThread|HWUI|Fatal|FATAL|crash|ANR|watchdog|Watchdog|lowmemory|lmkd|kernel`);
+  log(tail(logcatFile, 80, (line) => relevant.test(line) && !/Capacitor\/Plugin|V\/Capacitor|methodData|document_style_environment/.test(line)));
+  log("   Últimas linhas do logcat:");
+  log(tail(logcatFile, 25, (line) => !/Capacitor\/Plugin|V\/Capacitor|methodData|document_style_environment/.test(line)));
   log("   Memória do computador:");
   log(tail(memoryFile, 30));
-  log("   Kernel do computador:");
-  log(spawnSync("sh", ["-c", "sudo -n dmesg 2>&1 | tail -n 40"], { encoding: "utf8" }).stdout.split("\n").map((line) => `     | ${line}`).join("\n"));
+  log("   Relatórios de falha do emulador e kernel do computador:");
+  const host = spawnSync("sh", ["-c", "ls -la --time-style=+%T /tmp/android-runner 2>&1 | tail -n 8; sudo -n dmesg 2>&1 | tail -n 12"], { encoding: "utf8" }).stdout;
+  log(host.split("\n").map((line) => `     | ${line}`).join("\n"));
   process.exit(1);
 }
 process.on("uncaughtException", async (error) => {
@@ -194,16 +198,21 @@ await sh(`am force-stop ${PKG}`);
 await sh(`pm uninstall ${PKG}`);
 
 // 2) APK de teste: o PDF chega por "Abrir com" (pelo FileProvider do próprio app).
+const mark = (what) => log(`   ${new Date().toISOString().slice(11, 19)} ${what}`);
+mark("instalando o APK de teste");
 await device.installApk(fs.readFileSync(debugApk));
 await device.push(Buffer.from(sampleBytes), "/data/local/tmp/contrato.pdf");
 await sh(`run-as ${PKG} mkdir -p cache`);
 await sh(`cat /data/local/tmp/contrato.pdf | run-as ${PKG} sh -c 'cat > cache/contrato.pdf'`);
 await sh("logcat -c");
+mark("abrindo o PDF pelo app");
 await sh(
   `am start -W -a android.intent.action.VIEW -t application/pdf -d content://${PKG}.fileprovider/my_cache_images/contrato.pdf -n ${PKG}/.MainActivity`,
 );
+mark("conectando ao WebView");
 const webview = await device.webView({ pkg: PKG }, { timeout: 60000 });
 page = await webview.page();
+mark("WebView conectado");
 const pageErrors = [];
 page.on("pageerror", (e) => pageErrors.push(e.message));
 const idle = async () => {
