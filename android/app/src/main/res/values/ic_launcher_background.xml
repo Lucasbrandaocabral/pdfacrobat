@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#D7373F</color>
+    <color name="ic_launcher_background">#E5254B</color>
     <!-- Fundo da tela de abertura: o mesmo do app. -->
-    <color name="splash_background">#F3F3F3</color>
+    <color name="splash_background">#F4F4F6</color>
 </resources>
