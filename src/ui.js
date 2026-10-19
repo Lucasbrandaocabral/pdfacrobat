@@ -1,6 +1,8 @@
 // Utilidades de interface: seletores, avisos, indicador de progresso e
 // diálogos genéricos (confirmação, texto, escolha) baseados em <dialog>.
 
+import { icon } from "./icons.js";
+
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
@@ -20,9 +22,11 @@ export function el(tag, props = {}, children = []) {
 }
 
 let toastTimer = null;
-export function toast(message, { duration = 3500 } = {}) {
+/** Aviso rápido embaixo da tela; `kind: "error"` mostra o ícone de alerta. */
+export function toast(message, { duration = 3500, kind = "" } = {}) {
   const box = $("#toast");
-  box.textContent = message;
+  box.dataset.kind = kind;
+  box.replaceChildren(...(kind === "error" ? [el("span", { class: "toast-icon", html: icon("alert") })] : []), el("span", { text: message }));
   box.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (box.hidden = true), duration);
@@ -41,7 +45,7 @@ export async function runBusy(message, task) {
     return await task();
   } catch (err) {
     console.error(err);
-    toast(err?.userMessage || err?.message || String(err), { duration: 6000 });
+    toast(err?.userMessage || err?.message || String(err), { duration: 6000, kind: "error" });
     return undefined;
   } finally {
     setBusy(false);
@@ -67,14 +71,46 @@ export function openDialog(dialog, { focus } = {}) {
   });
 }
 
-export async function confirmAction({ title, message, ok = "OK", danger = false }) {
+// Ícone de cada tipo de aviso (o selo colorido à esquerda do título).
+const KIND_ICONS = { question: "help", warning: "alert", danger: "trash", info: "info", success: "check", error: "alert" };
+
+/** Troca o tipo (cor e ícone do selo) de um diálogo de aviso. */
+export function setAlertKind(dialog, kind, iconName = KIND_ICONS[kind]) {
+  dialog.dataset.kind = kind;
+  const badge = $(".alert-badge", dialog);
+  if (badge) {
+    badge.innerHTML = icon(iconName);
+    badge.dataset.iconDone = "";
+  }
+}
+
+/**
+ * Pergunta com OK e Cancelar. `kind`: question (padrão), warning, danger
+ * (ou `danger: true`, para excluir), info.
+ */
+export async function confirmAction({ title, message, ok = "OK", danger = false, kind = danger ? "danger" : "question", icon: iconName }) {
   const dialog = $("#confirm-dialog");
+  setAlertKind(dialog, kind, iconName);
   $("h2", dialog).textContent = title;
   $(".message", dialog).textContent = message || "";
   const okButton = $('button[value="ok"]', dialog);
   okButton.textContent = ok;
   okButton.classList.toggle("danger", danger);
+  $('button[value="cancel"]', dialog).hidden = false;
   return openDialog(dialog, { focus: 'button[value="ok"]' });
+}
+
+/** Aviso com um botão só (erro, informação). */
+export async function notice({ title, message, kind = "info", ok = "OK" }) {
+  const dialog = $("#confirm-dialog");
+  setAlertKind(dialog, kind);
+  $("h2", dialog).textContent = title;
+  $(".message", dialog).textContent = message || "";
+  const okButton = $('button[value="ok"]', dialog);
+  okButton.textContent = ok;
+  okButton.classList.remove("danger");
+  $('button[value="cancel"]', dialog).hidden = true;
+  await openDialog(dialog, { focus: 'button[value="ok"]' });
 }
 
 /** Pede um texto. Retorna a string digitada ou null se cancelado. */

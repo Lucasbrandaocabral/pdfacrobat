@@ -369,7 +369,7 @@ async function runAction(name) {
     await actions[name]?.();
   } catch (err) {
     console.error(err);
-    toast(err?.userMessage || err?.message || String(err), { duration: 6000 });
+    toast(err?.userMessage || err?.message || String(err), { duration: 6000, kind: "error" });
   }
 }
 
@@ -573,6 +573,8 @@ function addRecent({ name, path }) {
 }
 
 function renderRecent() {
+  // Arrastar arquivos para a janela não existe no celular.
+  $("#welcome-drop").hidden = platform.isAndroid;
   const list = readRecent();
   const section = $("#recent-section");
   section.hidden = !platform.isDesktop || !list.length;
