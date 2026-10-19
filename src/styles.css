@@ -1753,14 +1753,18 @@ body.has-doc .welcome {
   font-weight: 500;
 }
 
+/* O anel é feito só de bordas, nas cores da marca, sem máscara nem degradê
+   cônico: a animação gira uma camada simples, leve também sem GPU (como no
+   emulador do teste do Android). */
 .spinner {
   width: 30px;
   height: 30px;
   flex: none;
+  border: 3.5px solid var(--accent-soft);
+  border-top-color: #ff7452;
+  border-right-color: #e5254b;
+  border-bottom-color: #a3123c;
   border-radius: 50%;
-  background: conic-gradient(from 90deg, transparent 0deg, #ff7452 120deg, #e5254b 260deg, #a3123c 360deg);
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3.5px));
-  mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3.5px));
   animation: spin 0.8s linear infinite;
 }
 
