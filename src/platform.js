@@ -165,6 +165,11 @@ export function onMenu(callback) {
   api?.onMenu(callback);
 }
 
+/** Avisos do processo principal ({ title, message, kind }), só no app de computador. */
+export function onNotice(callback) {
+  api?.onNotice?.(callback);
+}
+
 export function onOpenFile(callback) {
   api?.onOpenFile(callback);
   // Android: PDFs abertos com "Abrir com" ou recebidos por "Compartilhar",

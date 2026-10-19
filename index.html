@@ -299,15 +299,54 @@
       </form>
     </dialog>
 
-    <dialog id="unsaved-dialog" class="dialog small">
+    <dialog id="unsaved-dialog" class="dialog small alert" data-kind="warning">
       <form method="dialog">
-        <h2>Salvar alterações?</h2>
-        <p class="message"></p>
+        <div class="alert-head">
+          <span class="alert-badge" data-icon="save"></span>
+          <div class="alert-body">
+            <h2></h2>
+            <p class="message">Se você não salvar, as alterações serão perdidas.</p>
+          </div>
+        </div>
         <div class="dialog-actions">
           <button class="btn" value="discard" formnovalidate>Não salvar</button>
           <span class="spacer"></span>
           <button class="btn" value="cancel" formnovalidate>Cancelar</button>
           <button class="btn primary" value="ok">Salvar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="close-dialog" class="dialog small alert" data-kind="warning">
+      <form method="dialog">
+        <div class="alert-head">
+          <span class="alert-badge" data-icon="save"></span>
+          <div class="alert-body">
+            <h2>Salvar as alterações antes de fechar?</h2>
+            <p class="message"></p>
+            <ul class="close-list"></ul>
+            <p class="muted small">Se você não salvar, as alterações serão perdidas.</p>
+          </div>
+        </div>
+        <div class="dialog-actions">
+          <button class="btn" value="discard" formnovalidate>Não salvar</button>
+          <span class="spacer"></span>
+          <button class="btn" value="cancel" formnovalidate>Cancelar</button>
+          <button class="btn primary" value="ok">Salvar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="about-dialog" class="dialog small about">
+      <form method="dialog">
+        <img class="about-logo" src="./icons/logo.svg" alt="" width="76" height="76" />
+        <h2 class="about-title"><b>PDF</b> Acrobat</h2>
+        <p class="about-version" data-version></p>
+        <p class="about-tagline">Leitor e editor de PDF para computador, navegador e celular. Seus documentos nunca saem do aparelho.</p>
+        <p class="about-credits muted small">Projeto de Lucas Brandão Cabral · Feito com PDF.js, pdf-lib, Tesseract, Electron e Capacitor · Fonte Inter</p>
+        <a class="about-link" href="https://github.com/Lucasbrandaocabral/pdfacrobat" target="_blank" rel="noopener">github.com/Lucasbrandaocabral/pdfacrobat</a>
+        <div class="dialog-actions">
+          <button class="btn primary about-ok" value="ok">OK</button>
         </div>
       </form>
     </dialog>

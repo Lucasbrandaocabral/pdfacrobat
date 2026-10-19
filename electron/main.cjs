@@ -1,6 +1,6 @@
 // Processo principal do Electron: janela, menus, diálogos de arquivo e
 // integração com o sistema operacional (abrir PDFs com duplo clique).
-const { app, BrowserWindow, Menu, dialog, ipcMain, net, protocol, shell } = require("electron");
+const { app, BrowserWindow, Menu, dialog, ipcMain, nativeTheme, net, protocol, shell } = require("electron");
 const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
@@ -77,7 +77,8 @@ async function openInWindow(filePath) {
   try {
     send("open-file", await readFileForRenderer(filePath));
   } catch (err) {
-    dialog.showErrorBox(APP_NAME, `Não foi possível abrir o arquivo:\n${err.message}`);
+    // O aviso aparece na janela do app, com a cara dele.
+    send("notice", { kind: "error", title: "Não foi possível abrir o arquivo", message: `${path.basename(filePath)}: ${err.message}` });
   }
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.focus();
@@ -90,7 +91,8 @@ function createWindow() {
     minWidth: 760,
     minHeight: 500,
     title: APP_NAME,
-    backgroundColor: "#f3f3f3",
+    // A mesma cor do fundo do app (claro ou escuro), para não piscar ao abrir.
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#131316" : "#f4f4f6",
     icon: path.join(__dirname, "..", "build", "icon.png"),
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
@@ -110,24 +112,12 @@ function createWindow() {
   });
   mainWindow.webContents.on("will-navigate", (event) => event.preventDefault());
 
-  mainWindow.on("close", async (event) => {
+  // Com documentos alterados, quem pergunta se quer salvar é a interface do app
+  // (Salvar / Não salvar / Cancelar); ela fecha a janela pelo "close-window".
+  mainWindow.on("close", (event) => {
     if (forceClose || !isDirty) return;
     event.preventDefault();
-    const { response } = await dialog.showMessageBox(mainWindow, {
-      type: "warning",
-      buttons: ["Salvar", "Não salvar", "Cancelar"],
-      defaultId: 0,
-      cancelId: 2,
-      title: APP_NAME,
-      message: "Deseja salvar as alterações antes de fechar?",
-      detail: "Há documentos com alterações não salvas. Se você não salvar, elas serão perdidas.",
-    });
-    if (response === 0) {
-      send("menu", "save-all-and-close");
-    } else if (response === 1) {
-      forceClose = true;
-      mainWindow.close();
-    }
+    send("menu", "confirm-close");
   });
 
   mainWindow.on("closed", () => {
@@ -280,16 +270,7 @@ function buildMenu() {
       submenu: [
         item("Verificar atualizações…", "check-updates"),
         sep,
-        {
-          label: "Sobre o PDF Acrobat",
-          click: () =>
-            dialog.showMessageBox(mainWindow, {
-              title: APP_NAME,
-              message: `${APP_NAME} ${app.getVersion()}`,
-              detail:
-                "Leitor e editor de PDF.\nRenderização: PDF.js (Mozilla) · Edição: pdf-lib · OCR: Tesseract · Interface: Electron (Chromium).",
-            }),
-        },
+        item("Sobre o PDF Acrobat", "about"),
       ],
     },
   ];
