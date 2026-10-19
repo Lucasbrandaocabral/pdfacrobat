@@ -4,15 +4,17 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self' blob: data: https://api.github.com" />
-    <meta name="theme-color" content="#d7373f" />
+    <meta name="theme-color" content="#f4f4f6" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#131316" media="(prefers-color-scheme: dark)" />
     <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="./icons/logo.svg" />
     <link rel="icon" type="image/png" href="./icons/icon-192.png" />
     <link rel="apple-touch-icon" href="./icons/icon-192.png" />
     <title>PDF Acrobat</title>
   </head>
   <body>
     <header class="topbar">
-      <div class="brand"><span class="brand-mark" data-icon="pdf"></span><span class="brand-name">PDF Acrobat</span></div>
+      <div class="brand"><img class="brand-mark" src="./icons/logo.svg" alt="" width="30" height="30" /><span class="brand-name"><b>PDF</b> Acrobat</span></div>
       <div class="group">
         <button class="btn" data-action="open" data-icon="open" title="Abrir (Ctrl+O)"><span class="label">Abrir</span></button>
         <button class="btn icon-only" data-action="save" data-icon="save" title="Salvar (Ctrl+S)" data-needs-doc></button>
@@ -210,25 +212,41 @@
 
       <section class="viewer-area" id="viewer-area">
         <div id="welcome" class="welcome">
-          <div class="welcome-card">
-            <div class="welcome-icon" data-icon="pdf"></div>
-            <h1>Abra um PDF para começar</h1>
-            <p class="muted">Arraste arquivos para esta janela ou escolha uma opção abaixo.</p>
-            <div class="welcome-actions">
-              <button class="btn primary" data-action="open" data-icon="open"><span>Abrir arquivo</span></button>
-              <button class="btn" data-action="create-from-images" data-icon="image"><span>Criar PDF de imagens</span></button>
-              <button class="btn" data-action="combine" data-icon="combine"><span>Combinar arquivos</span></button>
-              <button class="btn" data-action="compare" data-icon="compare"><span>Comparar arquivos</span></button>
+          <div class="welcome-inner">
+            <div class="welcome-hero">
+              <img class="welcome-logo" src="./icons/logo.svg" alt="" width="88" height="88" />
+              <h1 class="welcome-title"><b>PDF</b> Acrobat</h1>
+              <p class="welcome-tagline">Leia, edite, assine e organize seus PDFs. Tudo acontece no seu aparelho: nenhum arquivo é enviado para a internet.</p>
             </div>
+            <div class="welcome-actions">
+              <button class="action-card primary" data-action="open">
+                <span class="action-icon" data-icon="open"></span>
+                <span class="action-text"><strong>Abrir arquivo</strong><span>Um PDF do computador ou do celular</span></span>
+              </button>
+              <button class="action-card" data-action="combine">
+                <span class="action-icon" data-icon="combine"></span>
+                <span class="action-text"><strong>Combinar arquivos</strong><span>Juntar PDFs e imagens num só</span></span>
+              </button>
+              <button class="action-card" data-action="create-from-images">
+                <span class="action-icon" data-icon="image"></span>
+                <span class="action-text"><strong>Criar PDF de imagens</strong><span>Fotos e digitalizações viram PDF</span></span>
+              </button>
+              <button class="action-card" data-action="compare">
+                <span class="action-icon" data-icon="compare"></span>
+                <span class="action-text"><strong>Comparar versões</strong><span>Veja o que mudou entre dois PDFs</span></span>
+              </button>
+            </div>
+            <p class="welcome-drop" id="welcome-drop"><span data-icon="download"></span>Ou arraste os arquivos para esta janela</p>
             <section id="recent-section" class="recent" hidden>
-              <h2>Recentes</h2>
+              <h2>Abertos recentemente</h2>
               <ul id="recent-list"></ul>
             </section>
+            <button type="button" class="welcome-about" data-action="about">Sobre o PDF Acrobat</button>
           </div>
         </div>
 
         <div id="drop-overlay" class="drop-overlay" hidden><div>Solte os arquivos para abrir</div></div>
-        <div id="busy" class="busy" hidden><div class="spinner"></div><span id="busy-text">Processando…</span></div>
+        <div id="busy" class="busy" hidden><div class="busy-card"><div class="spinner"></div><span id="busy-text">Processando…</span></div></div>
       </section>
     </main>
 
@@ -247,10 +265,15 @@
     <div id="print-container" class="print-container"></div>
 
     <!-- Diálogos genéricos -->
-    <dialog id="confirm-dialog" class="dialog small">
+    <dialog id="confirm-dialog" class="dialog small alert" data-kind="question">
       <form method="dialog">
-        <h2></h2>
-        <p class="message"></p>
+        <div class="alert-head">
+          <span class="alert-badge" data-icon="help"></span>
+          <div class="alert-body">
+            <h2></h2>
+            <p class="message"></p>
+          </div>
+        </div>
         <div class="dialog-actions">
           <span class="spacer"></span>
           <button class="btn" value="cancel" formnovalidate>Cancelar</button>
@@ -259,11 +282,16 @@
       </form>
     </dialog>
 
-    <dialog id="repair-dialog" class="dialog small">
+    <dialog id="repair-dialog" class="dialog small alert" data-kind="success">
       <form method="dialog">
-        <h2>Arquivo reparado</h2>
-        <p class="message"></p>
-        <ul class="repair-list"></ul>
+        <div class="alert-head">
+          <span class="alert-badge" data-icon="repair"></span>
+          <div class="alert-body">
+            <h2>Arquivo reparado</h2>
+            <p class="message"></p>
+            <ul class="repair-list"></ul>
+          </div>
+        </div>
         <div class="dialog-actions">
           <span class="spacer"></span>
           <button class="btn primary" value="ok">OK</button>
@@ -271,15 +299,54 @@
       </form>
     </dialog>
 
-    <dialog id="unsaved-dialog" class="dialog small">
+    <dialog id="unsaved-dialog" class="dialog small alert" data-kind="warning">
       <form method="dialog">
-        <h2>Salvar alterações?</h2>
-        <p class="message"></p>
+        <div class="alert-head">
+          <span class="alert-badge" data-icon="save"></span>
+          <div class="alert-body">
+            <h2></h2>
+            <p class="message">Se você não salvar, as alterações serão perdidas.</p>
+          </div>
+        </div>
         <div class="dialog-actions">
           <button class="btn" value="discard" formnovalidate>Não salvar</button>
           <span class="spacer"></span>
           <button class="btn" value="cancel" formnovalidate>Cancelar</button>
           <button class="btn primary" value="ok">Salvar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="close-dialog" class="dialog small alert" data-kind="warning">
+      <form method="dialog">
+        <div class="alert-head">
+          <span class="alert-badge" data-icon="save"></span>
+          <div class="alert-body">
+            <h2>Salvar as alterações antes de fechar?</h2>
+            <p class="message"></p>
+            <ul class="close-list"></ul>
+            <p class="muted small">Se você não salvar, as alterações serão perdidas.</p>
+          </div>
+        </div>
+        <div class="dialog-actions">
+          <button class="btn" value="discard" formnovalidate>Não salvar</button>
+          <span class="spacer"></span>
+          <button class="btn" value="cancel" formnovalidate>Cancelar</button>
+          <button class="btn primary" value="ok">Salvar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="about-dialog" class="dialog small about">
+      <form method="dialog">
+        <img class="about-logo" src="./icons/logo.svg" alt="" width="76" height="76" />
+        <h2 class="about-title"><b>PDF</b> Acrobat</h2>
+        <p class="about-version" data-version></p>
+        <p class="about-tagline">Leitor e editor de PDF para computador, navegador e celular. Seus documentos nunca saem do aparelho.</p>
+        <p class="about-credits muted small">Projeto de Lucas Brandão Cabral · Feito com PDF.js, pdf-lib, Tesseract, Electron e Capacitor · Fonte Inter</p>
+        <a class="about-link" href="https://github.com/Lucasbrandaocabral/pdfacrobat" target="_blank" rel="noopener">github.com/Lucasbrandaocabral/pdfacrobat</a>
+        <div class="dialog-actions">
+          <button class="btn primary about-ok" value="ok">OK</button>
         </div>
       </form>
     </dialog>

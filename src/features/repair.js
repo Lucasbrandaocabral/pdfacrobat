@@ -100,6 +100,8 @@ export async function repairAndOpen(app, bytes, name) {
     title: "Arquivo danificado",
     message: `“${name}” não abriu: o arquivo parece estar danificado (um download que não terminou, por exemplo). Tentar reparar? O arquivo original não é alterado.`,
     ok: "Reparar",
+    kind: "warning",
+    icon: "repair",
   });
   if (!ok) return null;
   let result = null;

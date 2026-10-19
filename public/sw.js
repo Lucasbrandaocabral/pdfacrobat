@@ -1,6 +1,8 @@
 // Service worker da versão web: guarda os arquivos do app para funcionar
 // offline depois da primeira visita. Os documentos nunca saem do aparelho.
-const CACHE = "pdf-acrobat-v1";
+// Trocar o nome quando mudar algum arquivo de public/ (ícones, manifesto), que
+// não tem versão no nome: o cache antigo é apagado e os arquivos vêm de novo.
+const CACHE = "pdf-acrobat-v2";
 
 self.addEventListener("install", () => self.skipWaiting());
 

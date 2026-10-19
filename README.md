@@ -1,8 +1,15 @@
+<img src="public/icons/logo.svg" width="80" alt="Logo do PDF Acrobat">
+
 # PDF Acrobat
 
 Leitor e editor de PDF para Windows, macOS, Linux, navegador e celular, inspirado no Adobe Acrobat.
 
 ![Tela do PDF Acrobat](docs/screenshot.png)
+
+<p>
+  <img src="docs/inicio.png" width="49%" alt="Tela inicial">
+  <img src="docs/tema-escuro.png" width="49%" alt="Tema escuro, com a janela de salvar as alterações ao fechar">
+</p>
 
 ## O que ele faz
 
@@ -17,7 +24,7 @@ Leitor e editor de PDF para Windows, macOS, Linux, navegador e celular, inspirad
 | **Converter** | Para imagens (PNG/JPG), texto (.txt) e Word (.docx); comprimir o PDF; **reparar** PDFs danificados — download interrompido, índice, catálogo ou árvore de páginas estragados, páginas sem tamanho, conteúdo com a compressão danificada — recuperando o que dá e mostrando o que foi consertado (um arquivo que nem abre já oferece o reparo, e o original não muda; um PDF que abre aqui mas dá erro em outros programas ou sites sai com estrutura e índice novos); reconhecer texto em páginas escaneadas (OCR, em português e inglês, sem internet); comparar duas versões, com as diferenças destacadas |
 | **Criar** | Combinar vários PDFs e imagens num arquivo só, ou criar um PDF a partir de imagens |
 | **Imprimir** | Janela de impressão própria, como a do Acrobat, mostrando cada folha antes de imprimir: impressora, cópias, frente e verso e tons de cinza; páginas (todas, a atual, intervalos, só ímpares ou pares, ordem inversa); **Tamanho** (ajustar ao papel, tamanho real, reduzir as páginas grandes ou escala personalizada), **Pôster** (uma página dividida em várias folhas, com sobreposição, marcas de corte e rótulos), **Múltiplas** (2, 4, 6, 9, 16 ou colunas × linhas por folha, na ordem e com as bordas que quiser) e **Livreto** (folhas para dobrar ao meio, frente e verso, encadernação à esquerda ou à direita); papel, orientação, comentários e formulários; salvar as folhas como PDF. No app desktop a impressão vai direto para a impressora, vetorial, sem passar pela janela do sistema |
-| **Outros** | Desfazer e refazer, propriedades do documento, arquivos recentes, abrir PDFs com duplo clique, arrastar e soltar, tema claro e escuro |
+| **Outros** | Desfazer e refazer, propriedades do documento, arquivos recentes, abrir PDFs com duplo clique, arrastar e soltar, tema claro e escuro (acompanha o do sistema); visual próprio, com a fonte Inter e as janelas do próprio app — salvar as alterações ao fechar, avisos e Sobre —, iguais no Windows, no macOS, no Linux, no navegador e no Android |
 
 Os comentários, carimbos e formas são gravados como anotações PDF padrão e aparecem em qualquer leitor. Os documentos nunca saem do seu computador ou celular: tudo, inclusive o OCR, roda localmente.
 
@@ -130,6 +137,7 @@ electron/updater.cjs     atualização automática (procura, baixa e instala ver
 android/                 app Android (Capacitor); NativeFilesPlugin.java: salvar, abrir com, imprimir
 src/android.js           só no Android: botão voltar do sistema
 src/main.js              inicialização, ações, atalhos, arrastar e soltar, recentes
+src/ui.js                janelas do app (perguntas e avisos), indicador de processamento e mensagens
 src/tabs.js              abas (um visualizador do PDF.js por documento), desfazer/refazer, permissões
 src/tools.js             ferramentas na página: comentar, formas, carimbos, assinar, editar texto e imagens
 src/sidebar.js           miniaturas, marcadores e lista de comentários
@@ -152,8 +160,10 @@ src/pdf/repair.js        reparar: catálogo, árvore de páginas, tamanhos, refe
 src/pdf/textedit.js      linhas editáveis, escrever texto novo com a fonte do catálogo ou a original
 src/pdf/imposition.js    monta as folhas de impressão (tamanho, pôster, várias por folha, livreto)
 src/pdf/split.js         como dividir: intervalos, inícios de documento, tamanho de cada página
-public/                  manifesto e service worker da versão web; public/fonts: as fontes e suas licenças
+src/assets/              fonte Inter da interface
+public/                  manifesto e service worker da versão web; public/fonts: as fontes e suas licenças; public/icons: o logo e os ícones
 scripts/build-fonts.py   baixa as fontes do Google Fonts e monta o catálogo
+scripts/make-icons.cjs   desenha o logo e gera os ícones do computador, da web e do Android
 ```
 
 ## Desenvolvimento
@@ -168,6 +178,7 @@ npm run dist         # gera o instalador do sistema atual em release/
 npm run dist:win     # ou :mac / :linux
 npm run android      # copia a interface para o app Android (android/)
 python3 scripts/build-fonts.py   # refaz o catálogo de fontes (precisa de internet e de pip install fonttools brotli)
+npx electron scripts/make-icons.cjs   # refaz o logo e os ícones (no Linux sem tela: xvfb-run -a npx electron scripts/make-icons.cjs)
 cd android && ./gradlew assembleDebug   # APK de teste (precisa do JDK 21 e do Android SDK)
 ```
 
@@ -188,4 +199,4 @@ Projeto de [@Lucasbrandaocabral](https://github.com/Lucasbrandaocabral), desenvo
 
 ## Licença
 
-MIT. Usa [PDF.js](https://github.com/mozilla/pdf.js) (Apache-2.0), [pdf-lib](https://github.com/cantoo-scribe/pdf-lib) (MIT), [Tesseract.js](https://github.com/naptha/tesseract.js) (Apache-2.0), [signpdf](https://github.com/vbuch/node-signpdf) (MIT), [node-forge](https://github.com/digitalbazaar/forge) (BSD/GPL), [docx](https://github.com/dolanmiu/docx) (MIT), [jsdiff](https://github.com/kpdecker/jsdiff) (BSD), [fflate](https://github.com/101arrowz/fflate) (MIT), [Electron](https://www.electronjs.org/) (MIT), [Capacitor](https://capacitorjs.com/) (MIT) e [electron-updater](https://github.com/electron-userland/electron-builder) (MIT). Fontes da assinatura digitada: [Dancing Script](https://fonts.google.com/specimen/Dancing+Script), [Great Vibes](https://fonts.google.com/specimen/Great+Vibes) e [Caveat](https://fonts.google.com/specimen/Caveat) (OFL) e [Homemade Apple](https://fonts.google.com/specimen/Homemade+Apple) (Apache-2.0). Fontes do editor de texto: 127 famílias do [Google Fonts](https://fonts.google.com) (SIL Open Font License 1.1, Apache 2.0 e Ubuntu Font Licence), com os direitos autorais e a licença de cada uma em [`public/fonts/LICENSES.md`](public/fonts/LICENSES.md); leitura e embutimento com [fontkit](https://github.com/cantoo-scribe/fontkit) (MIT).
+MIT. Usa [PDF.js](https://github.com/mozilla/pdf.js) (Apache-2.0), [pdf-lib](https://github.com/cantoo-scribe/pdf-lib) (MIT), [Tesseract.js](https://github.com/naptha/tesseract.js) (Apache-2.0), [signpdf](https://github.com/vbuch/node-signpdf) (MIT), [node-forge](https://github.com/digitalbazaar/forge) (BSD/GPL), [docx](https://github.com/dolanmiu/docx) (MIT), [jsdiff](https://github.com/kpdecker/jsdiff) (BSD), [fflate](https://github.com/101arrowz/fflate) (MIT), [Electron](https://www.electronjs.org/) (MIT), [Capacitor](https://capacitorjs.com/) (MIT) e [electron-updater](https://github.com/electron-userland/electron-builder) (MIT). Fonte da interface: [Inter](https://rsms.me/inter/) (SIL Open Font License 1.1). Fontes da assinatura digitada: [Dancing Script](https://fonts.google.com/specimen/Dancing+Script), [Great Vibes](https://fonts.google.com/specimen/Great+Vibes) e [Caveat](https://fonts.google.com/specimen/Caveat) (OFL) e [Homemade Apple](https://fonts.google.com/specimen/Homemade+Apple) (Apache-2.0). Fontes do editor de texto: 127 famílias do [Google Fonts](https://fonts.google.com) (SIL Open Font License 1.1, Apache 2.0 e Ubuntu Font Licence), com os direitos autorais e a licença de cada uma em [`public/fonts/LICENSES.md`](public/fonts/LICENSES.md); leitura e embutimento com [fontkit](https://github.com/cantoo-scribe/fontkit) (MIT).

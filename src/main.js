@@ -1,7 +1,7 @@
 import "pdfjs-dist/web/pdf_viewer.css";
 import "./styles.css";
 import { renderIcons } from "./icons.js";
-import { $, $$, askText, baseName, debounce, el, runBusy, setBusy, toast } from "./ui.js";
+import { $, $$, askText, baseName, debounce, el, notice, openDialog, runBusy, setBusy, toast } from "./ui.js";
 import { TabManager } from "./tabs.js";
 import { Sidebar } from "./sidebar.js";
 import { ToolController } from "./tools.js";
@@ -128,13 +128,42 @@ async function saveTab(tab, { saveAs = false } = {}) {
   return ok === true;
 }
 
-function askUnsaved(name) {
-  const dialog = $("#unsaved-dialog");
-  $(".message", dialog).textContent = `"${name}" tem alterações que não foram salvas.`;
+/** Abre um diálogo de escolha (Salvar / Não salvar / Cancelar) e resolve com o valor do botão. */
+function askChoice(dialog) {
   dialog.returnValue = "";
   dialog.showModal();
   $('button[value="ok"]', dialog).focus();
   return new Promise((resolve) => dialog.addEventListener("close", () => resolve(dialog.returnValue || "cancel"), { once: true }));
+}
+
+function askUnsaved(name) {
+  const dialog = $("#unsaved-dialog");
+  $("h2", dialog).textContent = `Salvar as alterações em “${name}”?`;
+  return askChoice(dialog);
+}
+
+/**
+ * Fechar a janela com documentos alterados (o app de computador pergunta pela
+ * interface, não pela janela do sistema): Salvar (todos), Não salvar ou Cancelar.
+ */
+async function confirmClose() {
+  const dialog = $("#close-dialog");
+  if (dialog.open) return;
+  const dirty = manager.tabs.filter((t) => t.dirty);
+  if (!dirty.length) return platform.closeWindow();
+  $(".message", dialog).textContent = dirty.length === 1 ? "Este documento tem alterações que ainda não foram salvas:" : `Estes ${dirty.length} documentos têm alterações que ainda não foram salvas:`;
+  $(".close-list", dialog).replaceChildren(...dirty.map((t) => el("li", { text: t.name, title: t.path || t.name })));
+  $('button[value="ok"]', dialog).textContent = dirty.length === 1 ? "Salvar" : "Salvar todos";
+  const choice = await askChoice(dialog);
+  if (choice === "ok") await saveAllAndClose();
+  else if (choice === "discard") platform.closeWindow();
+}
+
+/** Janela "Sobre" com a marca e a versão. */
+function showAbout() {
+  const dialog = $("#about-dialog");
+  $("[data-version]", dialog).textContent = `Versão ${platform.APP_VERSION}`;
+  return openDialog(dialog, { focus: ".about-ok" });
 }
 
 async function closeTab(tab) {
@@ -290,6 +319,8 @@ const actions = {
   save: () => saveTab(manager.active),
   "save-as": () => saveTab(manager.active, { saveAs: true }),
   "save-all-and-close": saveAllAndClose,
+  "confirm-close": confirmClose,
+  about: showAbout,
   "close-tab": () => closeTab(manager.active),
   "next-tab": () => manager.cycle(1),
   "prev-tab": () => manager.cycle(-1),
@@ -358,6 +389,8 @@ const LEAVES_EDIT_OPEN = new Set([
   "properties",
   "author-name",
   "check-updates",
+  "about",
+  "confirm-close",
 ]);
 
 async function runAction(name) {
@@ -369,7 +402,7 @@ async function runAction(name) {
     await actions[name]?.();
   } catch (err) {
     console.error(err);
-    toast(err?.userMessage || err?.message || String(err), { duration: 6000 });
+    toast(err?.userMessage || err?.message || String(err), { duration: 6000, kind: "error" });
   }
 }
 
@@ -573,6 +606,8 @@ function addRecent({ name, path }) {
 }
 
 function renderRecent() {
+  // Arrastar arquivos para a janela não existe no celular.
+  $("#welcome-drop").hidden = platform.isAndroid;
   const list = readRecent();
   const section = $("#recent-section");
   section.hidden = !platform.isDesktop || !list.length;
@@ -625,6 +660,8 @@ const checkForUpdates = setupUpdates({ closeDocuments: closeUnsaved });
 document.addEventListener("keydown", onKeyDown);
 platform.onMenu((action) => runAction(action));
 platform.onOpenFile((file) => openFiles([file]));
+// Avisos do processo principal (arquivo que não abriu, por exemplo), na janela do app.
+platform.onNotice((n) => notice(n));
 if (platform.isAndroid) setupAndroid(app);
 window.addEventListener("beforeunload", (e) => {
   if (!platform.isDesktop && manager.tabs.some((t) => t.dirty)) e.preventDefault();
@@ -640,4 +677,5 @@ const initial = await platform.getInitialFile();
 if (initial?.length) await openFiles(initial);
 
 // Usado pelos testes automatizados.
+app.runAction = runAction;
 window.__app = app;
