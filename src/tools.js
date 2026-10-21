@@ -10,8 +10,8 @@ import * as annotations from "./pdf/annotations.js";
 import { findImages, imageHasMask, isolatePage, moveImage, readPageContent, removeImage } from "./pdf/content.js";
 import { drawPngOnPage } from "./pdf/ops.js";
 import { drawMark, today } from "./pdf/fill.js";
-import { LINE_HEIGHT, addText, describeLine, editText, fontStyle, groupLines } from "./pdf/textedit.js";
-import { findTextRuns, lineRuns, removeRuns } from "./pdf/textops.js";
+import { LINE_HEIGHT, addText, describeLine, editBlock, editText, fontStyle, groupLines, groupParagraphs } from "./pdf/textedit.js";
+import { baseFontName, findTextRuns, lineRuns, removeRuns } from "./pdf/textops.js";
 import { catalogFont, cssFamily, exactFamily, fallbackFont, fontById, loadFontFace, matchFont, rememberFont } from "./fonts.js";
 import { closeFontPicker, fontPickerOpen, openFontPicker } from "./fontpicker.js";
 import { Perm, loadForEdit } from "./pdf/security.js";
@@ -742,13 +742,15 @@ export class ToolController {
     return tab.pageCache.get("lib");
   }
 
-  /** Linhas de texto e imagens da página (em cache até o próximo recarregamento). */
+  /** Linhas e parágrafos de texto e imagens da página (em cache até o próximo recarregamento). */
   pageData(tab, pageNumber) {
     const key = `edit-${pageNumber}`;
     if (!tab.pageCache.has(key)) {
       const promise = (async () => {
         const page = await tab.doc.getPage(pageNumber);
-        const lines = groupLines(await getTextItems(page));
+        // Cópias da mesma fonte (uma por palavra, em alguns PDFs) contam como uma só.
+        const fontKey = (name) => baseFontName(fontInfo(page, name).name) || name;
+        const lines = groupLines(await getTextItems(page), { fontKey });
         const lib = await this.libDoc(tab);
         const libPage = lib.getPage(pageNumber - 1);
         let content;
@@ -773,13 +775,22 @@ export class ToolController {
           } catch (err) {
             console.warn("Não foi possível analisar a linha", err);
           }
-          Object.assign(line, drawn, { realName: info.name, face: info.face, style: fontStyle(line.fontFamily, info.name) });
+          // As fontes da linha carregadas pelo PDF.js, para a prévia ter as letras de todas as cópias.
+          const faces = [...new Set(line.fontNames.map((name) => fontInfo(page, name).face).filter(Boolean))];
+          Object.assign(line, drawn, { realName: info.name, face: info.face, faces, style: fontStyle(line.fontFamily, info.name) });
+        }
+        let blocks;
+        try {
+          blocks = groupParagraphs(lines);
+        } catch (err) {
+          console.warn("Não foi possível achar os parágrafos", err);
+          blocks = lines.map((line) => ({ lines: [line], single: true, align: "left", leading: null, left: 0, width: line.width, indent: 0, origin: line.origin, text: line.text || line.str, rect: line.rect, size: line.size, angle: line.angle }));
         }
         // Página que é só uma imagem (escaneada ou foto): não há texto para editar.
         const [x0, y0, x1, y1] = page.view;
         const area = Math.abs((x1 - x0) * (y1 - y0));
         const scanned = !lines.length && images.some(({ rect: r }) => (r[2] - r[0]) * (r[3] - r[1]) > 0.5 * area);
-        return { lines, images, scanned };
+        return { lines, blocks, images, scanned };
       })();
       tab.pageCache.set(key, promise);
       promise.then((data) => tab.pageCache.set(`${key}-ready`, data)).catch(() => tab.pageCache.delete(key));
@@ -789,10 +800,10 @@ export class ToolController {
 
   hitTest(data, [px, py]) {
     const inside = ([x0, y0, x1, y1], pad = 0) => px >= x0 - pad && px <= x1 + pad && py >= y0 - pad && py <= y1 + pad;
-    // Entre linhas sobrepostas, a menor (a mais específica).
+    // Um clique numa linha pega o parágrafo inteiro; entre blocos sobrepostos, o menor (o mais específico).
     const area = ([x0, y0, x1, y1]) => (x1 - x0) * (y1 - y0);
-    const line = data.lines.filter((l) => inside(l.rect, Math.max(1.5, 0.15 * l.size))).sort((a, b) => area(a.rect) - area(b.rect))[0];
-    if (line) return { kind: "text", line };
+    const block = data.blocks.filter((b) => inside(b.rect, Math.max(1.5, 0.15 * b.size))).sort((a, b) => area(a.rect) - area(b.rect))[0];
+    if (block) return { kind: "text", block };
     for (let i = data.images.length - 1; i >= 0; i--) {
       if (inside(data.images[i].rect)) return { kind: "image", image: data.images[i] };
     }
@@ -811,7 +822,7 @@ export class ToolController {
     }
     const target = this.hitTest(data, hit.pdf);
     if (!target) return this.removeHover();
-    const rect = this.cssRect(hit.pageView, target.kind === "text" ? target.line.rect : target.image.rect);
+    const rect = this.cssRect(hit.pageView, target.kind === "text" ? target.block.rect : target.image.rect);
     const layer = this.overlayFor(hit);
     let box = layer.querySelector(".edit-hover");
     if (!box) {
@@ -837,7 +848,7 @@ export class ToolController {
     const target = this.hitTest(data, hit.pdf);
     this.removeHover();
     if (!target) return this.explainNothingHere(data);
-    if (target.kind === "text") this.startTextEdit(hit, target.line);
+    if (target.kind === "text") this.startTextEdit(hit, target.block);
     else this.startImageEdit(hit, target.image);
   }
 
@@ -945,13 +956,16 @@ export class ToolController {
     this.openTextBox(hit, { mode: "add", text: "", state: this.newTextStyle(), anchor: [hit.x, hit.y] });
   }
 
-  startTextEdit(hit, line) {
-    const css = this.cssRect(hit.pageView, line.rect);
+  /** Edita o bloco clicado: o parágrafo inteiro ou uma linha sozinha. */
+  startTextEdit(hit, block) {
+    const line = block.lines[0];
+    const css = this.cssRect(hit.pageView, block.rect);
     const { bg, fg } = this.sampleColors(hit, css);
     const match = matchFont(line.realName);
     const substitute = match || fallbackFont(line.style);
-    // A própria fonte do PDF, quando o catálogo não tem a mesma (Arial, Calibri, fontes do Canva...).
-    const original = line.original && line.face ? { label: prettyFontName(line.realName), family: `"${line.face}"` } : null;
+    // A própria fonte do PDF (com todas as cópias dela), quando o catálogo não tem a mesma (Arial, Calibri, fontes do Canva...).
+    const faces = line.faces?.length ? line.faces : line.face ? [line.face] : [];
+    const original = line.original && faces.length ? { label: prettyFontName(line.realName), family: faces.map((face) => `"${face}"`).join(", ") } : null;
     const state = {
       font: original && !match?.exact ? "original" : substitute.id,
       substitute: substitute.id,
@@ -961,24 +975,28 @@ export class ToolController {
       color: line.color || fg,
       spacing: line.spacing,
     };
-    // O texto lido do próprio PDF quando o PDF.js separa as letras ("C L I Q U E").
-    const editing = this.openTextBox(hit, { mode: "edit", line, text: line.text || line.str, state, bg, original });
+    // Parágrafo: o texto todo, refluindo na largura dele. Linha sozinha: o texto
+    // dela (o lido do próprio PDF quando o PDF.js separa as letras, "C L I Q U E").
+    const paragraph = block.single ? null : block;
+    const text = paragraph ? block.text : line.text || line.str;
+    const editing = this.openTextBox(hit, { mode: "edit", line, paragraph, text, state, bg, original });
     editing.originalStyle = { bold: substitute.bold, italic: substitute.italic };
-    if (line.runs) this.prepareTextPreview(editing);
+    if (block.lines.some((l) => l.runs)) this.prepareTextPreview(editing);
   }
 
   /**
    * Caixa de texto editável sobre a página, com a barra de formatação.
-   * `mode`: "edit" (troca a linha `line`) ou "add" (texto novo no ponto `anchor`).
+   * `mode`: "edit" (troca a linha `line` ou, com `paragraph`, o parágrafo
+   * inteiro) ou "add" (texto novo no ponto `anchor`).
    */
-  openTextBox(hit, { mode, line = null, text, state, bg = null, original = null, anchor = null }) {
+  openTextBox(hit, { mode, line = null, paragraph = null, text, state, bg = null, original = null, anchor = null }) {
     const layer = this.overlayFor(hit);
     const editor = el("div", {
-      class: "text-editor",
+      class: paragraph ? "text-editor paragraph" : "text-editor",
       spellcheck: "false",
       role: "textbox",
       "aria-multiline": "true",
-      "aria-label": mode === "add" ? "Texto novo" : "Texto",
+      "aria-label": mode === "add" ? "Texto novo" : paragraph ? "Parágrafo" : "Texto",
     });
     try {
       editor.contentEditable = "plaintext-only";
@@ -991,11 +1009,16 @@ export class ToolController {
     if (mode === "edit") editor.style.background = cssColor(bg || [1, 1, 1]);
     const grip = el("span", { class: "text-grip", title: "Arraste para mover", "aria-hidden": "true" });
     const box = el("div", { class: "text-box" }, [grip, editor]);
+    // No parágrafo, a alça da direita muda a largura (o texto reflui).
+    const sizer = paragraph ? el("span", { class: "text-sizer", title: "Arraste para mudar a largura", "aria-hidden": "true" }) : null;
+    if (sizer) box.append(sizer);
     const editing = {
       kind: "text",
       mode,
       hit,
       line,
+      paragraph,
+      width: paragraph?.width ?? null,
       layer,
       box,
       editor,
@@ -1014,8 +1037,8 @@ export class ToolController {
 
     editor.addEventListener("keydown", (e) => {
       const mod = e.ctrlKey || e.metaKey;
-      // Editando uma linha, Enter conclui (Shift+Enter quebra a linha); no texto novo, Enter quebra a linha.
-      if (e.key === "Enter" && (mode === "edit" ? !e.shiftKey : mod)) {
+      // Editando uma linha, Enter conclui (Shift+Enter quebra a linha); no parágrafo e no texto novo, Enter quebra a linha e Ctrl+Enter conclui.
+      if (e.key === "Enter" && (mode === "edit" && !paragraph ? !e.shiftKey : mod)) {
         e.preventDefault();
         this.finishEdit();
       } else if (mod && !e.altKey && /^[bi]$/i.test(e.key)) {
@@ -1032,6 +1055,7 @@ export class ToolController {
       document.execCommand("insertText", false, pasted.replace(/\r\n?/g, "\n"));
     });
     grip.addEventListener("pointerdown", (e) => this.startTextDrag(e));
+    sizer?.addEventListener("pointerdown", (e) => this.startParagraphResize(e));
 
     this.styleTextEditor();
     this.revealTextBox();
@@ -1040,6 +1064,12 @@ export class ToolController {
     const range = document.createRange();
     range.selectNodeContents(editor);
     if (mode === "add") range.collapse(false);
+    else if (paragraph) {
+      // No parágrafo, o cursor fica onde a pessoa clicou (uma tecla não apaga o texto todo).
+      const caret = caretAt(hit, editor);
+      if (caret) range.setStart(caret.node, caret.offset);
+      range.collapse(Boolean(caret));
+    }
     selection.removeAllRanges();
     selection.addRange(range);
     return editing;
@@ -1090,7 +1120,7 @@ export class ToolController {
       }),
     );
     const done = keepFocus(
-      el("button", { class: "btn primary", type: "button", text: "Concluir", title: mode === "add" ? "Concluir (Ctrl+Enter)" : "Concluir (Enter)", onclick: () => this.finishEdit() }),
+      el("button", { class: "btn primary", type: "button", text: "Concluir", title: mode === "add" || editing.paragraph ? "Concluir (Ctrl+Enter)" : "Concluir (Enter)", onclick: () => this.finishEdit() }),
     );
     editing.controls = { fontButton, size, bold, italic, color };
     return el("div", { class: "float-bar text-bar" }, [fontButton, size, bold, italic, color, remove, done]);
@@ -1116,10 +1146,15 @@ export class ToolController {
     const catalogId = original ? state.substitute : state.font;
     // Com a fonte original, as letras que ela não tem saem com a substituta (no estilo certo).
     const family = original ? `${editing.original.family}, ${exactFamily(catalogId, state.bold)}` : cssFamily(catalogId);
+    const paragraph = editing.paragraph;
     Object.assign(editor.style, {
       fontFamily: `${family}, sans-serif`,
       fontSize: `${state.size * viewport.scale}px`,
-      lineHeight: String(LINE_HEIGHT),
+      // No parágrafo, a mesma distância entre as linhas do PDF, na mesma largura (1 px de folga para arredondamentos).
+      lineHeight: String(paragraph ? paragraph.leading / paragraph.size : LINE_HEIGHT),
+      width: paragraph ? `${editing.width * viewport.scale + 1}px` : "",
+      textAlign: paragraph ? paragraph.align : "",
+      textIndent: paragraph?.indent ? `${paragraph.indent * viewport.scale}px` : "",
       fontWeight: !original && state.bold ? "700" : "400",
       fontStyle: !original && state.italic ? "italic" : "normal",
       color: cssColor(state.color),
@@ -1158,7 +1193,8 @@ export class ToolController {
       x = editing.anchor[0];
       y = editing.anchor[1] - (state.size * viewport.scale * LINE_HEIGHT) / 2 + baseline;
     } else {
-      const { origin, angle } = editing.line;
+      const { angle } = editing.line;
+      const origin = editing.paragraph ? editing.paragraph.origin : editing.line.origin;
       [x, y] = viewport.convertToViewportPoint(...origin);
       const [dx, dy] = viewport.convertToViewportPoint(origin[0] + Math.cos(angle), origin[1] + Math.sin(angle));
       theta = Math.atan2(dy - y, dx - x);
@@ -1223,6 +1259,36 @@ export class ToolController {
     window.addEventListener("pointercancel", up);
   }
 
+  /** Arrastar a alça da direita muda a largura do parágrafo (na direção do texto). */
+  startParagraphResize(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const editing = this.editing;
+    const { viewport, line } = editing;
+    const [x0, y0] = viewport.convertToViewportPoint(...line.origin);
+    const [x1, y1] = viewport.convertToViewportPoint(line.origin[0] + Math.cos(line.angle), line.origin[1] + Math.sin(line.angle));
+    const theta = Math.atan2(y1 - y0, x1 - x0);
+    const start = [e.clientX, e.clientY];
+    const from = editing.width;
+    const min = 2 * editing.state.size;
+    const move = (ev) => {
+      if (this.editing !== editing) return;
+      const along = (ev.clientX - start[0]) * Math.cos(theta) + (ev.clientY - start[1]) * Math.sin(theta);
+      editing.width = Math.max(min, from + along / viewport.scale);
+      editing.editor.style.width = `${editing.width * viewport.scale + 1}px`;
+      this.placeTextBar();
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      if (this.editing === editing) editing.editor.focus({ preventScroll: true });
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+  }
+
   toggleTextStyle(kind) {
     const editing = this.editing;
     if (editing?.kind !== "text") return;
@@ -1271,17 +1337,23 @@ export class ToolController {
   async prepareTextPreview(editing) {
     const pageCanvas = editing.hit.pageDiv.querySelector(".canvasWrapper canvas");
     if (!pageCanvas) return;
+    const lines = editing.paragraph ? editing.paragraph.lines : [editing.line];
+    let complete = false;
     try {
       const clean = await this.renderPageCopy(editing, pageCanvas, (doc, page) => {
-        const runs = lineRuns(findTextRuns(doc, page), editing.line);
-        if (!runs) return false;
+        const all = findTextRuns(doc, page);
+        const found = lines.map((line) => lineRuns(all, line));
+        const runs = found.flatMap((r) => r || []);
+        if (!runs.length) return false;
         removeRuns(doc, page, runs);
+        complete = found.every(Boolean);
         return true;
       });
       if (!clean || this.editing !== editing) return;
       editing.layer.prepend(clean);
       editing.clean = clean;
-      editing.editor.style.background = "transparent";
+      // Linha que não saiu do conteúdo continua coberta pelo fundo da caixa (como vai ficar no PDF).
+      if (complete) editing.editor.style.background = "transparent";
     } catch (err) {
       console.warn("Sem prévia do texto:", err);
     }
@@ -1289,8 +1361,10 @@ export class ToolController {
 
   async commitText() {
     const editing = this.editing;
-    const { hit, mode, line, state, bg, viewport } = editing;
+    const { hit, mode, line, paragraph, state, bg, viewport } = editing;
     const text = editorText(editing.editor);
+    // As linhas do parágrafo como aparecem na caixa (antes de ela sair da tela).
+    const rows = paragraph ? visualRows(editing.editor, paragraph.align === "justify") : null;
     const [bx, by] = editing.baselinePoint;
     const origin = viewport.convertToPdfPoint(bx, by);
     this.clearEdit();
@@ -1312,12 +1386,18 @@ export class ToolController {
     const initial = editing.initial;
     const restyled =
       ["font", "bold", "italic", "size", "spacing"].some((k) => state[k] !== initial[k]) || state.color.some((v, i) => Math.abs(v - initial.color[i]) > 0.002);
-    if (text === editing.text0 && !moved && !restyled) return;
+    const resized = paragraph && Math.abs(editing.width - paragraph.width) > 0.5;
+    if (text === editing.text0 && !moved && !restyled && !resized) return;
     if (state.font !== "original") rememberFont(fontId);
     await this.run(text.trim() ? "Aplicando texto…" : "Apagando texto…", async () => {
       const catalog = await catalogFont(fontId, state.bold);
       const style = { ...state, spacing: state.spacing || 0 };
-      await hit.tab.edit((doc) => editText(doc, hit.pageIndex, { line, text, style, catalog, bg, origin: moved ? origin : line.origin }));
+      if (paragraph) {
+        const start = moved ? origin : paragraph.origin;
+        await hit.tab.edit((doc) => editBlock(doc, hit.pageIndex, { block: paragraph, rows, style, catalog, bg, origin: start, width: editing.width }));
+      } else {
+        await hit.tab.edit((doc) => editText(doc, hit.pageIndex, { line, text, style, catalog, bg, origin: moved ? origin : line.origin }));
+      }
     });
   }
 
@@ -1632,9 +1712,76 @@ function estimateSpacing(editor, line, scale) {
   return Math.max(0, (line.width - natural) / (count - 1));
 }
 
+/** O lugar do texto da caixa que está sob o clique `hit`, ou null. */
+function caretAt(hit, editor) {
+  const box = hit.wrapper.getBoundingClientRect();
+  const x = box.left + hit.x;
+  const y = box.top + hit.y;
+  let node = null;
+  let offset = 0;
+  if (document.caretPositionFromPoint) {
+    const position = document.caretPositionFromPoint(x, y);
+    node = position?.offsetNode ?? null;
+    offset = position?.offset ?? 0;
+  } else if (document.caretRangeFromPoint) {
+    const found = document.caretRangeFromPoint(x, y);
+    node = found?.startContainer ?? null;
+    offset = found?.startOffset ?? 0;
+  }
+  return node && editor.contains(node) ? { node, offset } : null;
+}
+
 /** O texto da caixa, com as quebras de linha. */
 function editorText(editor) {
   return editor.innerText.replace(/\u00a0/g, " ").replace(/\r\n?/g, "\n").replace(/\n$/, "");
+}
+
+/**
+ * As linhas do texto como aparecem na caixa: onde o navegador quebrou a linha
+ * (o texto continua) e onde há quebra de verdade (Enter). Com `justify`, as
+ * linhas que continuam na de baixo são justificadas. Assim o PDF fica igual à
+ * caixa, sem depender de as medidas das letras baterem com as do navegador.
+ */
+function visualRows(editor, justify) {
+  const rows = [];
+  let row = { text: "", top: null };
+  const lineHeight = parseFloat(getComputedStyle(editor).lineHeight) || 10;
+  const breakRow = (hard) => {
+    rows.push({ text: hard ? row.text : row.text.replace(/ +$/, ""), hard });
+    row = { text: "", top: null };
+  };
+  const range = document.createRange();
+  const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      // <br> é quebra de linha; um <div> (Enter em alguns navegadores) começa outra.
+      if (node.nodeName === "BR") breakRow(true);
+      else if (node.nodeName === "DIV" && (row.text || rows.length)) breakRow(true);
+      continue;
+    }
+    const value = node.nodeValue;
+    for (let i = 0; i < value.length; i++) {
+      const char = value[i] === "\u00a0" ? " " : value[i];
+      if (char === "\n") {
+        breakRow(true);
+        continue;
+      }
+      range.setStart(node, i);
+      range.setEnd(node, i + 1);
+      const rects = range.getClientRects();
+      const rect = rects[rects.length - 1];
+      // A letra desceu para a linha de baixo: o navegador quebrou a linha aqui.
+      if (rect && rect.width + rect.height > 0 && char !== " ") {
+        if (row.top !== null && rect.top > row.top + lineHeight / 2) breakRow(false);
+        if (row.top === null) row.top = rect.top;
+      }
+      row.text += char;
+    }
+  }
+  breakRow(true);
+  // Linhas vazias no fim (o <br> que o navegador deixa depois de um Enter) não mudam nada no PDF.
+  while (rows.length > 1 && !rows[rows.length - 1].text) rows.pop();
+  return rows.map(({ text, hard }) => ({ text, justify: justify && !hard }));
 }
 
 /** Pixels de `canvas` dentro do retângulo CSS `css` (relativo à página). */
