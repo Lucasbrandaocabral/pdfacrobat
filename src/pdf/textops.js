@@ -677,6 +677,33 @@ function nearLine(runs, line) {
 
 const invisible = (run) => run.mode === 3 || run.mode === 7;
 
+/**
+ * Nome da fonte sem a marca de subconjunto: o prefixo ("ABCDEF+Arial") ou o
+ * número que alguns programas põem no fim ("Arial-8358") -> "Arial".
+ */
+export const baseFontName = (name) =>
+  String(name || "")
+    .replace(/^[A-Z]{6}\+/, "")
+    .replace(/[-_+]\d{3,}$/, "");
+
+const fontKeys = new WeakMap();
+let lastFontId = 0;
+/**
+ * O que identifica a fonte de um trecho: o nome dela sem o prefixo de
+ * subconjunto, para que cópias da mesma fonte (PDFs que embutem a mesma fonte
+ * várias vezes, uma por palavra ou por linha) contem como uma só.
+ */
+export function fontKeyOf(fontDict) {
+  if (!(fontDict instanceof PDFDict)) return null;
+  let found = fontKeys.get(fontDict);
+  if (!found) {
+    const name = baseFontName(nameOf(fontDict.lookup(key("BaseFont"))));
+    found = name ? `${nameOf(fontDict.lookup(key("Subtype")))}/${name}` : `#${++lastFontId}`;
+    fontKeys.set(fontDict, found);
+  }
+  return found;
+}
+
 /** Os trechos invisíveis (camada de OCR) da linha, que saem junto quando ela é coberta. */
 export function hiddenRuns(runs, line) {
   return nearLine(runs, line).candidates.filter((run) => invisible(run) && run.known);
@@ -693,15 +720,17 @@ export function lineRuns(runs, line) {
   };
   if (!candidates.length) return null;
   // A linha é de uma fonte só; ao lado pode haver texto de outra (um rótulo em
-  // negrito, por exemplo): fica a fonte que mais ocupa a linha.
+  // negrito, por exemplo): fica a fonte que mais ocupa a linha. Cópias da mesma
+  // fonte (uma por palavra, em alguns PDFs) contam como a mesma.
   const weight = new Map();
   for (const run of candidates) {
     const [a, b] = run.known ? span(run) : [0, 0];
     const overlap = Math.max(0, Math.min(b, line.width) - Math.max(a, 0));
-    weight.set(run.fontDict, (weight.get(run.fontDict) || 0) + overlap + 1e-3);
+    const font = fontKeyOf(run.fontDict);
+    weight.set(font, (weight.get(font) || 0) + overlap + 1e-3);
   }
   const font = [...weight].sort((a, b) => b[1] - a[1])[0][0];
-  const picked = candidates.filter((run) => run.fontDict === font);
+  const picked = candidates.filter((run) => fontKeyOf(run.fontDict) === font);
   if (picked.some((run) => !run.known)) return null;
   // Texto invisível (camada de OCR sobre uma imagem): o que se vê é a imagem.
   if (picked.some(invisible)) return null;
