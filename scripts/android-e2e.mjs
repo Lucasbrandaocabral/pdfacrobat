@@ -233,6 +233,10 @@ page = await webview.page();
 mark("WebView conectado");
 const pageErrors = [];
 page.on("pageerror", (e) => pageErrors.push(e.message));
+// O APK de teste tem número de versão mais velho que o da última versão
+// publicada: o aviso "Nova versão disponível", fixo embaixo da tela, cobriria a
+// barra de texto e a lista de fontes com o teclado aberto.
+await page.addStyleTag({ content: "#update-bar { display: none !important; }" });
 const idle = async () => {
   await page.waitForFunction(() => document.getElementById("busy").hidden, null, { timeout: 60000 });
   await sleep(800);
