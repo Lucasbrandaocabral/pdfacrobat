@@ -767,7 +767,11 @@ export class ToolController {
         } catch (err) {
           console.warn("Não foi possível ler as imagens da página", err);
         }
+        const [vx0, vy0, vx1, vy1] = page.view;
         for (const line of lines) {
+          // Linha que chega à borda da página: o PDF.js só vê o pedaço de dentro, o resto vem do conteúdo.
+          const end = [line.origin[0] + line.width * Math.cos(line.angle), line.origin[1] + line.width * Math.sin(line.angle)];
+          line.clipped = end[0] > vx1 - line.size || end[0] < vx0 + line.size || end[1] > vy1 - line.size || end[1] < vy0 + line.size;
           const info = fontInfo(page, line.fontName);
           let drawn = { runs: null, color: null, original: null, spacing: null, text: null };
           try {
@@ -1008,10 +1012,9 @@ export class ToolController {
     // Até a página sem o texto antigo ficar pronta, o fundo cobre o texto antigo.
     if (mode === "edit") editor.style.background = cssColor(bg || [1, 1, 1]);
     const grip = el("span", { class: "text-grip", title: "Arraste para mover", "aria-hidden": "true" });
-    const box = el("div", { class: "text-box" }, [grip, editor]);
-    // No parágrafo, a alça da direita muda a largura (o texto reflui).
-    const sizer = paragraph ? el("span", { class: "text-sizer", title: "Arraste para mudar a largura", "aria-hidden": "true" }) : null;
-    if (sizer) box.append(sizer);
+    // As alças das laterais mudam a largura: o texto quebra nela, como no Canva.
+    const sizers = ["left", "right"].map((side) => el("span", { class: "text-sizer", dataset: { side }, title: "Arraste para mudar a largura", "aria-hidden": "true" }));
+    const box = el("div", { class: "text-box" }, [grip, editor, ...sizers]);
     const editing = {
       kind: "text",
       mode,
@@ -1048,14 +1051,17 @@ export class ToolController {
       // Os atalhos com Ctrl (salvar, imprimir) continuam valendo; as outras teclas são do texto.
       if (!mod && e.key !== "Escape") e.stopPropagation();
     });
-    editor.addEventListener("input", () => this.placeTextBar());
+    editor.addEventListener("input", () => {
+      this.placeSizers();
+      this.placeTextBar();
+    });
     editor.addEventListener("paste", (e) => {
       e.preventDefault();
       const pasted = e.clipboardData?.getData("text/plain") ?? "";
       document.execCommand("insertText", false, pasted.replace(/\r\n?/g, "\n"));
     });
     grip.addEventListener("pointerdown", (e) => this.startTextDrag(e));
-    sizer?.addEventListener("pointerdown", (e) => this.startParagraphResize(e));
+    for (const sizer of sizers) sizer.addEventListener("pointerdown", (e) => this.startTextResize(e, sizer.dataset.side));
 
     this.styleTextEditor();
     this.revealTextBox();
@@ -1150,9 +1156,8 @@ export class ToolController {
     Object.assign(editor.style, {
       fontFamily: `${family}, sans-serif`,
       fontSize: `${state.size * viewport.scale}px`,
-      // No parágrafo, a mesma distância entre as linhas do PDF, na mesma largura (1 px de folga para arredondamentos).
+      // No parágrafo, a mesma distância entre as linhas do PDF.
       lineHeight: String(paragraph ? paragraph.leading / paragraph.size : LINE_HEIGHT),
-      width: paragraph ? `${editing.width * viewport.scale + 1}px` : "",
       textAlign: paragraph ? paragraph.align : "",
       textIndent: paragraph?.indent ? `${paragraph.indent * viewport.scale}px` : "",
       fontWeight: !original && state.bold ? "700" : "400",
@@ -1160,6 +1165,7 @@ export class ToolController {
       color: cssColor(state.color),
       letterSpacing: `${(state.spacing || 0) * viewport.scale}px`,
     });
+    this.applyTextWidth();
     this.updateTextBar();
     this.placeTextEditor();
     const token = {};
@@ -1208,7 +1214,30 @@ export class ToolController {
       transform: Math.abs(theta) > 1e-3 ? `rotate(${theta}rad)` : "",
     });
     editing.baselinePoint = [x, y];
+    editing.theta = theta;
+    this.placeSizers();
     this.placeTextBar();
+  }
+
+  /** Com a largura definida, o texto quebra na caixa (1 px de folga para arredondamentos). */
+  applyTextWidth() {
+    const { editor, width, viewport } = this.editing;
+    editor.classList.toggle("wrap", width !== null);
+    editor.style.width = width === null ? "" : `${width * viewport.scale + 1}px`;
+  }
+
+  /**
+   * Na linha que passa da borda da página, a alça da direita fica na borda,
+   * ao alcance: no fim do texto ela ficaria fora da página (às vezes da tela).
+   */
+  placeSizers() {
+    const editing = this.editing;
+    const { box, editor, layer, width, baselinePoint, theta, viewport, state } = editing;
+    const room = Math.max(2 * state.size * viewport.scale, edgeDistance(baselinePoint, theta, layer.clientWidth, layer.clientHeight) - 24);
+    editing.reach = width === null && editor.offsetWidth > room ? room : null;
+    const right = box.querySelector('.text-sizer[data-side="right"]');
+    right.style.left = editing.reach === null ? "" : `${editing.reach + 6}px`;
+    right.style.right = editing.reach === null ? "" : "auto";
   }
 
   /** Barra acima da caixa (abaixo, se não couber), sem passar da borda da página. */
@@ -1217,7 +1246,7 @@ export class ToolController {
     if (editing?.kind !== "text") return;
     const { box, bar, layer } = editing;
     bar.style.maxWidth = `${Math.max(220, layer.clientWidth)}px`;
-    const r = box.getBoundingClientRect();
+    const r = handlesRect(box);
     const l = layer.getBoundingClientRect();
     const left = Math.max(0, Math.min(r.left - l.left, layer.clientWidth - bar.offsetWidth));
     const above = r.top - l.top - bar.offsetHeight - 8;
@@ -1229,7 +1258,7 @@ export class ToolController {
     const { box, bar, hit } = this.editing;
     const container = hit.tab.container;
     const view = container.getBoundingClientRect();
-    const rects = [box.getBoundingClientRect(), bar.getBoundingClientRect()];
+    const rects = [handlesRect(box), bar.getBoundingClientRect()];
     const top = Math.min(...rects.map((r) => r.top));
     const bottom = Math.max(...rects.map((r) => r.bottom));
     if (top < view.top + 8) container.scrollTop -= view.top + 8 - top;
@@ -1259,24 +1288,31 @@ export class ToolController {
     window.addEventListener("pointercancel", up);
   }
 
-  /** Arrastar a alça da direita muda a largura do parágrafo (na direção do texto). */
-  startParagraphResize(e) {
+  /**
+   * Arrastar a alça de uma lateral muda a largura da caixa (na direção do
+   * texto) e o texto quebra nela. A da esquerda leva junto o começo do texto.
+   */
+  startTextResize(e, side) {
     e.preventDefault();
     e.stopPropagation();
     const editing = this.editing;
-    const { viewport, line } = editing;
-    const [x0, y0] = viewport.convertToViewportPoint(...line.origin);
-    const [x1, y1] = viewport.convertToViewportPoint(line.origin[0] + Math.cos(line.angle), line.origin[1] + Math.sin(line.angle));
-    const theta = Math.atan2(y1 - y0, x1 - x0);
+    const { viewport, editor, theta } = editing;
     const start = [e.clientX, e.clientY];
-    const from = editing.width;
+    // Sem largura definida (uma linha, texto novo), parte da largura da caixa, até a borda da página.
+    const from = editing.width ?? (editing.reach ?? editor.offsetWidth) / viewport.scale;
+    const offset = [...editing.offset];
     const min = 2 * editing.state.size;
     const move = (ev) => {
       if (this.editing !== editing) return;
-      const along = (ev.clientX - start[0]) * Math.cos(theta) + (ev.clientY - start[1]) * Math.sin(theta);
-      editing.width = Math.max(min, from + along / viewport.scale);
-      editing.editor.style.width = `${editing.width * viewport.scale + 1}px`;
-      this.placeTextBar();
+      const along = ((ev.clientX - start[0]) * Math.cos(theta) + (ev.clientY - start[1]) * Math.sin(theta)) / viewport.scale;
+      editing.width = Math.max(min, side === "right" ? from + along : from - along);
+      if (side === "left") {
+        // A borda da direita fica onde está.
+        const shift = (from - editing.width) * viewport.scale;
+        editing.offset = [offset[0] + shift * Math.cos(theta), offset[1] + shift * Math.sin(theta)];
+      }
+      this.applyTextWidth();
+      this.placeTextEditor();
     };
     const up = () => {
       window.removeEventListener("pointermove", move);
@@ -1363,8 +1399,8 @@ export class ToolController {
     const editing = this.editing;
     const { hit, mode, line, paragraph, state, bg, viewport } = editing;
     const text = editorText(editing.editor);
-    // As linhas do parágrafo como aparecem na caixa (antes de ela sair da tela).
-    const rows = paragraph ? visualRows(editing.editor, paragraph.align === "justify") : null;
+    // Com a largura definida, as linhas como aparecem na caixa (antes de ela sair da tela).
+    const rows = editing.width !== null ? visualRows(editing.editor, paragraph?.align === "justify") : null;
     const [bx, by] = editing.baselinePoint;
     const origin = viewport.convertToPdfPoint(bx, by);
     this.clearEdit();
@@ -1378,7 +1414,7 @@ export class ToolController {
       rememberFont(fontId);
       await this.run("Adicionando texto…", async () => {
         const catalog = await catalogFont(fontId, state.bold);
-        await hit.tab.edit((doc) => addText(doc, hit.pageIndex, { origin, angle, text, style: state, catalog }));
+        await hit.tab.edit((doc) => addText(doc, hit.pageIndex, { origin, angle, text, rows, style: state, catalog }));
       });
       return;
     }
@@ -1386,7 +1422,8 @@ export class ToolController {
     const initial = editing.initial;
     const restyled =
       ["font", "bold", "italic", "size", "spacing"].some((k) => state[k] !== initial[k]) || state.color.some((v, i) => Math.abs(v - initial.color[i]) > 0.002);
-    const resized = paragraph && Math.abs(editing.width - paragraph.width) > 0.5;
+    // Na linha sozinha, a largura só muda algo se o texto quebrou na caixa.
+    const resized = paragraph ? Math.abs(editing.width - paragraph.width) > 0.5 : rows !== null && rows.length > text.split("\n").length;
     if (text === editing.text0 && !moved && !restyled && !resized) return;
     if (state.font !== "original") rememberFont(fontId);
     await this.run(text.trim() ? "Aplicando texto…" : "Apagando texto…", async () => {
@@ -1396,7 +1433,7 @@ export class ToolController {
         const start = moved ? origin : paragraph.origin;
         await hit.tab.edit((doc) => editBlock(doc, hit.pageIndex, { block: paragraph, rows, style, catalog, bg, origin: start, width: editing.width }));
       } else {
-        await hit.tab.edit((doc) => editText(doc, hit.pageIndex, { line, text, style, catalog, bg, origin: moved ? origin : line.origin }));
+        await hit.tab.edit((doc) => editText(doc, hit.pageIndex, { line, text, rows, style, catalog, bg, origin: moved ? origin : line.origin }));
       }
     });
   }
@@ -1712,6 +1749,29 @@ function estimateSpacing(editor, line, scale) {
   return Math.max(0, (line.width - natural) / (count - 1));
 }
 
+/** O retângulo na tela da caixa de texto com as alças (que ficam por fora dela). */
+function handlesRect(box) {
+  const rects = [box, ...box.querySelectorAll(".text-grip, .text-sizer")].map((node) => node.getBoundingClientRect());
+  return {
+    left: Math.min(...rects.map((r) => r.left)),
+    top: Math.min(...rects.map((r) => r.top)),
+    right: Math.max(...rects.map((r) => r.right)),
+    bottom: Math.max(...rects.map((r) => r.bottom)),
+  };
+}
+
+/** Distância de `point` até a borda do retângulo de `width` × `height`, andando no ângulo `theta`. */
+function edgeDistance([x, y], theta, width, height) {
+  const cos = Math.cos(theta);
+  const sin = Math.sin(theta);
+  let distance = Infinity;
+  if (cos > 1e-6) distance = Math.min(distance, (width - x) / cos);
+  if (cos < -1e-6) distance = Math.min(distance, -x / cos);
+  if (sin > 1e-6) distance = Math.min(distance, (height - y) / sin);
+  if (sin < -1e-6) distance = Math.min(distance, -y / sin);
+  return distance;
+}
+
 /** O lugar do texto da caixa que está sob o clique `hit`, ou null. */
 function caretAt(hit, editor) {
   const box = hit.wrapper.getBoundingClientRect();
@@ -1743,6 +1803,18 @@ function editorText(editor) {
  * caixa, sem depender de as medidas das letras baterem com as do navegador.
  */
 function visualRows(editor, justify) {
+  // Mede com a caixa de pé (no texto girado ela está girada), com as linhas na horizontal.
+  const box = editor.parentElement;
+  const transform = box.style.transform;
+  box.style.transform = "";
+  try {
+    return rowsOnScreen(editor, justify);
+  } finally {
+    box.style.transform = transform;
+  }
+}
+
+function rowsOnScreen(editor, justify) {
   const rows = [];
   let row = { text: "", top: null };
   const lineHeight = parseFloat(getComputedStyle(editor).lineHeight) || 10;

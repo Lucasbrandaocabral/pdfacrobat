@@ -735,9 +735,11 @@ export function lineRuns(runs, line) {
   // Texto invisível (camada de OCR sobre uma imagem): o que se vê é a imagem.
   if (picked.some(invisible)) return null;
   const spans = picked.map(span).sort((p, q) => p[0] - q[0]);
-  // Folga para pequenas diferenças entre as medidas do PDF.js e as daqui.
+  // Folga para pequenas diferenças entre as medidas do PDF.js e as daqui. Na
+  // linha cortada na borda da página, o texto continua depois do que se vê.
   const slack = Math.max(0.35 * size, 0.05 * line.width);
-  if (spans.some(([from, to]) => to > line.width + slack + 0.25 * size || from < -slack - 0.25 * size)) return null;
+  const end = line.clipped ? Infinity : line.width + slack + 0.25 * size;
+  if (spans.some(([from, to]) => to > end || from < -slack - 0.25 * size)) return null;
   if (spans[0][0] > slack) return null;
   let reach = spans[0][1];
   for (const [from, to] of spans.slice(1)) {

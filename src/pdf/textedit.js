@@ -311,9 +311,10 @@ export function groupParagraphs(lines) {
 /**
  * Como a linha está desenhada no conteúdo da página: os trechos (null se não
  * deu para achá-los), a cor do texto, a fonte original (null se ela não serve
- * para escrever texto novo), o espaçamento entre letras em pontos e, nas
- * linhas com letras espaçadas, o texto lido do próprio PDF (o PDF.js vê
- * "C L I Q U E" e pode perder o espaço entre as palavras).
+ * para escrever texto novo), o espaçamento entre letras em pontos e o texto
+ * lido do próprio PDF nas linhas com letras espaçadas (o PDF.js vê
+ * "C L I Q U E" e pode perder o espaço entre as palavras) e nas cortadas na
+ * borda da página (`line.clipped`: o PDF.js só vê o pedaço de dentro).
  */
 export function describeLine(doc, page, line, runs = findTextRuns(doc, page)) {
   const found = lineRuns(runs, line);
@@ -339,7 +340,8 @@ export function describeLine(doc, page, line, runs = findTextRuns(doc, page)) {
     }
   }
   let text = null;
-  if (line.letterSpaced) {
+  const beyond = line.clipped && Math.max(...found.map((r) => along(r.endPoint))) > line.width + line.size;
+  if (line.letterSpaced || beyond) {
     text = "";
     let end = null;
     for (const run of sorted) {
@@ -356,6 +358,9 @@ export function describeLine(doc, page, line, runs = findTextRuns(doc, page)) {
     }
     text = text?.trim() || null;
   }
+  // Sem ler o pedaço de fora da página, trocar a linha o perderia: ela passa a
+  // terminar onde se vê e, ao editar, fica coberta (o texto de fora continua lá).
+  if (beyond && !text) return { runs: null, color: null, original: null, spacing: null, text: null, clipped: false };
   return {
     runs: found,
     color: sameColor ? first.fill : null,
@@ -549,11 +554,12 @@ function cover(page, line, bg) {
  * Troca o texto de uma linha (de groupLines) por `text` no estilo `style`
  * (veja writeText; `style.font === "original"` usa a fonte do PDF no que ela
  * tiver), escrito a partir de `origin` (o lugar da linha, se ela não foi
- * movida). `bg` é a cor do fundo, usada se o texto antigo tiver de ser
- * coberto. Texto vazio só apaga a linha. Devolve se o texto antigo saiu do
- * conteúdo.
+ * movida). `rows` ({ text, justify }): as linhas como ficaram na caixa de
+ * edição, quando o texto quebrou nela; sem elas, cada \n começa uma linha.
+ * `bg` é a cor do fundo, usada se o texto antigo tiver de ser coberto. Texto
+ * vazio só apaga a linha. Devolve se o texto antigo saiu do conteúdo.
  */
-export async function editText(doc, pageIndex, { line, text, style, catalog, bg, origin = line.origin }) {
+export async function editText(doc, pageIndex, { line, text, rows = null, style, catalog, bg, origin = line.origin }) {
   const page = doc.getPage(pageIndex);
   const all = findTextRuns(doc, page);
   const runs = lineRuns(all, line);
@@ -563,7 +569,7 @@ export async function editText(doc, pageIndex, { line, text, style, catalog, bg,
   if (removed.length) removeRuns(doc, page, removed);
   isolatePage(doc, page);
   if (!runs) cover(page, line, bg);
-  if (text.trim()) await writeText(doc, page, { origin, angle: line.angle, rows: rowsOf(text), style, catalog, original });
+  if (text.trim()) await writeText(doc, page, { origin, angle: line.angle, rows: rows || rowsOf(text), style, catalog, original });
   return Boolean(runs);
 }
 
@@ -605,9 +611,9 @@ export async function editBlock(doc, pageIndex, { block, rows, style, catalog, b
   return found.every(Boolean);
 }
 
-/** Escreve texto novo na página (veja writeText). */
-export async function addText(doc, pageIndex, { origin, angle = 0, text, style, catalog }) {
+/** Escreve texto novo na página (veja writeText; `rows` como em editText). */
+export async function addText(doc, pageIndex, { origin, angle = 0, text, rows = null, style, catalog }) {
   const page = doc.getPage(pageIndex);
   isolatePage(doc, page);
-  await writeText(doc, page, { origin, angle, rows: rowsOf(text), style, catalog, original: null });
+  await writeText(doc, page, { origin, angle, rows: rows || rowsOf(text), style, catalog, original: null });
 }
