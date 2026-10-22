@@ -1089,8 +1089,9 @@ textarea:focus {
   pointer-events: none;
 }
 
-/* Texto em edição (uma linha do PDF ou texto novo): a caixa fica com a linha
-   de base no lugar do texto; a alça à esquerda move. */
+/* Texto em edição (linha, parágrafo ou texto novo): a caixa fica com a linha
+   de base no lugar do texto; a alça de pontos move, as das laterais mudam a
+   largura. */
 .text-box {
   position: absolute;
   z-index: 2;
@@ -1108,17 +1109,17 @@ textarea:focus {
   caret-color: #1e88e5;
 }
 
-/* Parágrafo: o texto quebra na largura do bloco, como no PDF. */
-.text-editor.paragraph {
+/* Com a largura definida (o parágrafo, ou depois de arrastar uma alça da
+   lateral), o texto quebra na caixa. */
+.text-editor.wrap {
   white-space: pre-wrap;
   overflow-wrap: break-word;
 }
 
-/* Alça na borda direita do parágrafo: arrastar muda a largura. */
+/* Alças nas laterais: arrastar muda a largura. */
 .text-sizer {
   position: absolute;
   top: 50%;
-  right: -14px;
   width: 8px;
   height: 26px;
   margin-top: -13px;
@@ -1131,12 +1132,27 @@ textarea:focus {
   touch-action: none;
 }
 
+.text-sizer[data-side="left"] {
+  left: -14px;
+}
+
+.text-sizer[data-side="right"] {
+  right: -14px;
+}
+
 @media (pointer: coarse) {
   .text-sizer {
-    right: -20px;
     width: 14px;
     height: 34px;
     margin-top: -17px;
+  }
+
+  .text-sizer[data-side="left"] {
+    left: -20px;
+  }
+
+  .text-sizer[data-side="right"] {
+    right: -20px;
   }
 }
 
@@ -1146,13 +1162,13 @@ textarea:focus {
   pointer-events: none;
 }
 
+/* Alça de mover: embaixo do começo da caixa (nas laterais ficam as de largura). */
 .text-grip {
   position: absolute;
-  top: 50%;
-  left: -22px;
-  width: 14px;
-  height: 22px;
-  margin-top: -11px;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 22px;
+  height: 14px;
   border-radius: 3px;
   background:
     radial-gradient(circle, #1e88e5 1.6px, transparent 2px) 0 0 / 7px 7px,
@@ -1164,10 +1180,8 @@ textarea:focus {
 
 @media (pointer: coarse) {
   .text-grip {
-    left: -30px;
-    width: 22px;
-    height: 30px;
-    margin-top: -15px;
+    width: 30px;
+    height: 22px;
   }
 }
 
