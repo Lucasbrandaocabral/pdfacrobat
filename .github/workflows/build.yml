@@ -108,8 +108,31 @@ jobs:
           mkdir -p release
           cd android
           if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
-            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/pdfacrobat.p12"
-            export ANDROID_KEYSTORE_FILE="$RUNNER_TEMP/pdfacrobat.p12"
+            # Colado no site do GitHub, o secret pode ficar com quebra de linha (no
+            # Windows, \r\n) ou espaços, que não fazem parte da chave nem da senha.
+            keystore="$RUNNER_TEMP/pdfacrobat.p12"
+            key=$(printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '[:space:]')
+            if ! printf '%s' "$key" | base64 -d > "$keystore"; then
+              # Descreve o que foi colado, sem mostrar a chave.
+              extra=$(printf '%s' "$key" | tr -d 'A-Za-z0-9+/=')
+              echo "O secret tem $(printf '%s\n' "$ANDROID_KEYSTORE_BASE64" | grep -c .) linha(s) com texto e ${#key} caracteres sem contar os espaços; ${#extra} deles não são de base64."
+              echo "::error title=Chave do Android inválida::O secret ANDROID_KEYSTORE_BASE64 não é o texto da chave. Cadastre de novo colando só a chave em base64 (uma linha longa), sem o nome do secret nem outras linhas."
+              exit 1
+            fi
+            # O $(...) já tira as quebras de linha do fim; falta o \r do Windows.
+            ANDROID_KEYSTORE_PASSWORD=$(printf '%s' "$ANDROID_KEYSTORE_PASSWORD" | tr -d '\r')
+            export ANDROID_KEYSTORE_PASSWORD ANDROID_KEYSTORE_FILE="$keystore"
+            if ! keytool -list -v -keystore "$keystore" -storetype PKCS12 -storepass:env ANDROID_KEYSTORE_PASSWORD > "$RUNNER_TEMP/chave.txt" 2>&1; then
+              if grep -q 'password was incorrect' "$RUNNER_TEMP/chave.txt"; then
+                echo "O secret da senha tem $(printf '%s\n' "$ANDROID_KEYSTORE_PASSWORD" | grep -c .) linha(s) com texto."
+                echo "::error title=Senha da chave do Android errada::O secret ANDROID_KEYSTORE_PASSWORD não abre a chave. Cadastre de novo colando só a senha."
+              else
+                echo "::error title=Chave do Android inválida::O secret ANDROID_KEYSTORE_BASE64 não tem a chave inteira. Cadastre de novo colando a chave em base64 inteira."
+              fi
+              exit 1
+            fi
+            # Impressão digital do certificado (é pública): mostra qual chave assina o APK.
+            grep -m1 'SHA256:' "$RUNNER_TEMP/chave.txt" || true
             ./gradlew assembleRelease --no-daemon
             cp app/build/outputs/apk/release/app-release.apk "../release/PDF-Acrobat-$version-android.apk"
           else
