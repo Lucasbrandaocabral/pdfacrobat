@@ -146,12 +146,26 @@ async function describeScreen(name) {
   }
   if (page) {
     const state = await page
-      .evaluate(() => ({
-        toast: document.getElementById("toast")?.textContent,
-        busy: !document.getElementById("busy").hidden && document.getElementById("busy-text")?.textContent,
-        dialog: document.querySelector("dialog[open]")?.id,
-        tool: window.__app?.tools.tool,
-      }))
+      .evaluate(() => {
+        const rect = (selector) => {
+          const r = document.querySelector(selector)?.getBoundingClientRect();
+          return r && [r.left, r.top, r.right, r.bottom].map(Math.round).join(",");
+        };
+        // Botões da edição de texto com outro elemento por cima do meio deles.
+        const covered = [...document.querySelectorAll(".text-bar .btn, .font-picker .font-option")].slice(0, 8).flatMap((node) => {
+          const r = node.getBoundingClientRect();
+          const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          return top && !node.contains(top) ? [`${node.className} sob ${top.className || top.tagName}`] : [];
+        });
+        return {
+          toast: document.getElementById("toast")?.textContent,
+          busy: !document.getElementById("busy").hidden && document.getElementById("busy-text")?.textContent,
+          dialog: document.querySelector("dialog[open]")?.id,
+          tool: window.__app?.tools.tool,
+          tela: `${window.innerWidth}x${window.innerHeight}, visível ${Math.round(window.visualViewport?.height ?? window.innerHeight)}`,
+          texto: document.querySelector(".text-box") && { caixa: rect(".text-editor"), barra: rect(".text-bar"), mover: rect(".text-grip"), fontes: rect(".font-picker"), cobertos: covered },
+        };
+      })
       .catch((e) => ({ erro: e.message }));
     log("   app:", JSON.stringify(state));
   }
@@ -170,7 +184,11 @@ async function step(name, fn) {
     await dismissOtherAnr();
     await fn();
   } catch (error) {
-    check(name, false, error.message.split("\n")[0]);
+    const [first, ...rest] = error.message.split("\n");
+    check(name, false, first);
+    // O registro do Playwright diz por que a ação não aconteceu (outro elemento por cima, fora da tela...).
+    const why = [...new Set(rest.filter((line) => /^\s+-\s/.test(line)).map((line) => line.trim()))].slice(-8);
+    if (why.length) log(why.map((line) => `     ${line}`).join("\n"));
     await stopIfEmulatorDied();
     await describeScreen(`erro-${name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`);
   }
