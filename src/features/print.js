@@ -7,7 +7,7 @@
 import { PDFDocument } from "@cantoo/pdf-lib";
 import { LOAD_OPTIONS, pdfjsLib } from "../pdfjs.js";
 import { $, $$, UserError, baseName, debounce, el, formValues, openDialog, parsePageRange, setBusy, toast } from "../ui.js";
-import { Perm } from "../pdf/security.js";
+import { Perm, saveFromEdit } from "../pdf/security.js";
 import { PAPERS, choosePages, pageInfo, planSheets, printSource, renderSheets } from "../pdf/imposition.js";
 import * as platform from "../platform.js";
 
@@ -423,7 +423,9 @@ async function buildSheets(s) {
 }
 
 async function saveSheets(s) {
-  const { bytes } = await buildSheets(s);
+  let { bytes } = await buildSheets(s);
+  // Documento protegido: o PDF das folhas sai com as mesmas senhas e restrições.
+  if (s.tab.encrypted) bytes = await saveFromEdit(await PDFDocument.load(bytes, { updateMetadata: false }), s.tab.security);
   const saved = await platform.saveFile(bytes, { suggestedName: `${baseName(s.tab.name)} (impressão).pdf`, saveAs: true });
   if (saved) toast(`PDF das folhas salvo: ${saved.name}`);
 }

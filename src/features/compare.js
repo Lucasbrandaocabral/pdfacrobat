@@ -1,9 +1,10 @@
 // Comparar duas versões: diferenças de texto palavra a palavra, num novo PDF
 // com resumo e as páginas lado a lado (vermelho = saiu, verde = entrou).
 import { PDFDocument, StandardFonts, rgb } from "@cantoo/pdf-lib";
-import { getTextItems, loadPdf } from "../pdfjs.js";
+import { PermissionFlag, getTextItems, loadPdf } from "../pdfjs.js";
 import { $, UserError, askText, baseName, el, formValues, openDialog, setBusy, toast } from "../ui.js";
 import { encodable } from "../pdf/textedit.js";
+import { Perm, isOwnerPassword, readEncryption } from "../pdf/security.js";
 import * as platform from "../platform.js";
 
 const RED = [0.83, 0.18, 0.18];
@@ -59,11 +60,25 @@ async function resolveSource(app, choice) {
   if (choice.startsWith("tab:")) {
     const tab = app.manager.tabs.find((t) => String(t.id) === choice.slice(4));
     if (!tab) throw new UserError("O documento escolhido foi fechado.");
-    return { name: tab.name, bytes: await tab.currentBytes(), password: tab.security?.ownerPassword ?? tab.security?.userPassword ?? tab.password };
+    // O relatório reproduz o texto e as páginas: precisa da permissão de copiar.
+    if (!(await app.guard(tab, Perm.COPY, "copiar o conteúdo, que a comparação reproduz no relatório"))) return null;
+    return { name: tab.name, bytes: await tab.currentBytes(), password: tab.security?.ownerPassword ?? tab.security?.userPassword ?? tab.password, checked: true };
   }
   const [file] = await platform.pickFiles({ kind: "pdf" });
   if (!file) return null;
   return { name: file.name, bytes: file.data, password: null };
+}
+
+/** Arquivo escolhido do disco que proíbe copiar: só com a senha de permissões. */
+async function requireCopy(src, doc) {
+  if (src.checked) return;
+  const allowed = await doc.getPermissions();
+  if (!allowed || allowed.includes(PermissionFlag.COPY)) return;
+  const info = await readEncryption(src.bytes);
+  if (info && src.password && isOwnerPassword(info, src.password)) return;
+  throw new UserError(
+    `O autor de "${src.name}" não permite copiar o conteúdo, e a comparação o reproduz no relatório. Abra o arquivo aqui e libere as restrições com a senha de permissões antes de comparar.`,
+  );
 }
 
 function wrapLines(text, font, size, maxWidth) {
@@ -247,11 +262,16 @@ export async function compare(app) {
     const a = await loadPdf(oldSrc.bytes, { password: oldSrc.password, onPassword: askPassword(oldSrc.name) });
     oldSrc.password = a.password;
     setBusy("Lendo a versão nova…");
-    const b = await loadPdf(newSrc.bytes, { password: newSrc.password, onPassword: askPassword(newSrc.name) });
+    const b = await loadPdf(newSrc.bytes, { password: newSrc.password, onPassword: askPassword(newSrc.name) }).catch((err) => {
+      a.doc.destroy();
+      throw err;
+    });
     newSrc.password = b.password;
     let oldWords;
     let newWords;
     try {
+      await requireCopy(oldSrc, a.doc);
+      await requireCopy(newSrc, b.doc);
       oldWords = await extractWords(a.doc);
       newWords = await extractWords(b.doc);
     } finally {

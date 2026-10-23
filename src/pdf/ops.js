@@ -3,6 +3,7 @@
 import { PDFDocument, degrees } from "@cantoo/pdf-lib";
 import { UserError } from "../ui.js";
 import { isolatePage } from "./content.js";
+import { saveFromEdit } from "./security.js";
 
 export function isImage(name) {
   return /\.(png|jpe?g)$/i.test(name);
@@ -68,18 +69,21 @@ export function insertBlankPage(doc, at) {
   doc.insertPage(at, [width, height]);
 }
 
-/** Novo PDF só com as páginas indicadas. */
-export async function extractPages(doc, indices) {
+/**
+ * Novo PDF só com as páginas indicadas. Com `security` (documento protegido),
+ * ele sai com a mesma proteção: mesmas senhas e restrições.
+ */
+export async function extractPages(doc, indices, security = null) {
   const out = await PDFDocument.create();
   const pages = await out.copyPages(doc, indices);
   pages.forEach((p) => out.addPage(p));
-  return out.save();
+  return saveFromEdit(out, security);
 }
 
 /** Divide em vários PDFs: `groups` é uma lista de listas de índices. */
-export async function splitDocument(doc, groups) {
+export async function splitDocument(doc, groups, security = null) {
   const results = [];
-  for (const indices of groups) results.push({ indices, bytes: await extractPages(doc, indices) });
+  for (const indices of groups) results.push({ indices, bytes: await extractPages(doc, indices, security) });
   return results;
 }
 

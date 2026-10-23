@@ -147,28 +147,7 @@ export class DocTab {
     }
     const info = await security.readEncryption(bytes);
     this.encInfo = info;
-    let owner = false;
-    let userPassword = password ?? "";
-    if (ownerPassword && security.isOwnerPassword(info, ownerPassword)) {
-      owner = true;
-    } else if (password && security.isOwnerPassword(info, password)) {
-      owner = true;
-      ownerPassword = password;
-      userPassword = security.isUserPassword(info, password) ? password : security.userPasswordFromOwner(info, password);
-    } else {
-      ownerPassword = null;
-    }
-    // Sem como recuperar a senha de abertura (AES-256 aberto pelo proprietário):
-    // mantém o documento protegido usando a senha de permissões também para abrir.
-    if (userPassword == null) userPassword = ownerPassword;
-    this.owner = owner;
-    this.security = {
-      keepProtection: true,
-      userPassword,
-      ownerPassword,
-      P: info.P,
-      permissions: security.permissionsFromFlags(info.P),
-    };
+    ({ owner: this.owner, security: this.security } = security.sessionSecurity(info, password, ownerPassword));
   }
 
   /** A ação é permitida pelas restrições do documento? */
