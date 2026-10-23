@@ -169,6 +169,10 @@ export class ToolController {
   }
 
   applyEditorMode(tab) {
+    // Um desenho em andamento só fica na página quando a camada dele perde o
+    // foco; trocar de modo antes (Esc, atalho de teclado) faz o PDF.js perder o
+    // desenho e travar a ferramenta. Tirar o foco dela fecha o desenho direito.
+    if (document.activeElement?.closest?.(".annotationEditorLayer")) tab.container.focus({ preventScroll: true });
     try {
       tab.viewer.annotationEditorMode = { mode: EDITOR_MODES[this.tool] ?? NONE };
     } catch {
