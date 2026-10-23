@@ -623,6 +623,8 @@ function renderRecent() {
             onclick: async () => {
               try {
                 const file = await platform.readPath(item.path);
+                // Recente de antes desta versão: a pessoa não confirmou o arquivo.
+                if (!file) return;
                 await openDocument(file.data, { name: file.name, path: file.path });
               } catch {
                 writeRecent(readRecent().filter((r) => r.path !== item.path));

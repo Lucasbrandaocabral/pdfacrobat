@@ -1,6 +1,6 @@
 // Processo principal do Electron: janela, menus, diálogos de arquivo e
 // integração com o sistema operacional (abrir PDFs com duplo clique).
-const { app, BrowserWindow, Menu, dialog, ipcMain, nativeTheme, net, protocol, shell } = require("electron");
+const { app, BrowserWindow, Menu, dialog, ipcMain, nativeTheme, net, protocol, session, shell } = require("electron");
 const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
@@ -65,6 +65,45 @@ async function readFileForRenderer(filePath) {
   return { name: path.basename(filePath), path: filePath, data: new Uint8Array(data) };
 }
 
+// ---- Arquivos que a interface pode ler e gravar ----
+// A interface só lê e grava arquivos que a pessoa escolheu: na janela de abrir
+// ou de salvar, arrastando para a janela ou abrindo pelo sistema (duplo
+// clique). A lista fica aqui, fora do alcance da interface, e é guardada entre
+// uma vez e outra que o programa abre, para os recentes. Assim, nem um PDF que
+// conseguisse rodar código na interface leria ou gravaria outros arquivos.
+const MAX_CHOSEN = 300;
+let chosen = new Set();
+const chosenFile = () => path.join(app.getPath("userData"), "arquivos-escolhidos.json");
+// Pastas escolhidas nesta sessão para gravar vários arquivos.
+const chosenDirs = new Set();
+
+async function loadChosen() {
+  try {
+    const list = JSON.parse(await fs.readFile(chosenFile(), "utf8"));
+    if (Array.isArray(list)) chosen = new Set(list.filter((p) => typeof p === "string"));
+  } catch {
+    // Primeira vez ou arquivo ilegível: a lista começa vazia.
+  }
+}
+
+/** Registra um arquivo escolhido pela pessoa e devolve o caminho absoluto. */
+function choose(filePath) {
+  const full = path.resolve(filePath);
+  chosen.delete(full);
+  chosen.add(full);
+  while (chosen.size > MAX_CHOSEN) chosen.delete(chosen.values().next().value);
+  fs.writeFile(chosenFile(), JSON.stringify([...chosen])).catch(() => {});
+  return full;
+}
+
+const isChosen = (filePath) => typeof filePath === "string" && filePath !== "" && chosen.has(path.resolve(filePath));
+
+// Só a página do próprio app (app://pdfacrobat) fala com o processo principal.
+function fromApp(event) {
+  const url = event.senderFrame?.url || "";
+  return url.startsWith("app://pdfacrobat/") || (!app.isPackaged && Boolean(process.env.VITE_DEV_SERVER_URL) && url.startsWith(process.env.VITE_DEV_SERVER_URL));
+}
+
 function send(channel, ...args) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, ...args);
 }
@@ -75,7 +114,7 @@ async function openInWindow(filePath) {
     return;
   }
   try {
-    send("open-file", await readFileForRenderer(filePath));
+    send("open-file", await readFileForRenderer(choose(filePath)));
   } catch (err) {
     // O aviso aparece na janela do app, com a cara dele.
     send("notice", { kind: "error", title: "Não foi possível abrir o arquivo", message: `${path.basename(filePath)}: ${err.message}` });
@@ -102,7 +141,8 @@ function createWindow() {
     },
   });
 
-  if (process.env.VITE_DEV_SERVER_URL) mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
+  // O servidor de desenvolvimento só vale rodando do código-fonte, nunca no app instalado.
+  if (!app.isPackaged && process.env.VITE_DEV_SERVER_URL) mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
   else mainWindow.loadURL("app://pdfacrobat/index.html");
 
   // Links externos abrem no navegador padrão, nunca dentro do app.
@@ -185,7 +225,9 @@ function buildMenu() {
         item("Documento anterior", "prev-tab", "Ctrl+Shift+Tab"),
         sep,
         { role: "togglefullscreen", label: "Tela cheia" },
-        { role: "toggleDevTools", label: "Ferramentas do desenvolvedor" },
+        // No app instalado não há ferramentas do desenvolvedor (alguém poderia
+        // pedir para colar um código ali e mexer nos arquivos pelo app).
+        ...(app.isPackaged ? [] : [{ role: "toggleDevTools", label: "Ferramentas do desenvolvedor" }]),
       ],
     },
     {
@@ -301,22 +343,25 @@ ipcMain.handle("open-dialog", async (_e, { multiple = false, filters = [PDF_FILT
   });
   if (canceled || !filePaths.length) return [];
   rememberDir(path.dirname(filePaths[0]));
-  return Promise.all(filePaths.map(readFileForRenderer));
+  return Promise.all(filePaths.map((filePath) => readFileForRenderer(choose(filePath))));
 });
 
-ipcMain.handle("save-file", async (_e, { data, filePath, suggestedName, saveAs, filter }) => {
+ipcMain.handle("save-file", async (event, { data, filePath, suggestedName, saveAs, filter }) => {
+  if (!fromApp(event)) return null;
   let target = filePath;
   const chosenFilter = filter || PDF_FILTER;
-  if (saveAs || !target) {
+  // Gravar por cima sem perguntar só no arquivo que a pessoa escolheu; outro caminho passa pela janela de salvar.
+  if (saveAs || !isChosen(target)) {
     const name = suggestedName || "documento.pdf";
-    const { canceled, filePath: chosen } = await dialog.showSaveDialog(mainWindow, {
+    const { canceled, filePath: picked } = await dialog.showSaveDialog(mainWindow, {
       defaultPath: target || (lastDir ? path.join(lastDir, name) : name),
       filters: [chosenFilter],
     });
-    if (canceled || !chosen) return null;
+    if (canceled || !picked) return null;
     const ext = `.${chosenFilter.extensions[0]}`;
-    target = chosenFilter.extensions.some((e) => chosen.toLowerCase().endsWith(`.${e}`)) ? chosen : `${chosen}${ext}`;
+    target = chosenFilter.extensions.some((e) => picked.toLowerCase().endsWith(`.${e}`)) ? picked : `${picked}${ext}`;
   }
+  target = choose(target);
   await fs.writeFile(target, Buffer.from(data));
   rememberDir(path.dirname(target));
   return { name: path.basename(target), path: target };
@@ -330,10 +375,13 @@ ipcMain.handle("pick-directory", async (_e, { title } = {}) => {
   });
   if (canceled || !filePaths.length) return null;
   rememberDir(filePaths[0]);
+  chosenDirs.add(path.resolve(filePaths[0]));
   return filePaths[0];
 });
 
-ipcMain.handle("write-files", async (_e, { dir, files }) => {
+ipcMain.handle("write-files", async (event, { dir, files }) => {
+  // Só na pasta que a pessoa acabou de escolher.
+  if (!fromApp(event) || typeof dir !== "string" || !chosenDirs.has(path.resolve(dir))) throw new Error("Pasta não escolhida.");
   const written = [];
   for (const file of files) {
     const target = await uniquePath(dir, path.basename(file.name));
@@ -343,7 +391,26 @@ ipcMain.handle("write-files", async (_e, { dir, files }) => {
   return written;
 });
 
-ipcMain.handle("read-path", (_e, filePath) => readFileForRenderer(filePath));
+ipcMain.handle("read-path", async (event, filePath) => {
+  if (!fromApp(event) || typeof filePath !== "string") return null;
+  if (isChosen(filePath)) return readFileForRenderer(path.resolve(filePath));
+  // Fora da lista (um recente de antes desta versão, por exemplo): a pessoa
+  // confirma o arquivo na janela de abrir, que já vem nele.
+  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+    defaultPath: filePath,
+    properties: ["openFile"],
+    filters: [PDF_FILTER],
+  });
+  if (canceled || !filePaths.length) return null;
+  rememberDir(path.dirname(filePaths[0]));
+  return readFileForRenderer(choose(filePaths[0]));
+});
+
+// Arquivo arrastado para a janela (ou escolhido num campo de arquivo): o preload
+// só manda o caminho que o próprio Electron deu para o arquivo de verdade.
+ipcMain.on("choose-dropped", (event, filePath) => {
+  if (fromApp(event) && typeof filePath === "string" && filePath) choose(filePath);
+});
 
 ipcMain.handle("get-user-name", () => {
   try {
@@ -354,7 +421,7 @@ ipcMain.handle("get-user-name", () => {
 });
 
 ipcMain.on("add-recent", (_e, filePath) => {
-  if (filePath) app.addRecentDocument(filePath);
+  if (isChosen(filePath)) app.addRecentDocument(path.resolve(filePath));
 });
 
 ipcMain.handle("get-initial-file", async () => {
@@ -363,7 +430,7 @@ ipcMain.handle("get-initial-file", async () => {
   const loaded = [];
   for (const file of files) {
     try {
-      loaded.push(await readFileForRenderer(file));
+      loaded.push(await readFileForRenderer(choose(file)));
     } catch {
       // Arquivo inexistente ou sem permissão: ignora.
     }
@@ -488,8 +555,9 @@ ipcMain.on("update-install", () => updater.install());
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on("second-instance", (_e, argv) => {
-    const files = findPdfArgs(argv);
+  app.on("second-instance", (_e, argv, workingDirectory) => {
+    // Caminho relativo é da pasta de onde a outra instância foi aberta.
+    const files = findPdfArgs(argv).map((file) => path.resolve(workingDirectory || "", file));
     if (files.length) files.forEach(openInWindow);
     else if (mainWindow) mainWindow.focus();
   });
@@ -503,6 +571,9 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     app.setName(APP_NAME);
     loadLastDir();
+    loadChosen();
+    // O app não usa câmera, microfone, localização nem notificações: nenhuma página pode pedir.
+    session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
     registerAppProtocol();
     createWindow();
     updater.setup({ send: (status) => send("update-status", status) });
