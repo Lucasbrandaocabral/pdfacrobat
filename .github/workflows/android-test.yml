@@ -26,6 +26,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -60,7 +62,8 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Testar no emulador
-        uses: reactivecircus/android-emulator-runner@v2
+        # Fixada no commit (de terceiros): v2.38.0.
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
         env:
           PLAYWRIGHT: ${{ runner.temp }}/pw/node_modules/playwright/index.mjs
         with:
