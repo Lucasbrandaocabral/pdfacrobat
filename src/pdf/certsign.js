@@ -1,7 +1,7 @@
 // Assinatura digital com certificado A1 (.pfx/.p12): PKCS#7 destacado
 // (adbe.pkcs7.detached), SHA-256, com bloco visível opcional na página.
 import { Buffer } from "buffer";
-import { StandardFonts, degrees, rgb } from "@cantoo/pdf-lib";
+import { PDFArray, PDFDict, PDFName, StandardFonts, degrees, rgb } from "@cantoo/pdf-lib";
 import { UserError } from "../ui.js";
 import { isolatePage } from "./content.js";
 import { fromUser, visualFrame } from "./marks.js";
@@ -96,6 +96,25 @@ export async function drawSignatureBlock(doc, pageIndex, { center, info, reason,
     cursor -= line.size * 0.35;
   }
   return rect;
+}
+
+/** Quantas assinaturas digitais o documento já tem (campos de assinatura preenchidos). */
+export function signatureCount(doc) {
+  const acroForm = doc.catalog.lookup(PDFName.of("AcroForm"));
+  const seen = new Set();
+  let count = 0;
+  const visit = (fields, depth) => {
+    if (!(fields instanceof PDFArray) || depth > 20) return;
+    for (let i = 0; i < fields.size(); i++) {
+      const field = fields.lookup(i);
+      if (!(field instanceof PDFDict) || seen.has(field)) continue;
+      seen.add(field);
+      if (field.lookup(PDFName.of("FT")) === PDFName.of("Sig") && field.lookup(PDFName.of("V")) instanceof PDFDict) count++;
+      visit(field.lookup(PDFName.of("Kids")), depth + 1);
+    }
+  };
+  if (acroForm instanceof PDFDict) visit(acroForm.lookup(PDFName.of("Fields")), 0);
+  return count;
 }
 
 /**

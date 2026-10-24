@@ -124,6 +124,9 @@ async function openInWindow(filePath) {
 }
 
 function createWindow() {
+  // Janela nova (no Mac, depois de fechar a anterior pelo Dock): volta a perguntar antes de fechar com alterações.
+  forceClose = false;
+  isDirty = false;
   mainWindow = new BrowserWindow({
     width: 1320,
     height: 880,
@@ -362,10 +365,33 @@ ipcMain.handle("save-file", async (event, { data, filePath, suggestedName, saveA
     target = chosenFilter.extensions.some((e) => picked.toLowerCase().endsWith(`.${e}`)) ? picked : `${picked}${ext}`;
   }
   target = choose(target);
-  await fs.writeFile(target, Buffer.from(data));
+  await writeSafely(target, Buffer.from(data));
   rememberDir(path.dirname(target));
   return { name: path.basename(target), path: target };
 });
+
+/**
+ * Grava num arquivo temporário ao lado e só então troca o arquivo: se o app
+ * fechar ou faltar espaço no meio, o documento antigo continua inteiro. O novo
+ * fica com as permissões do antigo; um atalho (link) continua apontando para
+ * o mesmo arquivo.
+ */
+async function writeSafely(target, data) {
+  const real = await fs.realpath(target).catch(() => target);
+  const mode = await fs
+    .stat(real)
+    .then((s) => s.mode & 0o777)
+    .catch(() => null);
+  const temp = path.join(path.dirname(real), `.${path.basename(real)}.${process.pid}-${Date.now()}.tmp`);
+  try {
+    await fs.writeFile(temp, data);
+    if (mode !== null) await fs.chmod(temp, mode);
+    await fs.rename(temp, real);
+  } catch (err) {
+    await fs.rm(temp, { force: true }).catch(() => {});
+    throw err;
+  }
+}
 
 ipcMain.handle("pick-directory", async (_e, { title } = {}) => {
   const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
