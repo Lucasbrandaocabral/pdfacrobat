@@ -237,8 +237,39 @@ export function sessionSecurity(info, password, ownerPassword) {
  * para um documento novo feito a partir dele (páginas extraídas, por exemplo).
  */
 export function saveFromEdit(doc, security, saveOptions = {}) {
+  dropUnreachable(doc);
   if (security?.keepProtection) keepEncryption(doc, security);
   return doc.save(saveOptions);
+}
+
+/**
+ * Tira do arquivo os objetos que nada mais usa. O pdf-lib grava todos ao
+ * salvar, e entre eles estariam o que foi apagado (páginas excluídas, o texto
+ * antigo de uma linha editada, imagens trocadas, o conteúdo tarjado) e as
+ * versões antigas guardadas no arquivo.
+ */
+export function dropUnreachable(doc) {
+  const { context } = doc;
+  const seen = new Set();
+  const stack = Object.values(context.trailerInfo).filter(Boolean);
+  while (stack.length) {
+    const obj = stack.pop();
+    if (obj instanceof PDFRef) {
+      if (seen.has(obj)) continue;
+      seen.add(obj);
+      const target = context.lookup(obj);
+      if (target) stack.push(target);
+    } else if (obj instanceof PDFStream) stack.push(obj.dict);
+    else if (obj instanceof PDFDict) for (const [, value] of obj.entries()) stack.push(value);
+    else if (obj instanceof PDFArray) stack.push(...obj.asArray());
+  }
+  let dropped = 0;
+  for (const [ref] of [...context.enumerateIndirectObjects()]) {
+    if (seen.has(ref)) continue;
+    context.delete(ref);
+    dropped++;
+  }
+  return dropped;
 }
 
 /**
@@ -332,6 +363,7 @@ export function randomPassword() {
 /** Protege o documento com senha de abertura e/ou restrições. */
 export async function protect(bytes, current, { userPassword, ownerPassword, permissions }) {
   const doc = await loadForEdit(bytes, current);
+  dropUnreachable(doc);
   doc.encrypt({
     userPassword: userPassword || "",
     ownerPassword: ownerPassword || userPassword || randomPassword(),
@@ -343,5 +375,6 @@ export async function protect(bytes, current, { userPassword, ownerPassword, per
 /** Remove toda a proteção. */
 export async function unprotect(bytes, current) {
   const doc = await loadForEdit(bytes, current);
+  dropUnreachable(doc);
   return doc.save();
 }

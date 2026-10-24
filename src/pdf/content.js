@@ -149,6 +149,12 @@ export function multiply(m1, m2) {
   ];
 }
 
+export function invert([a, b, c, d, e, f]) {
+  const det = a * d - b * c;
+  if (!det) return null;
+  return [d / det, -b / det, -c / det, a / det, (c * f - d * e) / det, (b * e - a * f) / det];
+}
+
 export function transformPoint([a, b, c, d, e, f], x, y) {
   return [a * x + c * y + e, b * x + d * y + f];
 }
@@ -273,11 +279,42 @@ export function removeImage(doc, page, index) {
   const content = readPageContent(doc, page);
   const image = findImages(doc, page, content)[index];
   if (!image) return null;
-  writePageContent(doc, page, blankRange(content, image.start, image.end));
+  const out = blankRange(content, image.start, image.end);
+  writePageContent(doc, page, out);
+  dropUnusedXObject(doc, page, out, image.name);
   return image;
 }
 
-/** Move/redimensiona uma imagem para o retângulo `rect` [x0, y0, x1, y1]. */
+/**
+ * Tira `name` dos XObjects da página quando o conteúdo `content` não o desenha
+ * mais (assim a imagem sai do arquivo ao salvar). Os recursos podem ser os
+ * mesmos de outras páginas: esta ganha uma cópia deles, sem a imagem. Um
+ * formulário sem recursos próprios usa os da página; aí nada sai.
+ */
+function dropUnusedXObject(doc, page, content, name) {
+  if (parseOperations(content).some((o) => o.op === "Do" && o.operands[0]?.type === "name" && o.operands[0].value === name)) return;
+  const resources = page.node.Resources();
+  const xobjects = resources?.lookup(PDFName.of("XObject"));
+  if (!(xobjects instanceof PDFDict) || !xobjects.has(PDFName.of(name))) return;
+  for (const [, value] of xobjects.entries()) {
+    const dict = doc.context.lookup(value)?.dict;
+    if (dict?.lookup(PDFName.of("Subtype")) === PDFName.of("Form") && !dict.has(PDFName.of("Resources"))) return;
+  }
+  const own = resources.clone(doc.context);
+  const list = xobjects.clone(doc.context);
+  list.delete(PDFName.of(name));
+  own.set(PDFName.of("XObject"), list);
+  page.node.set(PDFName.of("Resources"), own);
+}
+
+// Comandos que desenham algo na página.
+const PAINTING = new Set(["f", "F", "f*", "B", "B*", "b", "b*", "S", "s", "sh", "Do", "BI", "EI", "Tj", "TJ", "'", '"']);
+
+/**
+ * Move/redimensiona uma imagem para o retângulo `rect` [x0, y0, x1, y1]. Ela
+ * fica no mesmo lugar do conteúdo (atrás ou na frente do que já estava), e o
+ * recorte só dela (o "clip" das fotos cortadas no Word ou no Canva) vai junto.
+ */
 export function moveImage(doc, page, index, rect) {
   const content = readPageContent(doc, page);
   const image = findImages(doc, page, content)[index];
@@ -286,17 +323,71 @@ export function moveImage(doc, page, index, rect) {
   const [nx0, ny0, nx1, ny1] = rect;
   const sx = (nx1 - nx0) / (ox1 - ox0 || 1);
   const sy = (ny1 - ny0) / (oy1 - oy0 || 1);
-  const ctm = multiply(image.ctm, [sx, 0, 0, sy, nx0 - ox0 * sx, ny0 - oy0 * sy]);
-  const blanked = blankRange(content, image.start, image.end);
-  const depth = openStateDepth(blanked);
+  // O que muda na página: a caixa antiga vira a nova.
+  const change = [sx, 0, 0, sy, nx0 - ox0 * sx, ny0 - oy0 * sy];
+  const ops = parseOperations(content);
+  const at = ops.findIndex((o) => o.start === image.start);
+  // A matriz antes de cada comando e os blocos q ... Q em volta da imagem.
+  const before = [];
+  const open = [];
+  const around = [];
+  let ctm = IDENTITY;
+  const saved = [];
+  ops.forEach((o, i) => {
+    before.push(ctm);
+    if (o.op === "q") {
+      saved.push(ctm);
+      open.push(i);
+    } else if (o.op === "Q") {
+      ctm = saved.pop() || IDENTITY;
+      const q = open.pop();
+      if (q !== undefined && q < at && i > at) around.push({ q, end: i });
+    } else if (o.op === "cm") {
+      const n = o.operands.map((t) => t.value);
+      if (n.length === 6 && n.every((v) => typeof v === "number")) ctm = multiply(n, ctm);
+    }
+  });
+  // Bloco ainda aberto no fim do conteúdo também conta.
+  for (const q of open) if (q < at) around.push({ q, end: ops.length });
+  around.sort((a, b) => b.q - a.q);
+  // O maior bloco em volta da imagem em que nada mais é desenhado: o recorte
+  // dentro dele é só da imagem.
+  let block = null;
+  for (const candidate of around) {
+    const others = ops.slice(candidate.q + 1, candidate.end).some((o, k) => candidate.q + 1 + k !== at && PAINTING.has(o.op));
+    if (others) break;
+    block = candidate;
+  }
   const fmt = (v) => (Math.round(v * 10000) / 10000).toString();
-  const tail = encoder.encode(
-    `\n${"Q\n".repeat(depth)}Q\nq ${ctm.map(fmt).join(" ")} cm /${image.name} Do Q\n`,
-  );
-  const out = new Uint8Array(2 + blanked.length + tail.length);
-  out.set(encoder.encode("q\n"), 0);
-  out.set(blanked, 2);
-  out.set(tail, 2 + blanked.length);
+  const conjugate = (m) => {
+    const inverse = invert(m);
+    return inverse && multiply(multiply(m, change), inverse);
+  };
+  // Texto acrescentado em cada posição do conteúdo.
+  let inserts;
+  const outer = block && conjugate(before[block.q]);
+  if (outer) inserts = [[ops[block.q].end, ` ${outer.map(fmt).join(" ")} cm`]];
+  else {
+    const inner = conjugate(image.ctm);
+    if (!inner) return null;
+    inserts = [
+      [image.start, `q ${inner.map(fmt).join(" ")} cm `],
+      [image.end, " Q"],
+    ];
+  }
+  const parts = [];
+  let from = 0;
+  for (const [position, text] of inserts) {
+    parts.push(content.subarray(from, position), encoder.encode(text));
+    from = position;
+  }
+  parts.push(content.subarray(from));
+  const out = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
+  let offset = 0;
+  for (const part of parts) {
+    out.set(part, offset);
+    offset += part.length;
+  }
   writePageContent(doc, page, out);
   return image;
 }

@@ -4,10 +4,10 @@
 // imagens, comentários e campos — e fica uma tarja preta no lugar.
 import { $, $$, UserError, debounce, el, setBusy, toast } from "../ui.js";
 import { icon } from "../icons.js";
-import { Perm } from "../pdf/security.js";
+import { Perm, dropUnreachable } from "../pdf/security.js";
 import { LOAD_OPTIONS, pdfjsLib } from "../pdfjs.js";
 import { textLines } from "../pdf/textops.js";
-import { PATTERNS, cleanMetadata, dropUnreachable, findMatches, redactPage, removeHiddenCopies, replaceWithImage } from "../pdf/redact.js";
+import { PATTERNS, cleanMetadata, findMatches, redactPage, removeHiddenCopies, replaceWithImage } from "../pdf/redact.js";
 
 // Menor marca desenhada à mão, em pixels da tela.
 const MIN_DRAG = 4;

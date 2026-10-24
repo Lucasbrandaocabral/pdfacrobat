@@ -1,7 +1,8 @@
 // Compressão: recomprime as imagens em JPEG (reduzindo a resolução das muito
 // grandes) e compacta fluxos que estavam sem compressão.
-import { PDFName, PDFNumber, PDFRawStream, extractImageBytes } from "@cantoo/pdf-lib";
+import { PDFArray, PDFName, PDFNumber, PDFRawStream, PDFRef } from "@cantoo/pdf-lib";
 import { zlibSync } from "fflate";
+import { decodeSamples, filtersOf } from "./samples.js";
 
 export const COMPRESSION_LEVELS = {
   low: { quality: 0.85, maxDim: 2400 },
@@ -32,10 +33,50 @@ async function toJpeg(bitmap, { quality, maxDim }) {
   return { bytes: new Uint8Array(await blob.arrayBuffer()), width, height };
 }
 
-async function recompress(stream, level) {
+/** Cinza ou RGB: 1 ou 3; outros espaços de cor (CMYK, paleta, cor especial) mudariam as cores. */
+function grayOrRgb(doc, dict) {
+  const space = doc.context.lookup(dict.get(name("ColorSpace")));
+  if (space instanceof PDFName) return { "/DeviceGray": 1, "/CalGray": 1, "/DeviceRGB": 3, "/CalRGB": 3 }[space.asString()] || 0;
+  if (space instanceof PDFArray && space.lookup(0) === name("ICCBased")) {
+    const n = space.lookup(1)?.dict?.lookup(name("N"))?.asNumber?.();
+    return n === 1 || n === 3 ? n : 0;
+  }
+  if (space instanceof PDFArray) return grayOrRgb(doc, doc.context.obj({ ColorSpace: space.lookup(0) }));
+  return 0;
+}
+
+/** A imagem pronta para desenhar no canvas (os pontos decodificados, com os previsores desfeitos). */
+async function pixels(doc, stream, width, height) {
+  const comps = grayOrRgb(doc, stream.dict);
+  if (!comps) return null;
+  const filters = filtersOf(stream.dict);
+  if (filters.length === 1 && filters[0] === "DCTDecode") {
+    try {
+      return await createImageBitmap(new Blob([stream.contents], { type: "image/jpeg" }));
+    } catch {
+      return null;
+    }
+  }
+  const samples = decodeSamples(stream);
+  if (!samples || samples.length < width * height * comps) return null;
+  const rgba = new Uint8ClampedArray(width * height * 4);
+  for (let i = 0, j = 0; i < width * height; i++, j += comps) {
+    rgba[i * 4] = samples[j];
+    rgba[i * 4 + 1] = samples[comps === 3 ? j + 1 : j];
+    rgba[i * 4 + 2] = samples[comps === 3 ? j + 2 : j];
+    rgba[i * 4 + 3] = 255;
+  }
+  const canvas = new OffscreenCanvas(width, height);
+  canvas.getContext("2d").putImageData(new ImageData(rgba, width, height), 0, 0);
+  return canvas;
+}
+
+async function recompress(doc, stream, level) {
   const { dict } = stream;
   if (dict.lookup(name("ImageMask"))?.asBoolean?.()) return null;
   if (dict.lookup(name("Decode"))) return null;
+  // Transparência por cor exata: com as perdas do JPEG, as cores deixariam de bater.
+  if (dict.lookup(name("Mask")) instanceof PDFArray) return null;
   const bpc = lookupNumber(dict, "BitsPerComponent");
   if (bpc && bpc !== 8) return null;
   const smask = dict.lookup(name("SMask"));
@@ -43,23 +84,12 @@ async function recompress(stream, level) {
   const width = lookupNumber(dict, "Width") || 0;
   const height = lookupNumber(dict, "Height") || 0;
   if (width * height < 160 * 160 || stream.contents.length < 24 * 1024) return null;
-  let extracted;
+  const source = await pixels(doc, stream, width, height);
+  if (!source) return null;
   try {
-    extracted = extractImageBytes(stream);
-  } catch {
-    return null;
-  }
-  if (!extracted) return null;
-  let bitmap;
-  try {
-    bitmap = await createImageBitmap(new Blob([extracted.bytes], { type: extracted.mimeType }));
-  } catch {
-    return null;
-  }
-  try {
-    return await toJpeg(bitmap, level);
+    return await toJpeg(source, level);
   } finally {
-    bitmap.close();
+    source.close?.();
   }
 }
 
@@ -78,10 +108,21 @@ export async function compressDocument(doc, levelKey, onProgress) {
     }
   }
 
+  // Máscaras de transparência de outras imagens ficam como estão: viram JPEG
+  // colorido e a imagem sumiria.
+  const masks = new Set();
+  for (const [, stream] of images) {
+    for (const key of ["SMask", "Mask"]) {
+      const ref = stream.dict.get(name(key));
+      if (ref instanceof PDFRef) masks.add(ref);
+    }
+  }
+
   let changed = 0;
   for (const [k, [ref, stream]] of images.entries()) {
     onProgress?.(k + 1, images.length);
-    const result = await recompress(stream, level);
+    if (masks.has(ref)) continue;
+    const result = await recompress(doc, stream, level);
     if (!result || result.bytes.length >= stream.contents.length * 0.9) continue;
     const dict = stream.dict.clone(context);
     for (const key of ["Filter", "DecodeParms", "Length", "ColorSpace", "BitsPerComponent", "Decode"]) dict.delete(name(key));
