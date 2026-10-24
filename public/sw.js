@@ -2,7 +2,7 @@
 // offline depois da primeira visita. Os documentos nunca saem do aparelho.
 // Trocar o nome quando mudar algum arquivo de public/ (ícones, manifesto), que
 // não tem versão no nome: o cache antigo é apagado e os arquivos vêm de novo.
-const CACHE = "pdf-acrobat-v2";
+const CACHE = "pdf-acrobat-v3";
 
 self.addEventListener("install", () => self.skipWaiting());
 
@@ -24,6 +24,8 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
+          // Uma página de erro (servidor fora do ar, por exemplo) não substitui a boa.
+          if (!response.ok) return caches.match(request).then((cached) => cached || response);
           const copy = response.clone();
           caches.open(CACHE).then((cache) => cache.put(request, copy));
           return response;

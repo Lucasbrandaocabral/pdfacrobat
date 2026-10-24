@@ -40,6 +40,8 @@ export async function certSign(app) {
       toast(err.userMessage || err.message, { duration: 6000 });
     }
   }
+  // A senha do certificado não fica no campo (escondido) depois de usada.
+  form.elements.password.value = "";
 
   let placement = null;
   if (values.visible) {
