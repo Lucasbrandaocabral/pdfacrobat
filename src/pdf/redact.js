@@ -4,10 +4,11 @@
 // retângulo preto cobre a área. Quando algo não dá para limpar com segurança
 // (imagem num formato que não se edita aqui, texto que não se localiza), a
 // página é marcada para virar imagem (`raster`).
-import { PDFArray, PDFDict, PDFName, PDFNumber, PDFRawStream, PDFRef, PDFStream, decodePDFRawStream, rgb } from "@cantoo/pdf-lib";
+import { PDFArray, PDFDict, PDFHexString, PDFName, PDFNumber, PDFRawStream, PDFRef, PDFStream, rgb } from "@cantoo/pdf-lib";
 import { zlibSync } from "fflate";
-import { decodeStream, isolatePage, multiply, parseOperations, readPageContent, transformPoint, unitBox } from "./content.js";
-import { pageCopies, redactText } from "./textops.js";
+import { decodeStream, invert, isolatePage, multiply, parseOperations, readPageContent, transformPoint, unitBox } from "./content.js";
+import { colorComponents, decodeSamples, filtersOf } from "./samples.js";
+import { FORM_BUDGET, pageCopies, redactText, textLines } from "./textops.js";
 
 const IDENTITY = [1, 0, 0, 1, 0, 0];
 const MAX_DEPTH = 6;
@@ -20,23 +21,53 @@ const pathOf = (scope) => (scope ? `${pathOf(scope.parent)}/${scope.name}` : "")
 /** As caixas [x0, y0, x1, y1] se sobrepõem? */
 export const overlaps = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
 
-export function invert([a, b, c, d, e, f]) {
-  const det = a * d - b * c;
-  if (!det) return null;
-  return [d / det, -b / det, -c / det, a / det, (c * f - d * e) / det, (b * e - a * f) / det];
+// Sombreados que guardam pontos (malhas, função amostrada) e podem conter uma imagem.
+const SAMPLED_SHADINGS = new Set([1, 4, 5, 6, 7]);
+
+/** O recurso `name` do tipo `kind` (Pattern, Shading, ExtGState) desenha algo que a tarja não alcança? */
+function hidesContent(resources, kind, name) {
+  const dict = resources?.lookup(key(kind));
+  const value = dict instanceof PDFDict && name ? dict.lookup(key(name)) : null;
+  const own = value instanceof PDFStream ? value.dict : value;
+  if (!(own instanceof PDFDict)) return false;
+  if (kind === "ExtGState") {
+    // Máscara suave: um formulário que recorta o que vem depois.
+    const mask = own.lookup(key("SMask"));
+    return mask instanceof PDFDict;
+  }
+  if (kind === "Pattern") {
+    // Padrão lado a lado: um conteúdo próprio (texto, imagens) repetido.
+    if (num(own.lookup(key("PatternType"))) === 1) return true;
+    const shading = own.lookup(key("Shading"));
+    const shadingDict = shading instanceof PDFStream ? shading.dict : shading;
+    return shadingDict instanceof PDFDict && SAMPLED_SHADINGS.has(num(shadingDict.lookup(key("ShadingType"))));
+  }
+  return SAMPLED_SHADINGS.has(num(own.lookup(key("ShadingType"))));
 }
 
 /**
  * Imagens desenhadas na página, com o formulário em que estão (`scope`, no
  * formato de findTextRuns). `repeated`: dentro de um formulário desenhado mais
  * de uma vez, que não dá para mudar só num lugar; `inline`: embutida no
- * conteúdo (BI ... EI).
+ * conteúdo (BI ... EI). `opaque` na lista diz que a página usa algo que não dá
+ * para limpar pedaço por pedaço (padrões, máscaras, sombreados com pontos,
+ * formulários demais).
  */
 export function imagePlacements(doc, page) {
   const found = [];
+  found.opaque = false;
+  let forms = 0;
+  let bytes = 0;
   const visit = (content, resources, scope, start, depth, repeated) => {
     const xobjects = resources?.lookup(key("XObject"));
     const ops = parseOperations(content);
+    for (const o of ops) {
+      const last = o.operands[o.operands.length - 1];
+      const name = last?.type === "name" ? last.value : null;
+      if ((o.op === "scn" || o.op === "SCN") && hidesContent(resources, "Pattern", name)) found.opaque = true;
+      else if (o.op === "sh" && hidesContent(resources, "Shading", name)) found.opaque = true;
+      else if (o.op === "gs" && hidesContent(resources, "ExtGState", name)) found.opaque = true;
+    }
     const uses = new Map();
     for (const o of ops) {
       if (o.op === "Do" && o.operands[0]?.type === "name") uses.set(o.operands[0].value, (uses.get(o.operands[0].value) || 0) + 1);
@@ -56,6 +87,7 @@ export function imagePlacements(doc, page) {
         if (!(stream instanceof PDFStream)) continue;
         const subtype = nameOf(stream.dict.lookup(key("Subtype")));
         if (subtype === "Image") found.push({ name, stream, scope, ctm, rect: unitBox(ctm), repeated });
+        else if (subtype === "Form" && (++forms > FORM_BUDGET.count || bytes > FORM_BUDGET.bytes)) found.opaque = true;
         // Formulário fundo demais: o texto dele já deixa a página em dúvida (redactText).
         else if (subtype === "Form" && depth < MAX_DEPTH) {
           let inner;
@@ -64,6 +96,7 @@ export function imagePlacements(doc, page) {
           } catch {
             continue;
           }
+          bytes += inner.length;
           const m = numbers(stream.dict.lookup(key("Matrix")));
           const own = stream.dict.lookup(key("Resources"));
           const child = { name, stream, parent: scope, resources: own instanceof PDFDict ? own : resources };
@@ -100,100 +133,6 @@ function pixelBoxes(ctm, width, height, rects) {
 }
 
 // ---- Pontos das imagens ----
-
-const DECODABLE = new Set(["FlateDecode", "LZWDecode", "ASCII85Decode", "ASCIIHexDecode", "RunLengthDecode"]);
-
-function filtersOf(dict) {
-  const filter = dict.lookup(key("Filter"));
-  if (filter instanceof PDFArray) return filter.asArray().map((_, i) => nameOf(filter.lookup(i)));
-  return filter ? [nameOf(filter)] : [];
-}
-
-/** Quantos valores tem cada ponto no espaço de cor; 0 quando não dá para saber. */
-function colorComponents(doc, space) {
-  const value = space instanceof PDFRef ? doc.context.lookup(space) : space;
-  if (value instanceof PDFName) return { DeviceGray: 1, DeviceRGB: 3, DeviceCMYK: 4, CalGray: 1, CalRGB: 3 }[value.decodeText()] || 0;
-  if (!(value instanceof PDFArray)) return 0;
-  const family = nameOf(value.lookup(0));
-  if (family === "ICCBased") return num(value.lookup(1)?.dict?.lookup(key("N"))) || 0;
-  if (family === "Indexed" || family === "Separation" || family === "CalGray") return 1;
-  if (family === "CalRGB" || family === "Lab") return 3;
-  if (family === "DeviceN") {
-    const names = value.lookup(1);
-    return names instanceof PDFArray ? names.size() : 0;
-  }
-  return 0;
-}
-
-/** Desfaz o previsor PNG (cada linha com o seu filtro). */
-function unPng(data, colors, bpc, columns) {
-  const bpp = Math.max(1, Math.ceil((colors * bpc) / 8));
-  const length = Math.ceil((colors * bpc * columns) / 8);
-  const rows = Math.floor(data.length / (length + 1));
-  const out = new Uint8Array(rows * length);
-  let prev = new Uint8Array(length);
-  for (let r = 0; r < rows; r++) {
-    const type = data[r * (length + 1)];
-    const line = data.subarray(r * (length + 1) + 1, (r + 1) * (length + 1));
-    const cur = out.subarray(r * length, (r + 1) * length);
-    for (let i = 0; i < length; i++) {
-      const a = i >= bpp ? cur[i - bpp] : 0;
-      const b = prev[i];
-      const c = i >= bpp ? prev[i - bpp] : 0;
-      let v = line[i];
-      if (type === 1) v += a;
-      else if (type === 2) v += b;
-      else if (type === 3) v += (a + b) >> 1;
-      else if (type === 4) {
-        const p = a + b - c;
-        const pa = Math.abs(p - a);
-        const pb = Math.abs(p - b);
-        const pc = Math.abs(p - c);
-        v += pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
-      } else if (type !== 0) return null;
-      cur[i] = v & 0xff;
-    }
-    prev = cur;
-  }
-  return out;
-}
-
-/** Desfaz o previsor TIFF (só com 8 bits por valor). */
-function unTiff(data, colors, columns) {
-  const length = colors * columns;
-  const out = new Uint8Array(data.length);
-  for (let at = 0; at < data.length; at++) {
-    const i = at % length;
-    out[at] = (data[at] + (i >= colors ? out[at - colors] : 0)) & 0xff;
-  }
-  return out;
-}
-
-/** Os valores dos pontos, sem compressão, linha a linha; null num formato que não dá para editar aqui. */
-function decodeSamples(stream) {
-  const filters = filtersOf(stream.dict);
-  if (!(stream instanceof PDFRawStream) || filters.some((f) => !DECODABLE.has(f))) return null;
-  let data;
-  try {
-    data = decodePDFRawStream(stream).decode();
-  } catch {
-    return null;
-  }
-  const parms = stream.dict.lookup(key("DecodeParms"));
-  for (let i = 0; i < filters.length; i++) {
-    const p = parms instanceof PDFArray ? parms.lookup(i) : filters.length === 1 ? parms : null;
-    const predictor = p instanceof PDFDict ? (num(p.lookup(key("Predictor"))) ?? 1) : 1;
-    if (predictor <= 1) continue;
-    // Previsor no meio da cadeia de filtros: raro, e o pdf-lib não o desfaz.
-    if (i !== filters.length - 1) return null;
-    const colors = num(p.lookup(key("Colors"))) ?? 1;
-    const bpc = num(p.lookup(key("BitsPerComponent"))) ?? 8;
-    const columns = num(p.lookup(key("Columns"))) ?? 1;
-    data = predictor >= 10 ? unPng(data, colors, bpc, columns) : predictor === 2 && bpc === 8 ? unTiff(data, colors, columns) : null;
-    if (!data) return null;
-  }
-  return data;
-}
 
 /**
  * Cópia do stream de pontos (imagem ou máscara) com as caixas `boxes` zeradas
@@ -362,6 +301,27 @@ export function removeAnnotations(doc, page, rects = null) {
 
 // ---- A página ----
 
+/** O texto de cada linha (de textLines) que fica debaixo das áreas, em pedaços contínuos. */
+function coveredTexts(lines, rects, share = 0.3) {
+  const area = (r) => Math.max(0, r[2] - r[0]) * Math.max(0, r[3] - r[1]);
+  const covered = (box) =>
+    rects.some((r) => area([Math.max(box[0], r[0]), Math.max(box[1], r[1]), Math.min(box[2], r[2]), Math.min(box[3], r[3])]) >= share * Math.max(area(box), 1e-6));
+  const texts = [];
+  for (const line of lines) {
+    let piece = "";
+    for (let i = 0; i <= line.text.length; i++) {
+      const box = line.boxes[i];
+      // Espaço entre palavras (sem caixa) continua o pedaço; o que sobra nas pontas sai no trim.
+      if (i < line.text.length && (box ? covered(box) : piece)) piece += line.text[i];
+      else {
+        if (piece.trim()) texts.push(piece.trim());
+        piece = "";
+      }
+    }
+  }
+  return texts;
+}
+
 /**
  * Tarja a página: `rects` são as áreas [x0, y0, x1, y1] em coordenadas da
  * página. `editJpeg(bytes, boxes, width, height)` (do navegador) devolve
@@ -369,7 +329,7 @@ export function removeAnnotations(doc, page, rects = null) {
  * Devolve o que saiu e se a página precisa virar imagem para garantir.
  */
 export async function redactPage(doc, page, rects, { editJpeg = null } = {}) {
-  const report = { glyphs: 0, images: 0, annotations: 0, raster: false };
+  const report = { glyphs: 0, images: 0, annotations: 0, raster: false, texts: coveredTexts(textLines(doc, page), rects) };
   const copies = pageCopies(doc, page);
   const text = redactText(doc, page, rects, { copies });
   report.glyphs = text.removed;
@@ -377,7 +337,9 @@ export async function redactPage(doc, page, rects, { editJpeg = null } = {}) {
 
   // Imagens: as caixas cobertas de cada uma, todas as vezes que ela aparece.
   const edits = new Map();
-  for (const image of imagePlacements(doc, page)) {
+  const placements = imagePlacements(doc, page);
+  if (placements.opaque) report.raster = true;
+  for (const image of placements) {
     const covering = rects.filter((r) => overlaps(r, image.rect));
     if (!covering.length) continue;
     const width = image.stream && num(image.stream.dict.lookup(key("Width")));
@@ -444,32 +406,70 @@ export function cleanMetadata(doc) {
 }
 
 /**
- * Tira do arquivo os objetos que nada mais usa. O pdf-lib grava todos ao
- * salvar, e entre eles estariam o conteúdo antigo das páginas tarjadas e as
- * imagens originais.
+ * Outras cópias do que foi tarjado que ficam fora das páginas: os dados de um
+ * formulário XFA (repetem os valores dos campos), o texto alternativo da
+ * estrutura de acessibilidade das páginas tarjadas (`pages`, referências) e os
+ * marcadores com o texto apagado (`texts`), que fica trocado por ■.
  */
-export function dropUnreachable(doc) {
+export function removeHiddenCopies(doc, pages, texts) {
+  const acroForm = doc.catalog.lookup(key("AcroForm"));
+  if (acroForm instanceof PDFDict) acroForm.delete(key("XFA"));
+  doc.catalog.delete(key("NeedsRendering"));
+  stripStructureText(doc, pages);
+  scrubOutlines(doc, texts);
+}
+
+const STRUCTURE_TEXT = ["Alt", "ActualText", "E", "T"];
+const LIMIT = 200000;
+
+/** Tira o texto alternativo dos elementos da estrutura (e dos que os contêm) que ficam nas páginas `pages`. */
+function stripStructureText(doc, pages) {
   const { context } = doc;
+  const root = doc.catalog.lookup(key("StructTreeRoot"));
+  if (!(root instanceof PDFDict) || !pages.size) return;
+  const known = new Map();
+  let budget = LIMIT;
+  // Devolve se o elemento (ou algo dentro dele) está numa das páginas; `page` é a herdada.
+  const visit = (value, page) => {
+    if (--budget < 0) return true;
+    const node = context.lookup(value);
+    // Número: marcação (MCID) na página herdada.
+    if (node instanceof PDFNumber) return Boolean(page && pages.has(page));
+    if (node instanceof PDFArray) return node.asArray().map((kid) => visit(kid, page)).some(Boolean);
+    if (!(node instanceof PDFDict)) return false;
+    if (known.has(node)) return known.get(node);
+    known.set(node, false);
+    const pg = node.get(key("Pg"));
+    const own = pg instanceof PDFRef ? pg : page;
+    const touches = visit(node.get(key("K")), own) || Boolean(own && pages.has(own));
+    if (touches) for (const name of STRUCTURE_TEXT) node.delete(key(name));
+    known.set(node, touches);
+    return touches;
+  };
+  visit(root.get(key("K")), null);
+}
+
+/** Troca, nos títulos dos marcadores, cada texto tarjado por ■. */
+function scrubOutlines(doc, texts) {
+  const { context } = doc;
+  // Pedaços curtos (uma letra na beira da tarja) apagariam títulos à toa.
+  const pieces = [...new Set(texts.map((t) => t.trim()).filter((t) => t.length >= 4))].sort((a, b) => b.length - a.length);
+  const outlines = doc.catalog.lookup(key("Outlines"));
+  if (!pieces.length || !(outlines instanceof PDFDict)) return;
   const seen = new Set();
-  const stack = Object.values(context.trailerInfo).filter(Boolean);
-  while (stack.length) {
-    const obj = stack.pop();
-    if (obj instanceof PDFRef) {
-      if (seen.has(obj)) continue;
-      seen.add(obj);
-      const target = context.lookup(obj);
-      if (target) stack.push(target);
-    } else if (obj instanceof PDFStream) stack.push(obj.dict);
-    else if (obj instanceof PDFDict) for (const [, value] of obj.entries()) stack.push(value);
-    else if (obj instanceof PDFArray) stack.push(...obj.asArray());
+  const stack = [outlines.get(key("First"))];
+  while (stack.length && seen.size < LIMIT) {
+    const item = context.lookup(stack.pop());
+    if (!(item instanceof PDFDict) || seen.has(item)) continue;
+    seen.add(item);
+    const title = item.lookup(key("Title"));
+    if (title?.decodeText) {
+      const before = title.decodeText();
+      const after = pieces.reduce((text, piece) => text.split(piece).join("■".repeat(piece.length)), before);
+      if (after !== before) item.set(key("Title"), PDFHexString.fromText(after));
+    }
+    stack.push(item.get(key("Next")), item.get(key("First")));
   }
-  let dropped = 0;
-  for (const [ref] of [...context.enumerateIndirectObjects()]) {
-    if (seen.has(ref)) continue;
-    context.delete(ref);
-    dropped++;
-  }
-  return dropped;
 }
 
 // ---- Procurar o que tarjar ----

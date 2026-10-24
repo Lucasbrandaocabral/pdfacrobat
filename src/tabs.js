@@ -42,6 +42,7 @@ export class DocTab {
     this.pendingView = null;
     this.pageCache = new Map();
     this.loaded = Promise.resolve();
+    this.queue = Promise.resolve();
 
     this.container = el("div", { class: "viewer-container", tabindex: "0", hidden: true }, el("div", { class: "pdfViewer" }));
     manager.area.prepend(this.container);
@@ -147,28 +148,7 @@ export class DocTab {
     }
     const info = await security.readEncryption(bytes);
     this.encInfo = info;
-    let owner = false;
-    let userPassword = password ?? "";
-    if (ownerPassword && security.isOwnerPassword(info, ownerPassword)) {
-      owner = true;
-    } else if (password && security.isOwnerPassword(info, password)) {
-      owner = true;
-      ownerPassword = password;
-      userPassword = security.isUserPassword(info, password) ? password : security.userPasswordFromOwner(info, password);
-    } else {
-      ownerPassword = null;
-    }
-    // Sem como recuperar a senha de abertura (AES-256 aberto pelo proprietário):
-    // mantém o documento protegido usando a senha de permissões também para abrir.
-    if (userPassword == null) userPassword = ownerPassword;
-    this.owner = owner;
-    this.security = {
-      keepProtection: true,
-      userPassword,
-      ownerPassword,
-      P: info.P,
-      permissions: security.permissionsFromFlags(info.P),
-    };
+    ({ owner: this.owner, security: this.security } = security.sessionSecurity(info, password, ownerPassword));
   }
 
   /** A ação é permitida pelas restrições do documento? */
@@ -234,23 +214,39 @@ export class DocTab {
   }
 
   /**
+   * Uma alteração de cada vez no documento: a próxima começa do que a anterior
+   * deixou (duas ao mesmo tempo partiriam do mesmo ponto e uma se perderia).
+   */
+  serialize(task) {
+    const run = this.queue.then(task);
+    this.queue = run.catch(() => {});
+    return run;
+  }
+
+  /**
    * Aplica uma alteração com pdf-lib e recarrega. `keepView` preserva zoom e
    * rolagem; `page` posiciona numa página (usado ao reorganizar páginas).
    */
-  async edit(fn, { keepView = true, page = null } = {}) {
-    const before = await this.currentBytes();
-    const pdf = await security.loadForEdit(before, this.encrypted ? this.security : null);
-    const result = await fn(pdf);
-    const out = await security.saveFromEdit(pdf, this.encrypted ? this.security : null);
-    await this.replace(out, { keepView, page, previous: before });
-    return result;
+  edit(fn, { keepView = true, page = null } = {}) {
+    return this.serialize(async () => {
+      const before = await this.currentBytes();
+      const pdf = await security.loadForEdit(before, this.encrypted ? this.security : null);
+      const result = await fn(pdf);
+      const out = await security.saveFromEdit(pdf, this.encrypted ? this.security : null);
+      await this.apply(out, { keepView, page, previous: before });
+      return result;
+    });
   }
 
   /**
    * Troca o conteúdo da aba por novos bytes (marca como alterado). O estado
    * anterior vai para o histórico de "Desfazer".
    */
-  async replace(bytes, { keepView = true, page = null, dirty = true, password, ownerPassword, previous, history = true } = {}) {
+  replace(bytes, options) {
+    return this.serialize(() => this.apply(bytes, options));
+  }
+
+  async apply(bytes, { keepView = true, page = null, dirty = true, password, ownerPassword, previous, history = true } = {}) {
     if (history) this.pushHistory(previous ?? (await this.currentBytes()));
     const view = keepView
       ? this.captureView()
@@ -265,10 +261,12 @@ export class DocTab {
   }
 
   /** Grava no arquivo as anotações feitas com as ferramentas do PDF.js. */
-  async commitEditors() {
-    if (!this.doc || this.doc.annotationStorage.size === 0) return;
-    const bytes = await this.currentBytes();
-    await this.replace(bytes, { keepView: true, history: false });
+  commitEditors() {
+    return this.serialize(async () => {
+      if (!this.doc || this.doc.annotationStorage.size === 0) return;
+      const bytes = await this.currentBytes();
+      await this.apply(bytes, { keepView: true, history: false });
+    });
   }
 
   pushHistory(bytes) {
@@ -290,24 +288,28 @@ export class DocTab {
     return Boolean(this.future?.length);
   }
 
-  async undo() {
-    if (!this.canUndo) return false;
-    const current = await this.currentBytes();
-    const previous = this.history.pop();
-    this.future.push(current);
-    await this.load(previous, { password: this.security?.userPassword ?? this.password, view: this.captureView() });
-    this.setDirty(true);
-    return true;
+  undo() {
+    return this.serialize(async () => {
+      if (!this.canUndo) return false;
+      const current = await this.currentBytes();
+      const previous = this.history.pop();
+      this.future.push(current);
+      await this.load(previous, { password: this.security?.userPassword ?? this.password, view: this.captureView() });
+      this.setDirty(true);
+      return true;
+    });
   }
 
-  async redo() {
-    if (!this.canRedo) return false;
-    const current = await this.currentBytes();
-    const next = this.future.pop();
-    this.history.push(current);
-    await this.load(next, { password: this.security?.userPassword ?? this.password, view: this.captureView() });
-    this.setDirty(true);
-    return true;
+  redo() {
+    return this.serialize(async () => {
+      if (!this.canRedo) return false;
+      const current = await this.currentBytes();
+      const next = this.future.pop();
+      this.history.push(current);
+      await this.load(next, { password: this.security?.userPassword ?? this.password, view: this.captureView() });
+      this.setDirty(true);
+      return true;
+    });
   }
 
   show() {

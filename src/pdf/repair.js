@@ -22,7 +22,7 @@ import {
   decodePDFRawStream,
 } from "@cantoo/pdf-lib";
 import { parseOperations } from "./content.js";
-import { dropUnreachable } from "./redact.js";
+import { dropUnreachable } from "./security.js";
 
 const key = (name) => PDFName.of(name);
 const num = (obj) => (typeof obj?.asNumber === "function" ? obj.asNumber() : undefined);

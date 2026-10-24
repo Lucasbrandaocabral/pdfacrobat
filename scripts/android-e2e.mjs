@@ -220,12 +220,12 @@ const mark = (what) => log(`   ${new Date().toISOString().slice(11, 19)} ${what}
 mark("instalando o APK de teste");
 await device.installApk(fs.readFileSync(debugApk));
 await device.push(Buffer.from(sampleBytes), "/data/local/tmp/contrato.pdf");
-await sh(`run-as ${PKG} mkdir -p cache`);
-await sh(`cat /data/local/tmp/contrato.pdf | run-as ${PKG} sh -c 'cat > cache/contrato.pdf'`);
+await sh(`run-as ${PKG} mkdir -p cache/compartilhados`);
+await sh(`cat /data/local/tmp/contrato.pdf | run-as ${PKG} sh -c 'cat > cache/compartilhados/contrato.pdf'`);
 await sh("logcat -c");
 mark("abrindo o PDF pelo app");
 await sh(
-  `am start -W -a android.intent.action.VIEW -t application/pdf -d content://${PKG}.fileprovider/my_cache_images/contrato.pdf -n ${PKG}/.MainActivity`,
+  `am start -W -a android.intent.action.VIEW -t application/pdf -d content://${PKG}.fileprovider/compartilhados/contrato.pdf -n ${PKG}/.MainActivity`,
 );
 mark("conectando ao WebView");
 const webview = await device.webView({ pkg: PKG }, { timeout: 60000 });

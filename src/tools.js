@@ -8,7 +8,7 @@ import { $, $$, askText, el, hexToRgb, rgbToHex, toast } from "./ui.js";
 import { icon } from "./icons.js";
 import * as annotations from "./pdf/annotations.js";
 import { findImages, imageHasMask, isolatePage, moveImage, readPageContent, removeImage } from "./pdf/content.js";
-import { drawPngOnPage } from "./pdf/ops.js";
+import { drawImageInBox, drawPngOnPage, jpegRotation } from "./pdf/ops.js";
 import { drawMark, today } from "./pdf/fill.js";
 import { LINE_HEIGHT, addText, describeLine, editBlock, editText, fontStyle, groupLines, groupParagraphs } from "./pdf/textedit.js";
 import { baseFontName, findTextRuns, lineRuns, removeRuns } from "./pdf/textops.js";
@@ -169,6 +169,10 @@ export class ToolController {
   }
 
   applyEditorMode(tab) {
+    // Um desenho em andamento só fica na página quando a camada dele perde o
+    // foco; trocar de modo antes (Esc, atalho de teclado) faz o PDF.js perder o
+    // desenho e travar a ferramenta. Tirar o foco dela fecha o desenho direito.
+    if (document.activeElement?.closest?.(".annotationEditorLayer")) tab.container.focus({ preventScroll: true });
     try {
       tab.viewer.annotationEditorMode = { mode: EDITOR_MODES[this.tool] ?? NONE };
     } catch {
@@ -1657,12 +1661,10 @@ export class ToolController {
         const page = doc.getPage(hit.pageIndex);
         removeImage(doc, page, image.index);
         isolatePage(doc, page);
-        const embedded = /\.png$/i.test(file.name) ? await doc.embedPng(file.data) : await doc.embedJpg(file.data);
-        const [x0, y0, x1, y1] = target;
-        const scale = Math.min((x1 - x0) / embedded.width, (y1 - y0) / embedded.height);
-        const w = embedded.width * scale;
-        const h = embedded.height * scale;
-        page.drawImage(embedded, { x: x0 + (x1 - x0 - w) / 2, y: y0 + (y1 - y0 - h) / 2, width: w, height: h });
+        const png = /\.png$/i.test(file.name);
+        const embedded = png ? await doc.embedPng(file.data) : await doc.embedJpg(file.data);
+        // Em pé na tela: a página pode estar girada e a foto, deitada no arquivo (EXIF).
+        drawImageInBox(page, embedded, target, page.getRotation().angle - (png ? 0 : jpegRotation(file.data)));
       }),
     );
   }

@@ -36,7 +36,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.json.JSONArray;
@@ -56,6 +59,16 @@ public class NativeFilesPlugin extends Plugin {
     private static final long MAX_BYTES = 100L * 1024 * 1024;
 
     private final ExecutorService io = Executors.newSingleThreadExecutor();
+    // Documentos que a pessoa escolheu no "Salvar como" desde que o app abriu:
+    // só neles o app grava de novo sem perguntar.
+    private final Set<String> chosen = Collections.synchronizedSet(new HashSet<>());
+
+    @Override
+    public void load() {
+        // PDFs de impressões que não terminaram (o app foi fechado no meio).
+        File[] leftovers = getContext().getCacheDir().listFiles((dir, name) -> name.startsWith("impressao") && name.endsWith(".pdf"));
+        if (leftovers != null) for (File file : leftovers) file.delete();
+    }
 
     // ---- Documentos recebidos ----
 
@@ -100,6 +113,9 @@ public class NativeFilesPlugin extends Plugin {
             ArrayList<Uri> list = IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri.class);
             if (list != null) uris.addAll(list);
         }
+        // Só documentos entregues por um provedor (content://): um endereço file://
+        // de outro app poderia apontar para os arquivos internos deste.
+        uris.removeIf((uri) -> uri == null || !ContentResolver.SCHEME_CONTENT.equals(uri.getScheme()));
         return uris;
     }
 
@@ -117,6 +133,10 @@ public class NativeFilesPlugin extends Plugin {
         }
         String uri = call.getString("uri");
         if (uri != null) {
+            if (!chosen.contains(uri)) {
+                call.reject("Este documento não foi escolhido para salvar nesta sessão.");
+                return;
+            }
             io.execute(() -> writeAndResolve(call, Uri.parse(uri)));
             return;
         }
@@ -136,6 +156,7 @@ public class NativeFilesPlugin extends Plugin {
             return;
         }
         Uri uri = data.getData();
+        if (ContentResolver.SCHEME_CONTENT.equals(uri.getScheme())) chosen.add(uri.toString());
         io.execute(() -> writeAndResolve(call, uri));
     }
 
@@ -210,9 +231,12 @@ public class NativeFilesPlugin extends Plugin {
             boolean landscape = Boolean.TRUE.equals(call.getBoolean("landscape", false));
             attributes.setMediaSize(landscape ? media.asLandscape() : media.asPortrait());
         }
-        File file = new File(getContext().getCacheDir(), "impressao.pdf");
-        try (OutputStream out = new FileOutputStream(file)) {
-            out.write(Base64.decode(call.getString("data", ""), Base64.DEFAULT));
+        File file;
+        try {
+            file = File.createTempFile("impressao", ".pdf", getContext().getCacheDir());
+            try (OutputStream out = new FileOutputStream(file)) {
+                out.write(Base64.decode(call.getString("data", ""), Base64.DEFAULT));
+            }
         } catch (IOException e) {
             call.reject("Não foi possível preparar a impressão: " + e.getMessage(), e);
             return;
@@ -361,6 +385,12 @@ public class NativeFilesPlugin extends Plugin {
             } catch (IOException e) {
                 callback.onWriteFailed(e.getMessage());
             }
+        }
+
+        @Override
+        public void onFinish() {
+            // A cópia para imprimir (sem a senha, se o documento tinha) não fica no aparelho.
+            file.delete();
         }
     }
 }

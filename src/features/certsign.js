@@ -1,6 +1,6 @@
 // Fluxo da assinatura digital com certificado A1.
-import { $, UserError, baseName, formValues, openDialog, setBusy, toast } from "../ui.js";
-import { drawSignatureBlock, readCertificate, signPdf } from "../pdf/certsign.js";
+import { $, UserError, baseName, confirmAction, formValues, openDialog, setBusy, toast } from "../ui.js";
+import { drawSignatureBlock, readCertificate, signPdf, signatureCount } from "../pdf/certsign.js";
 import { Perm } from "../pdf/security.js";
 import * as platform from "../platform.js";
 
@@ -11,6 +11,17 @@ export async function certSign(app) {
   if (tab.encrypted) {
     toast("Remova a senha do documento antes de assinar (Proteger → Remover senha). Depois de assinado, ele não pode mais ser alterado.", { duration: 8000 });
     return;
+  }
+  // A assinatura grava o documento de novo: a que ele já tem deixaria de valer na cópia assinada.
+  if (signatureCount(await tab.loadEditable())) {
+    const go = await confirmAction({
+      title: "Documento já assinado",
+      message:
+        "Este documento já tem assinatura digital. Na cópia assinada aqui, a assinatura anterior deixa de ser válida (o arquivo original não muda). Para ter as duas assinaturas válidas, use um programa que acrescente a assinatura sem regravar o documento.",
+      ok: "Assinar mesmo assim",
+      kind: "warning",
+    });
+    if (!go) return;
   }
   const dialog = $("#cert-sign-dialog");
   const form = $("form", dialog);
@@ -40,6 +51,8 @@ export async function certSign(app) {
       toast(err.userMessage || err.message, { duration: 6000 });
     }
   }
+  // A senha do certificado não fica no campo (escondido) depois de usada.
+  form.elements.password.value = "";
 
   let placement = null;
   if (values.visible) {

@@ -12,12 +12,17 @@ contextBridge.exposeInMainWorld("pdfApi", {
   listPrinters: () => ipcRenderer.invoke("list-printers"),
   printPdf: (options) => ipcRenderer.invoke("print-pdf", options),
   addRecent: (filePath) => ipcRenderer.send("add-recent", filePath),
+  // O caminho vem do próprio Electron, só para arquivos de verdade (arrastados ou
+  // escolhidos); o processo principal passa a permitir ler e gravar esse arquivo.
   getPathForFile: (file) => {
+    let filePath = null;
     try {
-      return webUtils.getPathForFile(file) || null;
+      filePath = webUtils.getPathForFile(file) || null;
     } catch {
       return null;
     }
+    if (filePath) ipcRenderer.send("choose-dropped", filePath);
+    return filePath;
   },
   setState: (state) => ipcRenderer.send("set-state", state),
   closeWindow: () => ipcRenderer.send("close-window"),

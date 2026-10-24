@@ -602,7 +602,7 @@ async function produce(session, plan, values) {
   while (queue.length) {
     const out = queue.shift();
     setBusy(`Criando os arquivos… ${files.length + 1}/${files.length + 1 + queue.length}`);
-    const data = await ops.extractPages(doc, out.pages);
+    const data = await ops.extractPages(doc, out.pages, tab.encrypted ? tab.security : null);
     // No modo Tamanho, um arquivo que passou do limite é dividido de novo ao meio.
     if (plan.limit && data.length > plan.limit && out.pages.length > 1) {
       const half = Math.ceil(out.pages.length / 2);
