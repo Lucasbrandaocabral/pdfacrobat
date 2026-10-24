@@ -9,6 +9,11 @@ import { decodeStream, multiply, parseOperations, readPageContent, tokenize, tra
 
 const IDENTITY = [1, 0, 0, 1, 0, 0];
 const MAX_DEPTH = 6;
+// Formulários lidos por página, no máximo (quantos e quanto conteúdo):
+// formulários que desenham uns aos outros muitas vezes fariam a conta crescer
+// sem fim (um arquivo pequeno travaria o app). Os que passam do limite contam
+// como não lidos.
+export const FORM_BUDGET = { count: 10000, bytes: 50_000_000 };
 const encoder = new TextEncoder();
 const SHOW = new Set(["Tj", "TJ", "'", '"']);
 const STANDARD = {
@@ -460,6 +465,7 @@ export function findTextRuns(doc, page, content = readPageContent(doc, page)) {
     space: 1,
   };
   runs.skipped = [];
+  runs.forms = { count: 0, bytes: 0 };
   scan(doc, content, page.node.Resources(), null, state, runs, 0);
   return runs;
 }
@@ -580,8 +586,10 @@ function scan(doc, content, resources, scope, initial, runs, depth) {
         if (!name || !(xobjects instanceof PDFDict)) break;
         const stream = xobjects.lookup(key(name));
         if (!(stream instanceof PDFStream) || nameOf(stream.dict.lookup(key("Subtype"))) !== "Form") break;
-        if (depth >= MAX_DEPTH || uses.get(name) !== 1) {
-          // Formulário que fica de fora (repetido ou fundo demais): onde ele aparece na página.
+        const over = () => ++runs.forms.count > FORM_BUDGET.count || runs.forms.bytes > FORM_BUDGET.bytes;
+        if (depth >= MAX_DEPTH || uses.get(name) !== 1 || over()) {
+          // Formulário que fica de fora (repetido, fundo demais ou além do limite):
+          // onde ele aparece na página (null quando não dá para saber).
           runs.skipped.push(formBox(doc, stream, gs.ctm));
           break;
         }
@@ -591,6 +599,7 @@ function scan(doc, content, resources, scope, initial, runs, depth) {
         } catch {
           break;
         }
+        runs.forms.bytes += formContent.length;
         const matrix = stream.dict.lookup(key("Matrix"));
         const m = matrix instanceof PDFArray ? matrix.asArray().map((v) => num(doc.context.lookup(v))) : IDENTITY;
         const own = stream.dict.lookup(key("Resources"));
@@ -930,17 +939,10 @@ export function redactText(doc, page, rects, { share = 0.3, copies = pageCopies(
   let unsure = false;
   for (const run of runs) {
     if (!run.known) {
-      if (!run.positioned) {
-        unsure = true;
-        continue;
-      }
-      // Sem as medidas das letras: sai o trecho inteiro se ele pode chegar a uma área.
-      const [x, y] = run.origin;
-      const pad = run.size || 12;
-      if (rects.some((r) => y >= r[1] - pad && y <= r[3] + pad && x <= r[2] + pad)) {
-        changes.set(run, "all");
-        removed += run.codes.length || 1;
-      }
+      // Sem as medidas das letras não dá para saber até onde o trecho vai (nem
+      // apagá-lo sem mexer no resto da linha): se ele pode chegar a uma área, a
+      // página vira imagem, com a tarja por cima.
+      if (!run.positioned || mayReach(run, rects)) unsure = true;
       continue;
     }
     const hit = new Set();
@@ -969,8 +971,24 @@ export function redactText(doc, page, rects, { share = 0.3, copies = pageCopies(
     const replacement = (run) => (changes.get(run) === "all" ? blankReplacement(run) : partialReplacement(run, changes.get(run)));
     removeRuns(doc, page, [...changes.keys()], replacement, { copies, edits });
   }
-  if (runs.skipped.some((box) => box && rects.some((r) => area(intersection(box, r)) > 0))) unsure = true;
+  // Formulário que ficou de fora debaixo de uma área, ou sem caixa (pode estar em qualquer lugar).
+  if (runs.skipped.some((box) => !box || rects.some((r) => area(intersection(box, r)) > 0))) unsure = true;
   return { removed, unsure };
+}
+
+/** O trecho sem medidas, que vai da origem para a frente sem saber até onde, pode chegar a uma das áreas? */
+function mayReach(run, rects) {
+  const [a, b] = run.trm;
+  const length = Math.hypot(a, b) || 1;
+  const size = Math.abs(run.fontSize) || 12;
+  const far = 1e4;
+  const pts = [];
+  for (const y of [run.rise - 0.3 * size, run.rise + size]) {
+    const [x0, y0] = transformPoint(run.trm, 0, y);
+    pts.push([x0, y0], [x0 + (a / length) * far, y0 + (b / length) * far]);
+  }
+  const box = [Math.min(...pts.map((q) => q[0])), Math.min(...pts.map((q) => q[1])), Math.max(...pts.map((q) => q[0])), Math.max(...pts.map((q) => q[1]))];
+  return rects.some((r) => area(intersection(box, r)) > 0);
 }
 
 const ALTERNATE_TEXT = new Set(["ActualText", "Alt", "E"]);

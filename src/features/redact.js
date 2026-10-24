@@ -7,7 +7,7 @@ import { icon } from "../icons.js";
 import { Perm } from "../pdf/security.js";
 import { LOAD_OPTIONS, pdfjsLib } from "../pdfjs.js";
 import { textLines } from "../pdf/textops.js";
-import { PATTERNS, cleanMetadata, dropUnreachable, findMatches, redactPage, replaceWithImage } from "../pdf/redact.js";
+import { PATTERNS, cleanMetadata, dropUnreachable, findMatches, redactPage, removeHiddenCopies, replaceWithImage } from "../pdf/redact.js";
 
 // Menor marca desenhada à mão, em pixels da tela.
 const MIN_DRAG = 4;
@@ -498,15 +498,18 @@ async function go() {
   await app.run("Tarjando…", async () => {
     const result = await tab.edit(async (doc) => {
       const raster = [];
+      const texts = [];
       for (const [k, [index, list]] of pages.entries()) {
         if (pages.length > 2) setBusy(`Tarjando… página ${k + 1} de ${pages.length}`);
         const report = await redactPage(doc, doc.getPage(index), list.map((m) => m.rect), { editJpeg });
         if (asImage || report.raster) raster.push(index);
+        texts.push(...report.texts);
       }
       if (raster.length) {
         setBusy(raster.length > 1 ? "Transformando as páginas em imagem…" : "Transformando a página em imagem…");
         await rasterize(doc, raster);
       }
+      removeHiddenCopies(doc, new Set(pages.map(([index]) => doc.getPage(index).ref)), texts);
       if (metadata) cleanMetadata(doc);
       // O conteúdo antigo das páginas não pode ir junto no arquivo.
       dropUnreachable(doc);

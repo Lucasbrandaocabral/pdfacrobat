@@ -4,10 +4,10 @@
 // retângulo preto cobre a área. Quando algo não dá para limpar com segurança
 // (imagem num formato que não se edita aqui, texto que não se localiza), a
 // página é marcada para virar imagem (`raster`).
-import { PDFArray, PDFDict, PDFName, PDFNumber, PDFRawStream, PDFRef, PDFStream, decodePDFRawStream, rgb } from "@cantoo/pdf-lib";
+import { PDFArray, PDFDict, PDFHexString, PDFName, PDFNumber, PDFRawStream, PDFRef, PDFStream, decodePDFRawStream, rgb } from "@cantoo/pdf-lib";
 import { zlibSync } from "fflate";
 import { decodeStream, isolatePage, multiply, parseOperations, readPageContent, transformPoint, unitBox } from "./content.js";
-import { pageCopies, redactText } from "./textops.js";
+import { FORM_BUDGET, pageCopies, redactText, textLines } from "./textops.js";
 
 const IDENTITY = [1, 0, 0, 1, 0, 0];
 const MAX_DEPTH = 6;
@@ -26,17 +26,53 @@ export function invert([a, b, c, d, e, f]) {
   return [d / det, -b / det, -c / det, a / det, (c * f - d * e) / det, (b * e - a * f) / det];
 }
 
+// Sombreados que guardam pontos (malhas, função amostrada) e podem conter uma imagem.
+const SAMPLED_SHADINGS = new Set([1, 4, 5, 6, 7]);
+
+/** O recurso `name` do tipo `kind` (Pattern, Shading, ExtGState) desenha algo que a tarja não alcança? */
+function hidesContent(resources, kind, name) {
+  const dict = resources?.lookup(key(kind));
+  const value = dict instanceof PDFDict && name ? dict.lookup(key(name)) : null;
+  const own = value instanceof PDFStream ? value.dict : value;
+  if (!(own instanceof PDFDict)) return false;
+  if (kind === "ExtGState") {
+    // Máscara suave: um formulário que recorta o que vem depois.
+    const mask = own.lookup(key("SMask"));
+    return mask instanceof PDFDict;
+  }
+  if (kind === "Pattern") {
+    // Padrão lado a lado: um conteúdo próprio (texto, imagens) repetido.
+    if (num(own.lookup(key("PatternType"))) === 1) return true;
+    const shading = own.lookup(key("Shading"));
+    const shadingDict = shading instanceof PDFStream ? shading.dict : shading;
+    return shadingDict instanceof PDFDict && SAMPLED_SHADINGS.has(num(shadingDict.lookup(key("ShadingType"))));
+  }
+  return SAMPLED_SHADINGS.has(num(own.lookup(key("ShadingType"))));
+}
+
 /**
  * Imagens desenhadas na página, com o formulário em que estão (`scope`, no
  * formato de findTextRuns). `repeated`: dentro de um formulário desenhado mais
  * de uma vez, que não dá para mudar só num lugar; `inline`: embutida no
- * conteúdo (BI ... EI).
+ * conteúdo (BI ... EI). `opaque` na lista diz que a página usa algo que não dá
+ * para limpar pedaço por pedaço (padrões, máscaras, sombreados com pontos,
+ * formulários demais).
  */
 export function imagePlacements(doc, page) {
   const found = [];
+  found.opaque = false;
+  let forms = 0;
+  let bytes = 0;
   const visit = (content, resources, scope, start, depth, repeated) => {
     const xobjects = resources?.lookup(key("XObject"));
     const ops = parseOperations(content);
+    for (const o of ops) {
+      const last = o.operands[o.operands.length - 1];
+      const name = last?.type === "name" ? last.value : null;
+      if ((o.op === "scn" || o.op === "SCN") && hidesContent(resources, "Pattern", name)) found.opaque = true;
+      else if (o.op === "sh" && hidesContent(resources, "Shading", name)) found.opaque = true;
+      else if (o.op === "gs" && hidesContent(resources, "ExtGState", name)) found.opaque = true;
+    }
     const uses = new Map();
     for (const o of ops) {
       if (o.op === "Do" && o.operands[0]?.type === "name") uses.set(o.operands[0].value, (uses.get(o.operands[0].value) || 0) + 1);
@@ -56,6 +92,7 @@ export function imagePlacements(doc, page) {
         if (!(stream instanceof PDFStream)) continue;
         const subtype = nameOf(stream.dict.lookup(key("Subtype")));
         if (subtype === "Image") found.push({ name, stream, scope, ctm, rect: unitBox(ctm), repeated });
+        else if (subtype === "Form" && (++forms > FORM_BUDGET.count || bytes > FORM_BUDGET.bytes)) found.opaque = true;
         // Formulário fundo demais: o texto dele já deixa a página em dúvida (redactText).
         else if (subtype === "Form" && depth < MAX_DEPTH) {
           let inner;
@@ -64,6 +101,7 @@ export function imagePlacements(doc, page) {
           } catch {
             continue;
           }
+          bytes += inner.length;
           const m = numbers(stream.dict.lookup(key("Matrix")));
           const own = stream.dict.lookup(key("Resources"));
           const child = { name, stream, parent: scope, resources: own instanceof PDFDict ? own : resources };
@@ -362,6 +400,27 @@ export function removeAnnotations(doc, page, rects = null) {
 
 // ---- A página ----
 
+/** O texto de cada linha (de textLines) que fica debaixo das áreas, em pedaços contínuos. */
+function coveredTexts(lines, rects, share = 0.3) {
+  const area = (r) => Math.max(0, r[2] - r[0]) * Math.max(0, r[3] - r[1]);
+  const covered = (box) =>
+    rects.some((r) => area([Math.max(box[0], r[0]), Math.max(box[1], r[1]), Math.min(box[2], r[2]), Math.min(box[3], r[3])]) >= share * Math.max(area(box), 1e-6));
+  const texts = [];
+  for (const line of lines) {
+    let piece = "";
+    for (let i = 0; i <= line.text.length; i++) {
+      const box = line.boxes[i];
+      // Espaço entre palavras (sem caixa) continua o pedaço; o que sobra nas pontas sai no trim.
+      if (i < line.text.length && (box ? covered(box) : piece)) piece += line.text[i];
+      else {
+        if (piece.trim()) texts.push(piece.trim());
+        piece = "";
+      }
+    }
+  }
+  return texts;
+}
+
 /**
  * Tarja a página: `rects` são as áreas [x0, y0, x1, y1] em coordenadas da
  * página. `editJpeg(bytes, boxes, width, height)` (do navegador) devolve
@@ -369,7 +428,7 @@ export function removeAnnotations(doc, page, rects = null) {
  * Devolve o que saiu e se a página precisa virar imagem para garantir.
  */
 export async function redactPage(doc, page, rects, { editJpeg = null } = {}) {
-  const report = { glyphs: 0, images: 0, annotations: 0, raster: false };
+  const report = { glyphs: 0, images: 0, annotations: 0, raster: false, texts: coveredTexts(textLines(doc, page), rects) };
   const copies = pageCopies(doc, page);
   const text = redactText(doc, page, rects, { copies });
   report.glyphs = text.removed;
@@ -377,7 +436,9 @@ export async function redactPage(doc, page, rects, { editJpeg = null } = {}) {
 
   // Imagens: as caixas cobertas de cada uma, todas as vezes que ela aparece.
   const edits = new Map();
-  for (const image of imagePlacements(doc, page)) {
+  const placements = imagePlacements(doc, page);
+  if (placements.opaque) report.raster = true;
+  for (const image of placements) {
     const covering = rects.filter((r) => overlaps(r, image.rect));
     if (!covering.length) continue;
     const width = image.stream && num(image.stream.dict.lookup(key("Width")));
@@ -440,6 +501,73 @@ export function cleanMetadata(doc) {
   for (const page of doc.getPages()) {
     page.node.delete(key("Metadata"));
     page.node.delete(key("PieceInfo"));
+  }
+}
+
+/**
+ * Outras cópias do que foi tarjado que ficam fora das páginas: os dados de um
+ * formulário XFA (repetem os valores dos campos), o texto alternativo da
+ * estrutura de acessibilidade das páginas tarjadas (`pages`, referências) e os
+ * marcadores com o texto apagado (`texts`), que fica trocado por ■.
+ */
+export function removeHiddenCopies(doc, pages, texts) {
+  const acroForm = doc.catalog.lookup(key("AcroForm"));
+  if (acroForm instanceof PDFDict) acroForm.delete(key("XFA"));
+  doc.catalog.delete(key("NeedsRendering"));
+  stripStructureText(doc, pages);
+  scrubOutlines(doc, texts);
+}
+
+const STRUCTURE_TEXT = ["Alt", "ActualText", "E", "T"];
+const LIMIT = 200000;
+
+/** Tira o texto alternativo dos elementos da estrutura (e dos que os contêm) que ficam nas páginas `pages`. */
+function stripStructureText(doc, pages) {
+  const { context } = doc;
+  const root = doc.catalog.lookup(key("StructTreeRoot"));
+  if (!(root instanceof PDFDict) || !pages.size) return;
+  const known = new Map();
+  let budget = LIMIT;
+  // Devolve se o elemento (ou algo dentro dele) está numa das páginas; `page` é a herdada.
+  const visit = (value, page) => {
+    if (--budget < 0) return true;
+    const node = context.lookup(value);
+    // Número: marcação (MCID) na página herdada.
+    if (node instanceof PDFNumber) return Boolean(page && pages.has(page));
+    if (node instanceof PDFArray) return node.asArray().map((kid) => visit(kid, page)).some(Boolean);
+    if (!(node instanceof PDFDict)) return false;
+    if (known.has(node)) return known.get(node);
+    known.set(node, false);
+    const pg = node.get(key("Pg"));
+    const own = pg instanceof PDFRef ? pg : page;
+    const touches = visit(node.get(key("K")), own) || Boolean(own && pages.has(own));
+    if (touches) for (const name of STRUCTURE_TEXT) node.delete(key(name));
+    known.set(node, touches);
+    return touches;
+  };
+  visit(root.get(key("K")), null);
+}
+
+/** Troca, nos títulos dos marcadores, cada texto tarjado por ■. */
+function scrubOutlines(doc, texts) {
+  const { context } = doc;
+  // Pedaços curtos (uma letra na beira da tarja) apagariam títulos à toa.
+  const pieces = [...new Set(texts.map((t) => t.trim()).filter((t) => t.length >= 4))].sort((a, b) => b.length - a.length);
+  const outlines = doc.catalog.lookup(key("Outlines"));
+  if (!pieces.length || !(outlines instanceof PDFDict)) return;
+  const seen = new Set();
+  const stack = [outlines.get(key("First"))];
+  while (stack.length && seen.size < LIMIT) {
+    const item = context.lookup(stack.pop());
+    if (!(item instanceof PDFDict) || seen.has(item)) continue;
+    seen.add(item);
+    const title = item.lookup(key("Title"));
+    if (title?.decodeText) {
+      const before = title.decodeText();
+      const after = pieces.reduce((text, piece) => text.split(piece).join("■".repeat(piece.length)), before);
+      if (after !== before) item.set(key("Title"), PDFHexString.fromText(after));
+    }
+    stack.push(item.get(key("Next")), item.get(key("First")));
   }
 }
 
