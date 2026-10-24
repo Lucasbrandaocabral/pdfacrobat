@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <external-path name="my_images" path="." />
-    <cache-path name="my_cache_images" path="." />
+    <!-- Só uma pasta própria dos arquivos temporários (o teste do CI abre um PDF por ela). -->
+    <cache-path name="compartilhados" path="compartilhados/" />
 </paths>
