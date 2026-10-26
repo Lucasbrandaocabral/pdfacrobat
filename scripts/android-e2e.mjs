@@ -196,6 +196,14 @@ async function step(name, fn) {
 
 log("Aparelho:", device.model(), "| Android", await sh("getprop ro.build.version.release"), "|", await sh("dumpsys webviewupdate | grep -m1 'Current WebView package'"));
 
+// O launcher do emulador do CI trava com frequência, e o aviso "Pixel Launcher
+// isn't responding" aparece por cima de tudo no meio dos passos: rouba toques,
+// o botão voltar e o seletor de arquivos. Sem as janelas de erro, o próprio
+// sistema fecha o app travado em vez de perguntar. Um travamento do nosso app
+// continua sendo falha: ele é fechado e os passos seguintes não acontecem.
+await sh("settings put global hide_error_dialogs 1");
+log("Janelas de erro do sistema escondidas:", (await sh("settings get global hide_error_dialogs")) === "1" ? "sim" : "não");
+
 // PDF de 3 páginas para o teste.
 const sample = await PDFDocument.create();
 const font = await sample.embedFont(StandardFonts.Helvetica);

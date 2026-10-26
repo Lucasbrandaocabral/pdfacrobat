@@ -6,10 +6,13 @@ on:
     branches: ["**"]
     # Versões publicadas: tag com ou sem "v" (v1.2.0 ou 1.2.0).
     tags: ["v*", "[0-9]*"]
-    # Mudanças só de documentação não geram instaladores novos.
-    paths-ignore:
-      - "**.md"
-      - "docs/**"
+    # Mudanças só de documentação não geram instaladores novos; as novidades
+    # geram, porque vão dentro do app.
+    paths:
+      - "**"
+      - "!**.md"
+      - "!docs/**"
+      - "NOVIDADES.md"
 
 # Só leitura; a publicação da versão (release) pede a escrita no próprio job.
 permissions:
@@ -179,13 +182,41 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
           pattern: instalador-*
           merge-multiple: true
+      # Texto da página da versão: primeiro o que mudou (NOVIDADES.md), depois a
+      # lista de mudanças do GitHub (a que já estava lá ou uma gerada agora).
+      # Uma vez só: se o job rodar de novo, a página fica como está.
+      - name: Novidades da versão
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [[ "$version" =~ ^[0-9]+\.[0-9]+$ ]]; then version="$version.0"; fi
+          : > corpo.md
+          atual=$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json body --jq .body 2>/dev/null || true)
+          if grep -q '<!-- novidades -->' <<< "$atual"; then
+            echo "A página da versão já tem as novidades."
+            exit 0
+          fi
+          if notas=$(node scripts/novidades.mjs notas "$version"); then
+            printf '<!-- novidades -->\n## O que mudou\n\n%s\n\n' "$notas" > corpo.md
+          else
+            echo "::warning title=Sem novidades::O NOVIDADES.md não tem a versão $version; a página dela fica sem a lista do que mudou."
+          fi
+          if [ -z "$atual" ]; then
+            atual=$(gh api -X POST "repos/$GITHUB_REPOSITORY/releases/generate-notes" -f tag_name="$GITHUB_REF_NAME" --jq .body 2>/dev/null || true)
+          fi
+          printf '%s\n' "$atual" >> corpo.md
       # Fixada no commit (de terceiros, recebe permissão de escrita): v2.6.2.
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
         with:
           files: artifacts/*
-          generate_release_notes: true
+          body_path: corpo.md
