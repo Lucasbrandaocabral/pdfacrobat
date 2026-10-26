@@ -579,7 +579,7 @@ function setupDragAndDrop() {
     overlay.hidden = true;
     const files = [...e.dataTransfer.files].filter((f) => /\.(pdf|png|jpe?g)$/i.test(f.name));
     if (!files.length) return toast("Solte arquivos PDF ou imagens.");
-    await openFiles(await Promise.all(files.map(platform.fileFromBrowser)));
+    await openFiles(await platform.filesFromBrowser(files));
   });
 }
 

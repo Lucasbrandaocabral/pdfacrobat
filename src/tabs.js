@@ -7,6 +7,7 @@ import {
   PDFFindController,
   PDFLinkService,
   PDFViewer,
+  PDFWorker,
   loadPdf,
 } from "./pdfjs.js";
 import { $, askText, el, setBusy, toast } from "./ui.js";
@@ -34,6 +35,7 @@ export class DocTab {
     this.path = path;
     this.dirty = false;
     this.doc = null;
+    this.worker = null;
     this.password = null;
     this.encrypted = false;
     this.owner = true;
@@ -116,9 +118,14 @@ export class DocTab {
 
   /** Carrega (ou recarrega) bytes nesta aba. */
   async load(bytes, { password = this.password, ownerPassword = this.security?.ownerPassword, view = null } = {}) {
+    // Cada edição, desfazer e refazer recarrega o documento, sempre no mesmo
+    // worker do PDF.js: um novo a cada vez releria e recompilaria o motor do
+    // PDF.js (1,4 MB), o que pesa principalmente em computador com HD.
+    if (!this.worker || this.worker.destroyed) this.worker = new PDFWorker();
     const { doc, password: used } = await loadPdf(bytes, {
       password,
       onPassword: (incorrect) => askOpenPassword(this.name, incorrect),
+      worker: this.worker,
     });
     const { info } = await doc.getMetadata().catch(() => ({ info: {} }));
     const previous = this.doc;
@@ -339,8 +346,10 @@ export class DocTab {
     } catch {
       // O visualizador já pode ter sido descartado.
     }
-    this.doc?.destroy();
+    const closing = this.doc?.destroy();
     this.container.remove();
+    // O worker fecha depois do documento e de uma alteração ainda em andamento.
+    Promise.allSettled([closing, this.queue]).then(() => this.worker?.destroy());
   }
 }
 
