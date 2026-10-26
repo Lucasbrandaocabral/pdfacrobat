@@ -25,6 +25,8 @@ const FINAL_STATES = new Set(["latest", "error", "unsupported", "available", "re
 const FOUND_STATES = new Set(["available", "downloading", "ready", "opened"]);
 
 let updater = null;
+let starting = null; // carregamento do electron-updater, na primeira verificação
+let enabled = false;
 let notify = () => {};
 let status = { state: "idle" };
 let latest = null; // informações da versão nova (arquivos e tag)
@@ -36,26 +38,45 @@ function setStatus(next) {
   notify(status);
 }
 
-/** Registro em arquivo, para investigar falhas que acontecem sem ninguém ver. */
+/**
+ * Registro em arquivo, para investigar falhas que acontecem sem ninguém ver.
+ * Sem travar o programa: a pasta e o rodízio do arquivo são feitos em segundo
+ * plano, e as linhas que chegam juntas vão numa gravação só.
+ */
 function fileLogger() {
   const file = path.join(app.getPath("logs"), "atualizacao.log");
-  try {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    if ((fs.statSync(file, { throwIfNoEntry: false })?.size ?? 0) > 512 * 1024) fs.renameSync(file, `${file}.old`);
-  } catch {
-    // Sem registro: a atualização funciona do mesmo jeito.
-  }
+  const prepared = fs.promises
+    .mkdir(path.dirname(file), { recursive: true })
+    .then(() => fs.promises.stat(file))
+    .then((stats) => stats.size > 512 * 1024 && fs.promises.rename(file, `${file}.old`))
+    .catch(() => {
+      // Sem registro: a atualização funciona do mesmo jeito.
+    });
+  let lines = "";
+  let writing = false;
+  const flush = async () => {
+    writing = true;
+    await prepared;
+    while (lines) {
+      const text = lines;
+      lines = "";
+      await fs.promises.appendFile(file, text).catch(() => {});
+    }
+    writing = false;
+  };
   const write = (level) => (message) => {
     const text = message instanceof Error ? message.stack || message.message : String(message);
-    fs.appendFile(file, `${new Date().toISOString()} [${level}] ${text}\n`, () => {});
+    lines += `${new Date().toISOString()} [${level}] ${text}\n`;
+    if (!writing) flush();
   };
   return { info: write("info"), warn: write("warn"), error: write("error") };
 }
 
-/** No pacote .deb o electron-builder grava o tipo de instalação. */
-function isDebPackage() {
+/** No pacote .deb (só no Linux) o electron-builder grava o tipo de instalação. */
+async function isDebPackage() {
+  if (process.platform !== "linux") return false;
   try {
-    return fs.readFileSync(path.join(process.resourcesPath, "package-type"), "utf8").trim() === "deb";
+    return (await fs.promises.readFile(path.join(process.resourcesPath, "package-type"), "utf8")).trim() === "deb";
   } catch {
     return false;
   }
@@ -80,12 +101,27 @@ function describeError(err, action) {
 
 function setup({ send }) {
   notify = send;
+  enabled = true;
+  setTimeout(() => check(), FIRST_CHECK_DELAY);
+  setInterval(() => check(), CHECK_INTERVAL);
+}
+
+/**
+ * Prepara o electron-updater na primeira verificação, e não junto com a
+ * janela: são uns 160 arquivos, que num HD atrasavam a abertura do programa.
+ */
+function start() {
+  starting ||= isDebPackage().then(prepare);
+  return starting;
+}
+
+function prepare(isDeb) {
   ({ autoUpdater: updater } = require("electron-updater"));
   updater.logger = fileLogger();
   updater.autoDownload = !isMac;
   // No .deb a instalação pede a senha de administrador, então só acontece
   // quando o usuário clica em "Reiniciar e atualizar".
-  updater.autoInstallOnAppQuit = !isMac && !isDebPackage();
+  updater.autoInstallOnAppQuit = !isMac && !isDeb;
 
   updater.on("checking-for-update", () => setStatus({ state: "checking" }));
   updater.on("update-not-available", () => setStatus({ state: "latest", version: app.getVersion() }));
@@ -107,30 +143,28 @@ function setup({ send }) {
     // conhecida: uma nova verificação tenta outra vez.
     setStatus({ state: "error", message: describeError(err, action) });
   });
-
-  setTimeout(() => check(), FIRST_CHECK_DELAY);
-  setInterval(() => check(), CHECK_INTERVAL);
 }
 
 /** Procura uma versão nova. `manual`: pedido pelo menu, mostra o andamento. */
-function check({ manual = false } = {}) {
-  if (!updater) return;
+async function check({ manual = false } = {}) {
+  if (!enabled) return;
   if (manual) following = true;
   if (FOUND_STATES.has(status.state)) {
     // Uma versão nova já foi encontrada: só mostra de novo onde ela está.
     if (manual) setStatus(status);
     return;
   }
-  updater
-    .checkForUpdates()
-    .then((result) => {
-      if (result === null && manual) {
-        setStatus({ state: "unsupported", message: "A atualização automática só funciona no programa instalado." });
-      }
-      // Falhas no download chegam pelo evento "error".
-      result?.downloadPromise?.catch(() => {});
-    })
-    .catch(() => {});
+  try {
+    await start();
+    const result = await updater.checkForUpdates();
+    if (result === null && manual) {
+      setStatus({ state: "unsupported", message: "A atualização automática só funciona no programa instalado." });
+    }
+    // Falhas no download chegam pelo evento "error".
+    result?.downloadPromise?.catch(() => {});
+  } catch {
+    // Falhas na verificação também chegam pelo evento "error".
+  }
 }
 
 /** macOS: baixa o instalador da versão nova e o abre. */
