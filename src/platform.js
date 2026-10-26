@@ -226,7 +226,8 @@ export const updates = isAndroid
 
 const LATEST_RELEASE = "https://api.github.com/repos/Lucasbrandaocabral/pdfacrobat/releases/latest";
 
-function isNewer(version, than) {
+/** A versão `version` (1.2.3) é mais nova que `than`? */
+export function isNewer(version, than) {
   const parts = (v) => v.split(/[.-]/).slice(0, 3).map((n) => Number(n) || 0);
   const [a, b] = [parts(version), parts(than)];
   for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i];

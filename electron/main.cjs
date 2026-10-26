@@ -313,6 +313,7 @@ function buildMenu() {
     {
       label: "Ajuda",
       submenu: [
+        item("Novidades", "news"),
         item("Verificar atualizações…", "check-updates"),
         sep,
         item("Sobre o PDF Acrobat", "about"),

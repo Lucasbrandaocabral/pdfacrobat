@@ -20,6 +20,7 @@ import { crop } from "./features/crop.js";
 import { redact } from "./features/redact.js";
 import { repair, repairAndOpen } from "./features/repair.js";
 import { setupUpdates } from "./updates.js";
+import { showNews } from "./novidades.js";
 import { setupAndroid } from "./android.js";
 
 const PDFJS_EDITOR_TOOLS = new Set(["highlight", "text", "ink", "image"]);
@@ -159,11 +160,12 @@ async function confirmClose() {
   else if (choice === "discard") platform.closeWindow();
 }
 
-/** Janela "Sobre" com a marca e a versão. */
-function showAbout() {
+/** Janela "Sobre" com a marca e a versão; o botão Novidades abre o que mudou. */
+async function showAbout() {
   const dialog = $("#about-dialog");
   $("[data-version]", dialog).textContent = `Versão ${platform.APP_VERSION}`;
-  return openDialog(dialog, { focus: ".about-ok" });
+  await openDialog(dialog, { focus: ".about-ok" });
+  if (dialog.returnValue === "news") await showNews();
 }
 
 async function closeTab(tab) {
@@ -321,6 +323,7 @@ const actions = {
   "save-all-and-close": saveAllAndClose,
   "confirm-close": confirmClose,
   about: showAbout,
+  news: () => showNews(),
   "close-tab": () => closeTab(manager.active),
   "next-tab": () => manager.cycle(1),
   "prev-tab": () => manager.cycle(-1),
@@ -390,6 +393,7 @@ const LEAVES_EDIT_OPEN = new Set([
   "author-name",
   "check-updates",
   "about",
+  "news",
   "confirm-close",
 ]);
 
@@ -658,7 +662,7 @@ function registerServiceWorker() {
 
 setupToolbar();
 setupDragAndDrop();
-const checkForUpdates = setupUpdates({ closeDocuments: closeUnsaved });
+const checkForUpdates = setupUpdates({ closeDocuments: closeUnsaved, showNews });
 document.addEventListener("keydown", onKeyDown);
 platform.onMenu((action) => runAction(action));
 platform.onOpenFile((file) => openFiles([file]));

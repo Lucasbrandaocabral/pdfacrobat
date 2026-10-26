@@ -241,7 +241,10 @@
               <h2>Abertos recentemente</h2>
               <ul id="recent-list"></ul>
             </section>
-            <button type="button" class="welcome-about" data-action="about">Sobre o PDF Acrobat</button>
+            <div class="welcome-links">
+              <button type="button" class="welcome-about" data-action="news">Novidades</button>
+              <button type="button" class="welcome-about" data-action="about">Sobre o PDF Acrobat</button>
+            </div>
           </div>
         </div>
 
@@ -346,7 +349,19 @@
         <p class="about-credits muted small">Projeto de Lucas Brandão Cabral · Feito com PDF.js, pdf-lib, Tesseract, Electron e Capacitor · Fonte Inter</p>
         <a class="about-link" href="https://github.com/Lucasbrandaocabral/pdfacrobat" target="_blank" rel="noopener">github.com/Lucasbrandaocabral/pdfacrobat</a>
         <div class="dialog-actions">
+          <button class="btn about-news" value="news">Novidades</button>
           <button class="btn primary about-ok" value="ok">OK</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="news-dialog" class="dialog news" aria-labelledby="news-title">
+      <form method="dialog">
+        <h2 id="news-title">Novidades</h2>
+        <div class="news-list"></div>
+        <div class="dialog-actions">
+          <span class="spacer"></span>
+          <button class="btn primary news-ok" value="ok">OK</button>
         </div>
       </form>
     </dialog>
