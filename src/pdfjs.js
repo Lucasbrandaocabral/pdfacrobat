@@ -9,7 +9,7 @@ const viewer = await import("pdfjs-dist/web/pdf_viewer.mjs");
 
 export { pdfjsLib };
 export const { EventBus, PDFLinkService, PDFFindController, PDFViewer, LinkTarget } = viewer;
-export const { AnnotationEditorType, AnnotationEditorParamsType, PermissionFlag } = pdfjsLib;
+export const { AnnotationEditorType, AnnotationEditorParamsType, PermissionFlag, PDFWorker } = pdfjsLib;
 
 export const LOAD_OPTIONS = {
   cMapUrl: "./pdfjs/cmaps/",
@@ -21,10 +21,11 @@ export const LOAD_OPTIONS = {
 /**
  * Carrega bytes como documento PDF.js. `getDocument` transfere o buffer para o
  * worker, então sempre passamos uma cópia. `onPassword(incorrect)` deve
- * devolver a senha ou null para cancelar.
+ * devolver a senha ou null para cancelar. `worker`: um PDFWorker para
+ * reaproveitar; sem ele, o documento ganha um worker só dele.
  */
-export async function loadPdf(bytes, { password, onPassword } = {}) {
-  const task = pdfjsLib.getDocument({ ...LOAD_OPTIONS, data: bytes.slice(), password: password ?? undefined });
+export async function loadPdf(bytes, { password, onPassword, worker } = {}) {
+  const task = pdfjsLib.getDocument({ ...LOAD_OPTIONS, data: bytes.slice(), password: password ?? undefined, worker });
   let usedPassword = password ?? null;
   if (onPassword) {
     task.onPassword = async (update, reason) => {

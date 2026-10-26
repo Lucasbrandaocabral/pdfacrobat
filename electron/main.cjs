@@ -36,24 +36,57 @@ let isDirty = false;
 let forceClose = false;
 let pendingFiles = findPdfArgs(process.argv);
 
+/**
+ * Arquivo de estado na pasta do usuário, lido ao abrir o programa e regravado
+ * a cada mudança. Uma gravação por vez: as mudanças feitas durante uma
+ * gravação (vários arquivos abertos de uma vez, por exemplo) saem juntas na
+ * seguinte, em vez de uma escrita no disco para cada. E nada é gravado antes
+ * de a leitura terminar, para não gravar por cima o que ainda não foi lido.
+ */
+function stateFile(name, serialize) {
+  const file = () => path.join(app.getPath("userData"), name);
+  let loading = Promise.resolve();
+  let changed = false;
+  let writing = false;
+  return {
+    load() {
+      loading = fs
+        .readFile(file(), "utf8")
+        .then(JSON.parse)
+        .catch(() => null);
+      return loading;
+    },
+    async save() {
+      changed = true;
+      if (writing) return;
+      writing = true;
+      await loading;
+      while (changed) {
+        changed = false;
+        await fs.writeFile(file(), serialize()).catch(() => {});
+      }
+      writing = false;
+    },
+  };
+}
+
 // Pasta usada por último nos diálogos de abrir e salvar. Sem uma pasta
 // indicada, os diálogos abrem sempre em Downloads (desde o Electron 43), então
 // o programa guarda a última, inclusive entre uma vez e outra que é aberto.
 let lastDir;
-const lastDirFile = () => path.join(app.getPath("userData"), "ultima-pasta.json");
+const lastDirState = stateFile("ultima-pasta.json", () => JSON.stringify({ dir: lastDir }));
 
 async function loadLastDir() {
-  try {
-    lastDir = JSON.parse(await fs.readFile(lastDirFile(), "utf8")).dir || undefined;
-  } catch {
-    // Primeira vez ou arquivo ilegível: os diálogos abrem em Downloads.
-  }
+  const saved = await lastDirState.load();
+  // Primeira vez ou arquivo ilegível: os diálogos abrem em Downloads. Uma
+  // pasta usada enquanto o arquivo era lido vale mais que a guardada.
+  lastDir ??= saved?.dir || undefined;
 }
 
 function rememberDir(dir) {
   if (!dir || dir === lastDir) return;
   lastDir = dir;
-  fs.writeFile(lastDirFile(), JSON.stringify({ dir })).catch(() => {});
+  lastDirState.save();
 }
 
 function findPdfArgs(argv) {
@@ -73,17 +106,26 @@ async function readFileForRenderer(filePath) {
 // conseguisse rodar código na interface leria ou gravaria outros arquivos.
 const MAX_CHOSEN = 300;
 let chosen = new Set();
-const chosenFile = () => path.join(app.getPath("userData"), "arquivos-escolhidos.json");
+const chosenState = stateFile("arquivos-escolhidos.json", () => JSON.stringify([...chosen]));
 // Pastas escolhidas nesta sessão para gravar vários arquivos.
 const chosenDirs = new Set();
 
 async function loadChosen() {
-  try {
-    const list = JSON.parse(await fs.readFile(chosenFile(), "utf8"));
-    if (Array.isArray(list)) chosen = new Set(list.filter((p) => typeof p === "string"));
-  } catch {
-    // Primeira vez ou arquivo ilegível: a lista começa vazia.
+  const list = await chosenState.load();
+  // Primeira vez ou arquivo ilegível: a lista começa vazia.
+  if (!Array.isArray(list)) return;
+  // Os escolhidos enquanto a lista era lida ficam no fim, como os mais recentes.
+  const saved = new Set(list.filter((p) => typeof p === "string"));
+  for (const full of chosen) {
+    saved.delete(full);
+    saved.add(full);
   }
+  chosen = saved;
+  trimChosen();
+}
+
+function trimChosen() {
+  while (chosen.size > MAX_CHOSEN) chosen.delete(chosen.values().next().value);
 }
 
 /** Registra um arquivo escolhido pela pessoa e devolve o caminho absoluto. */
@@ -91,8 +133,8 @@ function choose(filePath) {
   const full = path.resolve(filePath);
   chosen.delete(full);
   chosen.add(full);
-  while (chosen.size > MAX_CHOSEN) chosen.delete(chosen.values().next().value);
-  fs.writeFile(chosenFile(), JSON.stringify([...chosen])).catch(() => {});
+  trimChosen();
+  chosenState.save();
   return full;
 }
 
@@ -108,7 +150,15 @@ function send(channel, ...args) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, ...args);
 }
 
-async function openInWindow(filePath) {
+// Arquivos abertos pelo sistema com o programa já aberto: um de cada vez, na
+// ordem em que chegaram (lidos ao mesmo tempo, disputariam o disco).
+let opening = Promise.resolve();
+
+function openInWindow(filePath) {
+  opening = opening.then(() => openFromSystem(filePath)).catch(() => {});
+}
+
+async function openFromSystem(filePath) {
   if (!mainWindow) {
     pendingFiles.push(filePath);
     return;
@@ -347,7 +397,11 @@ ipcMain.handle("open-dialog", async (_e, { multiple = false, filters = [PDF_FILT
   });
   if (canceled || !filePaths.length) return [];
   rememberDir(path.dirname(filePaths[0]));
-  return Promise.all(filePaths.map((filePath) => readFileForRenderer(choose(filePath))));
+  // Um arquivo de cada vez: num HD, ler vários ao mesmo tempo faz o disco
+  // pular de um para outro e demora mais do que em sequência.
+  const files = [];
+  for (const filePath of filePaths.map(choose)) files.push(await readFileForRenderer(filePath));
+  return files;
 });
 
 ipcMain.handle("save-file", async (event, { data, filePath, suggestedName, saveAs, filter }) => {

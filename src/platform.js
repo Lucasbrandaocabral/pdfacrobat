@@ -66,7 +66,7 @@ function pickWithInput(accept, multiple) {
     input.type = "file";
     input.accept = accept;
     input.multiple = multiple;
-    input.addEventListener("change", async () => resolve(await Promise.all([...input.files].map(fileFromBrowser))));
+    input.addEventListener("change", async () => resolve(await filesFromBrowser(input.files)));
     input.addEventListener("cancel", () => resolve([]));
     input.click();
   });
@@ -78,6 +78,16 @@ export async function fileFromBrowser(file) {
     path: api?.getPathForFile(file) || null,
     data: new Uint8Array(await file.arrayBuffer()),
   };
+}
+
+/**
+ * Lê os arquivos um de cada vez: num HD, ler vários ao mesmo tempo faz o disco
+ * pular de um para outro e demora mais do que em sequência.
+ */
+export async function filesFromBrowser(list) {
+  const files = [];
+  for (const file of list) files.push(await fileFromBrowser(file));
+  return files;
 }
 
 /** Escolhe arquivos. `kind` é uma chave de FILTERS. Retorna [{ name, path, data }]. */
