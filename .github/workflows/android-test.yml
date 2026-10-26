@@ -12,6 +12,7 @@ on:
       - "android/**"
       - "src/**"
       - "index.html"
+      - "NOVIDADES.md"
       - "package.json"
       - "capacitor.config.json"
       - "scripts/android-e2e.mjs"

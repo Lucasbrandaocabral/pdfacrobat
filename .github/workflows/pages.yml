@@ -8,9 +8,12 @@ name: Publicar versão web
 on:
   push:
     branches: ["**"]
-    paths-ignore:
-      - "**.md"
-      - "docs/**"
+    # As novidades aparecem no app; o resto da documentação não.
+    paths:
+      - "**"
+      - "!**.md"
+      - "!docs/**"
+      - "NOVIDADES.md"
   workflow_dispatch:
 
 permissions:
@@ -33,6 +36,15 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # A versão web sai do branch principal, já com tudo que entrou nele: o
+      # número dela é o da versão mais nova do NOVIDADES.md.
+      - name: Número da versão
+        run: |
+          if version=$(node scripts/novidades.mjs ultima); then
+            npm version "$version" --no-git-tag-version --allow-same-version
+          else
+            echo "::warning title=Sem novidades::O NOVIDADES.md não tem nenhuma versão; a versão web fica com o número do package.json."
+          fi
       - run: npm run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

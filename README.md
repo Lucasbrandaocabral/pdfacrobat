@@ -55,6 +55,8 @@ A partir da versão 1.2.0 o programa se atualiza sozinho, sem precisar entrar no
 
 Antes de reiniciar, o programa pede para salvar os documentos com alterações. Quem usa a versão 1.1.0 ou anterior precisa instalar a 1.2.0 manualmente uma vez; daí em diante as atualizações chegam sozinhas.
 
+Depois de atualizar, o programa avisa e mostra o que mudou. A lista de todas as versões fica em **Ajuda → Novidades** (no celular e no navegador, em **Novidades**, na tela inicial) e no arquivo [NOVIDADES.md](NOVIDADES.md).
+
 ### Android
 
 1. No celular, abra a última versão em **Releases** e toque em `PDF-Acrobat-<versão>-android.apk`.
@@ -71,11 +73,12 @@ O APK é gerado pelo mesmo workflow e assinado sempre com a mesma chave, que fic
 
 ### Publicar uma versão nova
 
-1. Abra **Releases** → **Draft a new release**.
-2. Em **Tag: Select tag**, digite a versão nova, maior que a anterior (ex.: `v1.3.0` ou `1.3.0`), e escolha **Create new tag**.
-3. Clique em **Publish release**.
+1. Em [NOVIDADES.md](NOVIDADES.md), confira a parte do topo: ela tem o número da versão nova (ex.: `## 1.3.0`) e um item para cada mudança. É esse texto que aparece na página da versão e no aviso de novidades do programa.
+2. Abra **Releases** → **Draft a new release**.
+3. Em **Tag: Select tag**, digite a versão nova, maior que a anterior e com o mesmo número do NOVIDADES.md (ex.: `v1.3.0` ou `1.3.0`), e escolha **Create new tag**.
+4. Clique em **Publish release**.
 
-Em poucos minutos os instaladores e o APK aparecem anexados à versão (workflow **Gerar instaladores**), e os programas já instalados passam a se atualizar para ela. O número da versão do app vem da tag; não é preciso mudar o `package.json`. Uma versão marcada como **Set as a pre-release** não é oferecida como atualização, o que serve para testar antes.
+Em poucos minutos os instaladores e o APK aparecem anexados à versão (workflow **Gerar instaladores**), e os programas já instalados passam a se atualizar para ela. A página da versão recebe sozinha o que mudou (do NOVIDADES.md) e, abaixo, a lista de mudanças do GitHub. O número da versão do app vem da tag; não é preciso mudar o `package.json`. Uma versão marcada como **Set as a pre-release** não é oferecida como atualização, o que serve para testar antes.
 
 Todo envio de código também gera os instaladores como *Artifacts* na aba **Actions** (vêm em `.zip`), útil para testar antes de publicar.
 
@@ -141,7 +144,8 @@ src/ui.js                janelas do app (perguntas e avisos), indicador de proce
 src/tabs.js              abas (um visualizador do PDF.js por documento), desfazer/refazer, permissões
 src/tools.js             ferramentas na página: comentar, formas, carimbos, assinar, editar texto e imagens
 src/sidebar.js           miniaturas, marcadores e lista de comentários
-src/updates.js           aviso de atualização (desktop e Android)
+src/updates.js           aviso de atualização (desktop e Android) e de versão nova instalada
+src/novidades.js         janela Novidades, com o que mudou em cada versão (lido do NOVIDADES.md)
 src/signature.js         criar assinatura e iniciais (digitar, desenhar, imagem) e as salvas
 src/fonts.js             catálogo de fontes: carregar na tela, embutir no PDF, reconhecer a fonte de um PDF
 src/fontpicker.js        lista de fontes com pesquisa e categorias
@@ -162,6 +166,8 @@ src/pdf/imposition.js    monta as folhas de impressão (tamanho, pôster, vária
 src/pdf/split.js         como dividir: intervalos, inícios de documento, tamanho de cada página
 src/assets/              fonte Inter da interface
 public/                  manifesto e service worker da versão web; public/fonts: as fontes e suas licenças; public/icons: o logo e os ícones
+NOVIDADES.md             o que mudou em cada versão (no app, no GitHub e na página de cada versão)
+scripts/novidades.mjs    lê o NOVIDADES.md para os workflows (texto da versão, número da mais nova)
 scripts/build-fonts.py   baixa as fontes do Google Fonts e monta o catálogo
 scripts/make-icons.cjs   desenha o logo e gera os ícones do computador, da web e do Android
 ```
