@@ -55,7 +55,7 @@ A partir da versão 1.2.0 o programa se atualiza sozinho, sem precisar entrar no
 
 Antes de reiniciar, o programa pede para salvar os documentos com alterações. Quem usa a versão 1.1.0 ou anterior precisa instalar a 1.2.0 manualmente uma vez; daí em diante as atualizações chegam sozinhas.
 
-Depois de atualizar, o programa avisa e mostra o que mudou. A lista de todas as versões fica em **Ajuda → Novidades** (no celular e no navegador, em **Novidades**, na tela inicial) e no arquivo [NOVIDADES.md](NOVIDADES.md).
+Depois de atualizar, o programa avisa e mostra o que mudou. A lista de todas as versões fica em **Ajuda → Novidades** (no celular e no navegador, em **Novidades**, na tela inicial) e no arquivo [NOVIDADES.md](NOVIDADES.md). Os recursos novos aparecem em cartões com uma animação curta mostrando como usar (um clique pausa; com "reduzir movimento" ligado no sistema, ela começa parada) e um botão **Experimentar**, que abre a ferramenta certa, pedindo um PDF antes quando não há nenhum aberto. As correções ficam numa lista simples.
 
 ### Android
 
@@ -73,7 +73,7 @@ O APK é gerado pelo mesmo workflow e assinado sempre com a mesma chave, que fic
 
 ### Publicar uma versão nova
 
-1. Em [NOVIDADES.md](NOVIDADES.md), confira a parte do topo: ela tem o número da versão nova (ex.: `## 1.3.0`) e um item para cada mudança. É esse texto que aparece na página da versão e no aviso de novidades do programa.
+1. Em [NOVIDADES.md](NOVIDADES.md), confira a parte do topo: ela tem o número da versão nova (ex.: `## 1.3.0`) e um item para cada mudança. É esse texto que aparece na página da versão e no aviso de novidades do programa. Para um recurso novo ganhar animação, termine o item com o comentário `<!-- demo: nome -->`, com o nome de uma cena de `src/demos.js` (uma cena nova se escreve lá, com o desenho em SVG e as trilhas do movimento); o comentário não aparece no GitHub.
 2. Abra **Releases** → **Draft a new release**.
 3. Em **Tag: Select tag**, digite a versão nova, maior que a anterior e com o mesmo número do NOVIDADES.md (ex.: `v1.3.0` ou `1.3.0`), e escolha **Create new tag**.
 4. Clique em **Publish release**.
@@ -151,6 +151,7 @@ src/objectsel.js         objetos na ferramenta Editar: selecionar vários, arras
 src/sidebar.js           miniaturas, marcadores e lista de comentários
 src/updates.js           aviso de atualização (desktop e Android) e de versão nova instalada
 src/novidades.js         janela Novidades, com o que mudou em cada versão (lido do NOVIDADES.md)
+src/demos.js             animações das Novidades (uma cena em SVG por recurso) e o que o Experimentar abre
 src/signature.js         criar assinatura e iniciais (digitar, desenhar, imagem) e as salvas
 src/fonts.js             catálogo de fontes: carregar na tela, embutir no PDF, reconhecer a fonte de um PDF
 src/fontpicker.js        lista de fontes com pesquisa e categorias

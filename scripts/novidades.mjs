@@ -19,6 +19,8 @@ if (command === "ultima") {
   const notes = lines
     .slice(start + 1, next < 0 ? lines.length : next)
     .join("\n")
+    // A marca da animação do item ("demo: nome" num comentário) é só para o programa.
+    .replace(/[ \t]*<!--\s*demo:[^>]*-->/g, "")
     .trim();
   if (!notes) process.exit(1);
   console.log(notes);

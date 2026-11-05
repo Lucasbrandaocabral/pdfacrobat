@@ -2356,6 +2356,448 @@ body.has-doc .welcome {
   font-size: 0.92em;
 }
 
+.dialog.news {
+  width: min(760px, calc(100vw - 32px));
+}
+
+.news .news-list {
+  max-height: min(68vh, 640px);
+}
+
+/* Recurso com animação: a cena ao lado do texto (embaixo dela no celular). */
+.news-features {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.news-features + ul {
+  margin-top: 12px;
+}
+
+.news-feature {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel-2);
+}
+
+.news-feature h4 {
+  margin: 4px 0 4px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.news-feature p {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.news-feature-text {
+  min-width: 0;
+}
+
+.news-try {
+  margin-top: 10px;
+  gap: 6px;
+}
+
+.news-try .icon {
+  width: 16px;
+  height: 16px;
+  color: var(--accent);
+}
+
+@media (max-width: 640px) {
+  .news-feature {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .news-demo {
+    max-width: 420px;
+  }
+}
+
+/* A cena: um botão (um clique pausa ou continua). */
+.news-demo {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: var(--canvas);
+  color: inherit;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.news-demo:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.news-demo svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 8 / 5;
+  font-family: var(--font);
+}
+
+.news-demo-state {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgb(20 20 28 / 0.62);
+  color: #fff;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.news-demo-state .icon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.4;
+}
+
+.news-demo-state .icon:first-child {
+  fill: currentColor;
+}
+
+.news-demo:hover .news-demo-state,
+.news-demo:focus-visible .news-demo-state,
+.news-demo.stopped .news-demo-state {
+  opacity: 1;
+}
+
+.news-demo .news-demo-state .icon:first-child,
+.news-demo.stopped .news-demo-state .icon:last-child {
+  display: none;
+}
+
+.news-demo.stopped .news-demo-state .icon:first-child {
+  display: block;
+}
+
+/* Peças das cenas (src/demos.js). A página fica branca nos dois temas, como o PDF. */
+.news-demo .sc,
+.news-demo .sc-tl,
+.news-demo .sc-l,
+.news-demo .sc-r,
+.news-demo .sc-t,
+.news-demo .sc-b {
+  transform-box: fill-box;
+}
+
+.news-demo .sc {
+  transform-origin: center;
+}
+
+.news-demo .sc-tl {
+  transform-origin: 0 0;
+}
+
+.news-demo .sc-l {
+  transform-origin: left center;
+}
+
+.news-demo .sc-r {
+  transform-origin: right center;
+}
+
+.news-demo .sc-t {
+  transform-origin: center top;
+}
+
+.news-demo .sc-b {
+  transform-origin: center bottom;
+}
+
+.news-demo .d-page {
+  fill: #fff;
+  stroke: rgb(0 0 0 / 0.1);
+  stroke-width: 0.5;
+}
+
+.news-demo .d-shadow {
+  fill: rgb(20 20 30 / 0.1);
+}
+
+.news-demo .d-ln {
+  fill: #dadae2;
+}
+
+.news-demo .d-hd {
+  fill: #a9a9b7;
+}
+
+.news-demo .d-star {
+  fill: #ffb627;
+  stroke: #e69a00;
+  stroke-width: 0.6;
+  stroke-linejoin: round;
+}
+
+.news-demo .d-sel {
+  fill: rgb(30 136 229 / 0.08);
+  stroke: #1e88e5;
+  stroke-width: 1.2;
+}
+
+.news-demo .d-ripple {
+  fill: none;
+  stroke: #1e88e5;
+  stroke-width: 1.2;
+  opacity: 0;
+}
+
+.news-demo .d-arrow {
+  fill: #1b1b21;
+  stroke: #fff;
+  stroke-width: 0.9;
+  stroke-linejoin: round;
+}
+
+.news-demo .d-badge {
+  fill: #1e88e5;
+  stroke: #fff;
+  stroke-width: 0.8;
+}
+
+.news-demo .d-badge-mark {
+  stroke: #fff;
+  stroke-width: 1.1;
+  stroke-linecap: round;
+}
+
+.news-demo .d-key-up {
+  fill: var(--panel);
+  stroke: var(--border-strong);
+  stroke-width: 0.8;
+}
+
+.news-demo .d-key-down {
+  fill: var(--accent-soft);
+  stroke: var(--accent);
+  stroke-width: 0.9;
+  opacity: 0;
+}
+
+.news-demo .d-key-text {
+  fill: var(--text);
+  font-size: 7.5px;
+  font-weight: 650;
+  text-anchor: middle;
+}
+
+.news-demo .d-touch {
+  fill: rgb(40 40 52 / 0.2);
+  stroke: rgb(40 40 52 / 0.45);
+  stroke-width: 1;
+}
+
+.news-demo .d-ring {
+  fill: none;
+  stroke: #1e88e5;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+.news-demo .d-phone {
+  fill: #24242b;
+  stroke: #3b3b45;
+  stroke-width: 1.2;
+}
+
+.news-demo .d-screen {
+  fill: var(--canvas);
+}
+
+.news-demo .d-notch {
+  fill: #3b3b45;
+}
+
+.news-demo .d-bubble {
+  fill: var(--panel);
+  stroke: var(--border-strong);
+  stroke-width: 0.7;
+}
+
+.news-demo .d-bubble-down {
+  fill: var(--hover);
+  stroke: var(--border-strong);
+  stroke-width: 0.7;
+  opacity: 0;
+}
+
+.news-demo .d-bubble-text {
+  fill: var(--text);
+  font-size: 6.8px;
+  font-weight: 600;
+  text-anchor: middle;
+}
+
+.news-demo .d-box {
+  fill: none;
+  stroke: #1e88e5;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.news-demo .d-hover {
+  fill: rgb(30 136 229 / 0.05);
+  stroke: #1e88e5;
+  stroke-width: 1;
+  stroke-dasharray: 3 2;
+}
+
+.news-demo .d-sizer {
+  fill: #fff;
+  stroke: #1e88e5;
+  stroke-width: 1.2;
+}
+
+.news-demo .d-sizer-on {
+  fill: #1e88e5;
+  opacity: 0;
+}
+
+.news-demo .d-caret {
+  fill: #1e88e5;
+}
+
+.news-demo .d-new {
+  fill: rgb(30 136 229 / 0.55);
+}
+
+.news-demo .d-check-box,
+.news-demo .d-rule {
+  fill: none;
+  stroke: #9a9aa8;
+  stroke-width: 0.9;
+}
+
+.news-demo .d-mark {
+  fill: none;
+  stroke: #1b1b21;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.news-demo .d-date {
+  fill: #1b1b21;
+  font-size: 7px;
+  font-weight: 500;
+}
+
+.news-demo .d-ink {
+  fill: none;
+  stroke: #1d3b8f;
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.news-demo .d-field {
+  fill: var(--panel);
+  stroke: var(--border-strong);
+  stroke-width: 0.8;
+}
+
+.news-demo .d-glass {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+}
+
+.news-demo .d-field-text {
+  fill: var(--text);
+  font-size: 8px;
+  font-weight: 600;
+}
+
+.news-demo .d-hit {
+  fill: rgb(30 136 229 / 0.12);
+  stroke: #1e88e5;
+  stroke-width: 0.9;
+}
+
+.news-demo .d-redact {
+  fill: #111;
+}
+
+.news-demo .d-frame {
+  fill: none;
+  stroke: #1e88e5;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.news-demo .d-handle {
+  fill: #fff;
+  stroke: #1e88e5;
+  stroke-width: 1.2;
+}
+
+.news-demo .d-shade {
+  fill: #16161c;
+  opacity: 0.45;
+}
+
+.news-demo .d-cut {
+  fill: none;
+  stroke: #1e88e5;
+  stroke-width: 1.2;
+  stroke-dasharray: 3 2.5;
+}
+
+.news-demo .d-scissors {
+  fill: none;
+  stroke: #1e88e5;
+  stroke-width: 1.3;
+  stroke-linecap: round;
+}
+
+.news-demo .d-label {
+  fill: var(--text);
+  font-size: 7.5px;
+  font-weight: 650;
+  text-anchor: middle;
+}
+
+.news-demo .d-left {
+  text-anchor: start;
+}
+
+.news-demo .d-muted {
+  fill: var(--muted);
+  font-weight: 500;
+}
+
+.news-demo .d-num {
+  fill: #b4b4c0;
+  font-size: 11px;
+  font-weight: 700;
+  text-anchor: middle;
+}
+
+.news-demo .d-big {
+  font-size: 15px;
+}
+
 .spacer {
   flex: 1;
 }

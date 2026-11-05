@@ -165,7 +165,31 @@ async function showAbout() {
   const dialog = $("#about-dialog");
   $("[data-version]", dialog).textContent = `Versão ${platform.APP_VERSION}`;
   await openDialog(dialog, { focus: ".about-ok" });
-  if (dialog.returnValue === "news") await showNews();
+  if (dialog.returnValue === "news") await openNews();
+}
+
+/** Novidades, com o botão Experimentar dos recursos que têm animação. */
+function openNews(options) {
+  return showNews({ ...options, onTry: tryFeature });
+}
+
+/**
+ * Experimentar (Novidades): abre a ferramenta do recurso, pedindo um PDF antes
+ * quando não há nenhum aberto, e diz em poucas palavras o que fazer.
+ */
+async function tryFeature({ category, action, tip, touchTip }) {
+  try {
+    // Direto (sem esperar nada antes): no navegador, a janela de escolher arquivo precisa do clique.
+    if (!manager.active) await chooseAndOpen();
+  } catch (err) {
+    console.error(err);
+    toast(err?.userMessage || err?.message || String(err), { duration: 6000, kind: "error" });
+  }
+  if (!manager.active) return;
+  if (category) setCategory(category);
+  await runAction(action);
+  const hint = matchMedia("(pointer: coarse)").matches ? touchTip || tip : tip;
+  if (hint) toast(hint, { duration: 7000 });
 }
 
 async function closeTab(tab) {
@@ -323,7 +347,7 @@ const actions = {
   "save-all-and-close": saveAllAndClose,
   "confirm-close": confirmClose,
   about: showAbout,
-  news: () => showNews(),
+  news: () => openNews(),
   "close-tab": () => closeTab(manager.active),
   "next-tab": () => manager.cycle(1),
   "prev-tab": () => manager.cycle(-1),
@@ -668,7 +692,7 @@ function registerServiceWorker() {
 
 setupToolbar();
 setupDragAndDrop();
-const checkForUpdates = setupUpdates({ closeDocuments: closeUnsaved, showNews });
+const checkForUpdates = setupUpdates({ closeDocuments: closeUnsaved, showNews: openNews });
 document.addEventListener("keydown", onKeyDown);
 platform.onMenu((action) => runAction(action));
 platform.onOpenFile((file) => openFiles([file]));
