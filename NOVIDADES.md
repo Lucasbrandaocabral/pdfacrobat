@@ -14,6 +14,7 @@ página dela no GitHub e para o aviso de novidades do programa.
 - **Mover, copiar e colar objetos**: em **Editar texto e imagens**, como no Acrobat, qualquer objeto da página (parágrafo, imagem, desenho, degradê) pode ser arrastado para outro lugar, também os de dentro dos grupos dos PDFs do Canva. Vários de uma vez com Shift+clique ou arrastando uma área em volta; **Copiar**, **Recortar** e **Colar** (Ctrl+C, Ctrl+X, Ctrl+V) levam para outra página ou para outro documento aberto; Delete exclui e as setas movem aos poucos. O que estava por cima continua por cima.
 - **Duplicar com Alt**: arrastar um objeto com Alt (ou Ctrl) deixa o original no lugar e cria uma cópia. Editando um texto, arrastar a alça com Alt duplica o texto com a mesma fonte, o mesmo tamanho e as mesmas cores.
 - **No celular**: toque num desenho ou segure o dedo em qualquer objeto para selecionar, toque em outros para juntar e arraste a seleção; segure o dedo numa parte vazia da página para **Colar aqui**.
+- **Espaço com a fonte original do PDF**: em alguns PDFs (comum com fontes como a Avenir), o espaço digitado ao editar um texto aparecia como um quadrado, na caixa, na lista de fontes e no PDF salvo. Agora ele sai normal.
 - **Edições no lugar certo**: em alguns PDFs, um texto, uma assinatura ou uma imagem acrescentados podiam sair deslocados ou em outro tamanho. E muitas edições na mesma página não deixam mais o conteúdo dela cada vez mais aninhado.
 
 ## 1.11.0

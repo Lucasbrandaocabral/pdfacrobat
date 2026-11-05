@@ -3,7 +3,7 @@
 // carimbo, assinatura, marcas do "Preencher e assinar" e edição de
 // texto/imagens).
 import { PDFDocument } from "@cantoo/pdf-lib";
-import { AnnotationEditorParamsType, AnnotationEditorType, fontInfo, getTextItems, loadPdf, pdfjsLib } from "./pdfjs.js";
+import { AnnotationEditorParamsType, AnnotationEditorType, brokenSpaceFaces, fontInfo, getTextItems, loadPdf, pdfjsLib } from "./pdfjs.js";
 import { $, $$, askText, el, hexToRgb, rgbToHex, toast } from "./ui.js";
 import { icon } from "./icons.js";
 import * as annotations from "./pdf/annotations.js";
@@ -14,7 +14,7 @@ import { LINE_HEIGHT, addText, describeLine, editBlock, editText, fontStyle, gro
 import { baseFontName, findTextRuns, lineRuns, removeRuns } from "./pdf/textops.js";
 import { pageObjects } from "./pdf/objects.js";
 import { ObjectSelection, objectUnits, unitAt } from "./objectsel.js";
-import { catalogFont, cssFamily, exactFamily, fallbackFont, fontById, loadFontFace, matchFont, rememberFont } from "./fonts.js";
+import { catalogFont, cssFamily, exactFamily, fallbackFont, fontById, loadFontFace, matchFont, rememberFont, spaceFamily } from "./fonts.js";
 import { closeFontPicker, fontPickerOpen, openFontPicker } from "./fontpicker.js";
 import { Perm, loadForEdit } from "./pdf/security.js";
 import * as platform from "./platform.js";
@@ -799,6 +799,9 @@ export class ToolController {
           const faces = [...new Set(line.fontNames.map((name) => fontInfo(page, name).face).filter(Boolean))];
           Object.assign(line, drawn, { realName: info.name, face: info.face, faces, style: fontStyle(line.fontFamily, info.name) });
         }
+        // Fontes do PDF em que o espaço sai como o quadrado de "letra que falta".
+        const broken = await brokenSpaceFaces([...new Set(lines.flatMap((line) => line.faces))]);
+        for (const line of lines) line.brokenSpace = line.faces.some((face) => broken.has(face));
         let blocks;
         try {
           blocks = groupParagraphs(lines);
@@ -993,7 +996,12 @@ export class ToolController {
     const substitute = match || fallbackFont(line.style);
     // A própria fonte do PDF (com todas as cópias dela), quando o catálogo não tem a mesma (Arial, Calibri, fontes do Canva...).
     const faces = line.faces?.length ? line.faces : line.face ? [line.face] : [];
-    const original = line.original && faces.length ? { label: prettyFontName(line.realName), family: faces.map((face) => `"${face}"`).join(", ") } : null;
+    // Fonte do PDF sem o desenho do espaço: o espaço vem da fonte parecida do
+    // catálogo (na caixa, na lista de fontes e no PDF), e não o quadrado.
+    const brokenSpace = block.lines.some((l) => l.brokenSpace);
+    const space = brokenSpace ? { id: substitute.id, bold: substitute.bold } : null;
+    const families = [...(space ? [spaceFamily(space.id, space.bold)] : []), ...faces.map((face) => `"${face}"`)];
+    const original = line.original && faces.length ? { label: prettyFontName(line.realName), family: families.join(", "), space } : null;
     const state = {
       font: original && !match?.exact ? "original" : substitute.id,
       substitute: substitute.id,
@@ -1002,6 +1010,7 @@ export class ToolController {
       size: Math.round(line.size * 10) / 10,
       color: line.color || fg,
       spacing: line.spacing,
+      originalSpace: !brokenSpace,
     };
     // Parágrafo: o texto todo, refluindo na largura dele. Linha sozinha: o texto
     // dela (o lido do próprio PDF quando o PDF.js separa as letras, "C L I Q U E").
@@ -1195,7 +1204,11 @@ export class ToolController {
     const token = {};
     editing.styleToken = token;
     try {
-      await (original ? loadFontFace(catalogId, state.bold, { exact: true }) : loadFontFace(catalogId, state.bold));
+      const space = original && editing.original.space;
+      await Promise.all([
+        original ? loadFontFace(catalogId, state.bold, { exact: true }) : loadFontFace(catalogId, state.bold),
+        space && loadFontFace(space.id, space.bold, { space: true }),
+      ]);
     } catch {
       // Sem a fonte (sem internet na primeira vez, por exemplo), a prévia usa outra.
     }

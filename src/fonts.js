@@ -39,15 +39,27 @@ export function exactFamily(id, bold = false) {
   return `"pdfa-${font.id}-${realWeight(font, bold)}"`;
 }
 
+/**
+ * Família só com o espaço da fonte (U+0020 e U+00A0), para vir antes de uma
+ * fonte do PDF em que o espaço sai como o quadrado de "letra que falta": as
+ * outras letras continuam com a do PDF. Carregada com
+ * `loadFontFace(id, bold, { space: true })`.
+ */
+export function spaceFamily(id, bold = false) {
+  const font = fontById(id);
+  return `"pdfa-espaco-${font.id}-${realWeight(font, bold)}"`;
+}
+
 const faces = new Map();
 /** Carrega a fonte no navegador; resolve quando ela já pode ser desenhada. */
-export function loadFontFace(id, bold = false, { exact = false } = {}) {
+export function loadFontFace(id, bold = false, { exact = false, space = false } = {}) {
   const font = fontById(id);
   const weight = realWeight(font, bold);
-  const family = exact ? `pdfa-${font.id}-${weight}` : `pdfa-${font.id}`;
+  const family = space ? `pdfa-espaco-${font.id}-${weight}` : exact ? `pdfa-${font.id}-${weight}` : `pdfa-${font.id}`;
   const key = `${family}/${weight}`;
   if (!faces.has(key)) {
-    const face = new FontFace(family, `url(${fileUrl(font.id, weight)})`, exact ? {} : { weight: String(weight) });
+    const descriptors = space ? { unicodeRange: "U+20, U+A0" } : exact ? {} : { weight: String(weight) };
+    const face = new FontFace(family, `url(${fileUrl(font.id, weight)})`, descriptors);
     faces.set(
       key,
       face.load().then(

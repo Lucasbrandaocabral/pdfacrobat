@@ -378,15 +378,18 @@ const subsetTag = () => Array.from({ length: 6 }, () => String.fromCharCode(65 +
  * Pedaços seguidos do texto escritos com a mesma fonte: a primeira das fontes
  * originais (`fonts`) que tem a letra ou, se nenhuma tiver, a do catálogo. O
  * espaço que nenhuma fonte original tem (PDFs que posicionam cada palavra, sem
- * desenhar os espaços) vira só um avanço ("gap"). Com `splitSpaces`, cada
+ * desenhar os espaços) vira só um avanço ("gap"), como também quando
+ * `originalSpace` é falso: a fonte diz ter o espaço, mas o desenho dele não
+ * veio no PDF (sairia o quadrado de "letra que falta"). Com `splitSpaces`, cada
  * espaço fica num pedaço próprio (linha justificada).
  */
-function segmentsOf(text, fonts = [], splitSpaces = false) {
+function segmentsOf(text, fonts = [], splitSpaces = false, originalSpace = true) {
   const out = [];
   for (const char of text) {
     let font = -1;
     let code;
-    for (let i = 0; i < fonts.length && font < 0; i++) {
+    const candidates = originalSpace || char !== " " ? fonts : [];
+    for (let i = 0; i < candidates.length && font < 0; i++) {
       code = fonts[i].encoder.codeOf.get(char);
       if (code !== undefined) font = i;
     }
@@ -409,8 +412,9 @@ function segmentsOf(text, fonts = [], splitSpaces = false) {
  * `leading` pontos abaixo da anterior. `align` ("left", "center" ou "right") e
  * `width` posicionam cada linha na faixa; numa linha com `justify`, o espaço
  * que sobra é dividido entre os espaços dela. `indent` recua a primeira linha.
- * `style`: tamanho, cor [r, g, b] de 0 a 1, negrito, itálico e espaçamento
- * entre letras (pt). `catalog`: bytes e nome da fonte do catálogo e se o
+ * `style`: tamanho, cor [r, g, b] de 0 a 1, negrito, itálico, espaçamento
+ * entre letras (pt) e `originalSpace` (falso: o espaço não sai com a fonte
+ * original, veja segmentsOf). `catalog`: bytes e nome da fonte do catálogo e se o
  * negrito é de verdade. `original`: as fontes do PDF ({ fonts: [{ ref, dict,
  * encoder }] }) a usar no que elas tiverem; o resto sai com a do catálogo.
  */
@@ -418,7 +422,7 @@ async function writeText(doc, page, { origin, angle, rows, style, catalog, origi
   const { size, spacing = 0 } = style;
   const step = leading ?? LINE_HEIGHT * size;
   const fonts = original?.fonts ?? [];
-  const pieces = rows.map((row) => segmentsOf(row.text.normalize("NFC"), fonts, row.justify));
+  const pieces = rows.map((row) => segmentsOf(row.text.normalize("NFC"), fonts, row.justify, style.originalSpace !== false));
   let catalogFont = null;
   let catalogKey = null;
   let gapWidth = 0.278 * size;
