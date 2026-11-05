@@ -6,8 +6,9 @@
 // Cada cena tem o desenho (em 240 × 150) e as trilhas, tocadas com a Web
 // Animations API. Uma trilha diz, em frações da duração, onde fica um
 // elemento ("xy": [t, x, y] e, se mudar, a escala), o tamanho ("s": [t, sx,
-// sy]), quanto ele aparece ("o": [t, opacidade]; "fo" nas letras de um texto)
-// ou quanto de um traço já foi desenhado ("dash"). Todas as trilhas de uma
+// sy]), o giro ("r": [t, graus], em volta do transform-origin do elemento),
+// quanto ele aparece ("o": [t, opacidade]; "fo" nas letras de um texto) ou
+// quanto de um traço já foi desenhado ("dash"). Todas as trilhas de uma
 // cena têm a mesma duração e repetem juntas, sem atraso: o quadro t é o
 // mesmo para todas. `still` é o quadro mostrado parado (movimento reduzido)
 // e `experimentar` diz o que o botão Experimentar abre.
@@ -117,9 +118,89 @@ function blink(a, b, step = 0.035) {
   return frames;
 }
 
+/**
+ * Pontos [t, x, y] de um arco em volta de `c`, de `from` a `to` graus (horário
+ * na tela), entre os instantes a e b, em velocidade constante ("linear").
+ */
+function arcPath(c, radius, from, to, a, b, steps = 4) {
+  return Array.from({ length: steps + 1 }, (_, i) => {
+    const angle = ((from + ((to - from) * i) / steps) * Math.PI) / 180;
+    const point = [a + ((b - a) * i) / steps, +(c[0] + radius * Math.cos(angle)).toFixed(2), +(c[1] + radius * Math.sin(angle)).toFixed(2)];
+    return i < steps ? [...point, "linear"] : point;
+  });
+}
+
+/** O giro de `from` a `to` graus nos mesmos instantes de `path` (o objeto acompanha o cursor). */
+const spin = (path, from, to) => path.map(([t], i) => (i < path.length - 1 ? [t, from + ((to - from) * i) / (path.length - 1), "linear"] : [t, to]));
+
+/** Alça de girar das cenas: círculo com a seta, centro em (x, y). */
+const turnHandle = (x, y, r = 5.5) =>
+  `<circle class="d-turn" cx="${x}" cy="${y}" r="${r}"/><path class="d-turn-arrow" d="M${x + r * 0.45} ${y - r * 0.5}A${r * 0.52} ${r * 0.52} 0 1 0 ${x + r * 0.55} ${y + r * 0.1}M${x + r * 0.45} ${y - r * 0.5}l${r * 0.05} ${r * 0.42}M${x + r * 0.45} ${y - r * 0.5}l-${r * 0.4} ${r * 0.08}"/>`;
+
+/** Etiqueta escura com o ângulo, perto do cursor (larga o bastante para o maior texto). */
+function angleTip(x, y, labels, cls) {
+  const w = 8 + 4.6 * Math.max(...labels.map((label) => label.length));
+  return `<g class="${cls}"><rect class="d-tip" x="${x}" y="${y}" width="${w}" height="11" rx="3"/>${labels
+    .map((label, i) => `<text class="d-tip-text t${i}" x="${x + w / 2}" y="${y + 7.8}">${label}</text>`)
+    .join("")}</g>`;
+}
+
 // ---- Cenas ----
 
 const SCENES = {
+  // Girar: a alça redonda embaixo da imagem gira 45°; depois a do texto gira as letras.
+  girar: {
+    duration: 9000,
+    still: 0.84,
+    experimentar: {
+      category: "edit",
+      action: "tool:edit",
+      tip: "Clique num objeto ou num texto e arraste a alça redonda para girar (com Shift, de 15 em 15°).",
+      touchTip: "Toque num objeto ou num texto e arraste a alça redonda com o dedo para girar.",
+    },
+    draw: () => {
+      // A imagem gira em volta do meio (120, 79); o título, em volta do meio da caixa (104, 21).
+      const image = arcPath([120, 79], 31, 90, 135, 0.14, 0.36);
+      const title = arcPath([104, 21], 18.9, 142.5, 112.5, 0.56, 0.74, 3);
+      return {
+        svg: [
+          page(64, 6, 112, 138),
+          bars([[76, 36, 88], [76, 43, 80], [76, 122, 88], [76, 129, 70], [76, 136, 80]]),
+          '<g class="ttl" style="transform-origin: 104px 21px">',
+          heading(76, 18, 56, 6),
+          '<g class="tbox"><rect class="d-box" x="73" y="15" width="62" height="12" rx="1"/>',
+          '<rect class="d-grip" x="73" y="30" width="9" height="5" rx="1.2"/>',
+          turnHandle(89, 32.5, 4.5),
+          "</g></g>",
+          '<g class="img" style="transform-origin: 120px 79px">',
+          picture(92, 60, 56, 38),
+          `<g class="isel">${outline(92, 60, 56, 38)}<path class="d-stem" d="M120 100V104.5"/>${turnHandle(120, 110)}</g>`,
+          "</g>",
+          angleTip(70, 108, ["15°", "30°", "45°"], "tip1"),
+          angleTip(60, 44, ["345°", "330°"], "tip2"),
+          cursor(),
+        ].join(""),
+        tracks: [
+          [".cur", "o", [[0, 0], [0.04, 1], [0.9, 1], [0.93, 0]]],
+          [".cur", "xy", [[0, 156, 146], [0.04, 156, 146], [0.11, 120, 110], ...image, [0.44, 98.08, 100.92], [0.53, 89, 32.5], ...title, [0.93, 96.8, 38.5], [1, 156, 146]]],
+          [".img", "r", [[0, 0], ...spin(image, 0, 45), [0.94, 45], [0.94, 0]]],
+          [".img", "o", [[0, 1], [0.9, 1], [0.93, 0], [0.95, 0], [0.99, 1]]],
+          [".isel", "o", [[0, 1], [0.44, 1], [0.47, 0], [0.95, 0], [0.99, 1]]],
+          [".tip1", "o", show(0.16, 0.18, 0.4, 0.44)],
+          [".tip1 .t0", "fo", [[0, 1], [0.24, 1], [0.241, 0]]],
+          [".tip1 .t1", "fo", [[0, 0], [0.24, 0], [0.241, 1], [0.3, 1], [0.301, 0]]],
+          [".tip1 .t2", "fo", [[0, 0], [0.3, 0], [0.301, 1]]],
+          [".tbox", "o", show(0.47, 0.5, 0.84, 0.88)],
+          [".ttl", "r", [[0, 0], ...spin(title, 0, -30), [0.94, -30], [0.94, 0]]],
+          [".ttl", "o", [[0, 1], [0.9, 1], [0.93, 0], [0.95, 0], [0.99, 1]]],
+          [".tip2", "o", show(0.58, 0.6, 0.78, 0.82)],
+          [".tip2 .t0", "fo", [[0, 1], [0.66, 1], [0.661, 0]]],
+          [".tip2 .t1", "fo", [[0, 0], [0.66, 0], [0.661, 1]]],
+        ],
+      };
+    },
+  },
+
   // Selecionar, arrastar, Ctrl+C numa página e Ctrl+V na outra.
   mover: {
     duration: 8000,
@@ -527,14 +608,21 @@ const SCENES = {
 const FORMAT = {
   xy: ([x, y, sx = 1, sy = sx]) => ({ transform: `translate(${x}px, ${y}px) scale(${sx}, ${sy})` }),
   s: ([sx, sy = sx]) => ({ transform: `scale(${sx}, ${sy})` }),
+  r: ([degrees]) => ({ transform: `rotate(${degrees}deg)` }),
   o: ([value]) => ({ opacity: value }),
   fo: ([value]) => ({ fillOpacity: value }),
   dash: ([value]) => ({ strokeDashoffset: `${value}px` }),
 };
 
-/** Quadros da Web Animations API, do começo (0) ao fim (1) da cena. */
+/**
+ * Quadros da Web Animations API, do começo (0) ao fim (1) da cena. Um quadro
+ * pode terminar com a curva até o próximo ("linear", por exemplo).
+ */
 function keyframes(kind, frames) {
-  const list = frames.map(([offset, ...values]) => ({ offset, easing: EASE, ...FORMAT[kind](values) }));
+  const list = frames.map(([offset, ...values]) => {
+    const easing = typeof values[values.length - 1] === "string" ? values.pop() : EASE;
+    return { offset, easing, ...FORMAT[kind](values) };
+  });
   if (list[0].offset > 0) list.unshift({ ...list[0], offset: 0 });
   if (list[list.length - 1].offset < 1) list.push({ ...list[list.length - 1], offset: 1 });
   return list;

@@ -2,15 +2,17 @@
 // continua editando o texto ou a imagem; arrastar move qualquer objeto da
 // página (parágrafo, imagem, desenho, degradê, grupo); com Alt ou Ctrl, o
 // arrasto duplica; Shift+clique (ou Ctrl+clique) junta vários; arrastar na
-// página, fora dos objetos, seleciona os que a área pegar. A barra da seleção
-// duplica, copia, recorta e exclui; colar (Ctrl+V ou o botão Colar) põe os
-// objetos em qualquer página, deste ou de outro documento aberto. No celular,
-// segurar o dedo num objeto o seleciona; depois, tocar em outros junta mais e
-// arrastar a seleção a move.
+// página, fora dos objetos, seleciona os que a área pegar. A alça redonda
+// embaixo da seleção gira (em volta do meio dela). A barra da seleção gira
+// 90°, duplica, copia, recorta e exclui; colar (Ctrl+V ou o botão Colar) põe
+// os objetos em qualquer página, deste ou de outro documento aberto. No
+// celular, segurar o dedo num objeto o seleciona; depois, tocar em outros
+// junta mais e arrastar a seleção a move.
 import { $, el, toast } from "./ui.js";
 import { icon } from "./icons.js";
 import { loadPdf } from "./pdfjs.js";
-import { copyObjects, deleteObjects, moveObjects, pasteObjects, textKey, unionRect } from "./pdf/objects.js";
+import { copyObjects, deleteObjects, moveObjects, pasteObjects, rotationAbout, textKey, transformObjects, unionRect } from "./pdf/objects.js";
+import { dragRotation, normalizeAngle, rotateHandle, screenAngle } from "./rotate.js";
 
 // Quanto o ponteiro anda (px) até contar como arrasto, por tipo de ponteiro.
 const DRAG_START = { mouse: 4, pen: 6, touch: 10 };
@@ -377,7 +379,7 @@ export class ObjectSelection {
       this.layout(editing);
       return;
     }
-    this.tools.track(this.commitMove(editing, { keep: editing.duplicate }));
+    this.tools.track(this.commitTransform(editing, { keep: editing.duplicate }));
   }
 
   bandTo(g) {
@@ -424,8 +426,10 @@ export class ObjectSelection {
       const layer = tools.overlayFor(hit);
       const box = el("div", { class: "object-selection" });
       const bar = this.buildBar();
+      const rotator = rotateHandle("object-rotate");
+      rotator.addEventListener("pointerdown", (e) => this.startRotate(e));
       layer.append(box, bar);
-      editing = { kind: "objects", hit, layer, box, bar, units: [], data, viewport: hit.pageView.viewport, offset: [0, 0], duplicate: false };
+      editing = { kind: "objects", hit, layer, box, bar, rotator, units: [], data, viewport: hit.pageView.viewport, offset: [0, 0], turn: 0, duplicate: false };
       editing.dispose = () => this.dispose(editing);
       tools.editing = editing;
     }
@@ -449,8 +453,12 @@ export class ObjectSelection {
   buildBar() {
     const button = (name, label, title, onclick) =>
       el("button", { class: "btn", type: "button", title, html: `${icon(name)}<span>${label}</span>`, onclick });
+    const turn = (name, title, angle) =>
+      el("button", { class: "btn icon-only", type: "button", title, "aria-label": title, html: icon(name), onclick: () => this.rotateBy(angle) });
     return el("div", { class: "float-bar object-bar" }, [
       el("span", { class: "float-hint object-count" }),
+      turn("rotateCcw", "Girar 90° para a esquerda", -Math.PI / 2),
+      turn("rotateCw", "Girar 90° para a direita", Math.PI / 2),
       button("duplicate", "Duplicar", "Duplicar (ou arraste com Alt ou Ctrl)", () => this.duplicate()),
       button("copy", "Copiar", "Copiar (Ctrl+C)", () => this.copy({ cut: false })),
       button("cut", "Recortar", "Recortar (Ctrl+X)", () => this.copy({ cut: true })),
@@ -458,10 +466,10 @@ export class ObjectSelection {
     ]);
   }
 
-  /** Posiciona os contornos, a prévia do arrasto e a barra. */
+  /** Posiciona os contornos, a prévia do arrasto (ou do giro), a alça de girar e a barra. */
   layout(editing, { rebuild = false } = {}) {
     const tools = this.tools;
-    const { box, bar, units, offset, hit, layer } = editing;
+    const { box, bar, rotator, units, offset, hit, layer } = editing;
     if (rebuild) {
       // Num fragmento: milhares de contornos (Ctrl+A numa página cheia) espalhados como argumentos estourariam a pilha.
       const outlines = document.createDocumentFragment();
@@ -471,26 +479,39 @@ export class ObjectSelection {
         Object.assign(outline.style, { left: `${r.left - 1}px`, top: `${r.top - 1}px`, width: `${r.width + 2}px`, height: `${r.height + 2}px` });
         outlines.append(outline);
       }
-      box.replaceChildren(outlines);
+      // A alça vai junto com os contornos: gira e se desloca com eles.
+      box.replaceChildren(outlines, rotator);
       bar.querySelector(".object-count").textContent = plural(units.length, "objeto", "objetos");
     }
-    const moved = Boolean(offset[0] || offset[1]);
-    const shift = moved ? `translate(${offset[0]}px, ${offset[1]}px)` : "";
-    box.style.transform = shift;
-    box.classList.toggle("moving", Boolean(editing.dragging || moved));
-    box.classList.toggle("duplicating", Boolean(editing.duplicate && (editing.dragging || moved)));
-    // No arrasto, a página sem os objetos (quando não é para duplicar) e eles por cima, onde vão ficar.
-    if (editing.ghost) {
-      editing.ghost.hidden = !moved;
-      editing.ghost.style.transform = shift;
-    }
-    if (editing.clean) editing.clean.hidden = !moved || editing.duplicate;
-    bar.hidden = Boolean(editing.dragging);
-    if (bar.hidden) return;
     const union = tools.cssRect(hit.pageView, unionRect(units.map((u) => u.rect)));
+    const turn = editing.turn || 0;
+    const moved = Boolean(offset[0] || offset[1]);
+    const changed = moved || Boolean(turn);
+    const transform = [moved ? `translate(${offset[0]}px, ${offset[1]}px)` : "", turn ? `rotate(${turn}rad)` : ""].join(" ").trim();
+    const pivot = `${union.left + union.width / 2}px ${union.top + union.height / 2}px`;
+    Object.assign(box.style, { transform, transformOrigin: pivot });
+    box.classList.toggle("moving", Boolean(editing.dragging || editing.rotating || changed));
+    box.classList.toggle("dragging", Boolean(editing.dragging));
+    box.classList.toggle("duplicating", Boolean(editing.duplicate && (editing.dragging || moved)));
+    // No arrasto (e no giro), a página sem os objetos (quando não é para
+    // duplicar) e eles por cima, onde vão ficar.
+    if (editing.ghost) {
+      editing.ghost.hidden = !changed;
+      Object.assign(editing.ghost.style, { transform, transformOrigin: pivot });
+    }
+    if (editing.clean) editing.clean.hidden = !changed || editing.duplicate;
+    bar.hidden = Boolean(editing.dragging || editing.rotating);
+    if (bar.hidden) return;
+    // A alça de girar no meio, embaixo da seleção (em cima, quando não cabe
+    // embaixo, perto do fim da página); a barra fica do outro lado, ou além da alça.
+    const size = rotator.offsetWidth || 26;
+    const bottom = union.top + union.height;
+    const handleBelow = bottom + 12 + size <= layer.clientHeight || union.top - 12 - size < 0;
+    const handleTop = handleBelow ? bottom + 12 : union.top - 12 - size;
+    Object.assign(rotator.style, { left: `${union.left + union.width / 2 - size / 2}px`, top: `${handleTop}px` });
     const left = Math.max(0, Math.min(union.left + offset[0], layer.clientWidth - bar.offsetWidth));
-    const above = union.top + offset[1] - bar.offsetHeight - 10;
-    const top = above >= 0 ? above : union.top + offset[1] + union.height + 10;
+    const above = (handleBelow ? union.top : handleTop) + offset[1] - bar.offsetHeight - 10;
+    const top = above >= 0 ? above : (handleBelow ? handleTop + size : bottom) + offset[1] + 10;
     Object.assign(bar.style, { left: `${left}px`, top: `${Math.min(top, Math.max(0, layer.clientHeight - bar.offsetHeight))}px` });
   }
 
@@ -572,25 +593,92 @@ export class ObjectSelection {
 
   // ---- Ações ----
 
-  /** Desloca a seleção no PDF (de `editing.offset`, em px da tela) ou duplica (`keep`). */
-  async commitMove(editing, { keep = false, reselect = true } = {}) {
+  /**
+   * Grava na seleção o deslocamento (`editing.offset`, em px da tela) e o giro
+   * (`editing.turn`, em volta do meio dela), ou duplica (`keep`).
+   */
+  async commitTransform(editing, { keep = false, reselect = true } = {}) {
     const { hit, offset, units } = editing;
+    const turn = editing.turn || 0;
     const vp = hit.pageView.viewport;
     const a = vp.convertToPdfPoint(0, 0);
     const b = vp.convertToPdfPoint(offset[0], offset[1]);
     const delta = [b[0] - a[0], b[1] - a[1]];
     const keys = units.flatMap((u) => u.keys);
+    const r = unionRect(units.map((u) => u.rect));
+    // A tela tem o y para baixo: o horário dela é o anti-horário do PDF (com a página girada também).
+    const matrix = turn ? rotationAbout([(r[0] + r[2]) / 2, (r[1] + r[3]) / 2], -turn, delta) : null;
     editing.busy = true;
     clearTimeout(editing.nudgeTimer);
     const { tab, pageIndex, pageNumber } = hit;
-    const moved = await this.tools.run(keep ? "Duplicando…" : "Movendo…", () => tab.edit((doc) => moveObjects(doc, pageIndex, keys, delta, { keep })));
+    const label = keep ? "Duplicando…" : turn ? "Girando…" : "Movendo…";
+    const moved = await this.tools.run(label, () =>
+      tab.edit((doc) => (matrix ? transformObjects(doc, pageIndex, keys, matrix, { keep }) : moveObjects(doc, pageIndex, keys, delta, { keep }))),
+    );
     if (this.tools.editing === editing) {
       // Não deu certo (o documento não recarregou): a seleção volta para o lugar.
       editing.busy = false;
       editing.offset = [0, 0];
+      editing.turn = 0;
       this.layout(editing);
     }
     if (moved?.length && reselect) await this.reselect(tab, pageNumber, moved);
+  }
+
+  /**
+   * O ângulo na tela que a seleção já tem (para os ímãs do giro): o do texto
+   * ou da imagem, quando é um objeto só; 0 nos outros casos.
+   */
+  baseAngle(editing) {
+    const [unit] = editing.units;
+    if (editing.units.length !== 1) return 0;
+    const vp = editing.viewport;
+    if (unit.kind === "text" && unit.block) return screenAngle(vp, unit.block.angle || 0);
+    const m = unit.members[0]?.ctm;
+    if (["image", "inline", "form"].includes(unit.kind) && m) return screenAngle(vp, Math.atan2(m[1], m[0]));
+    return 0;
+  }
+
+  /** Alça de girar: gira a seleção com o ponteiro; ao soltar, grava. */
+  startRotate(e) {
+    const editing = this.editing;
+    if (!editing || editing.busy || editing.dragging || e.button > 0) return;
+    const tools = this.tools;
+    const union = tools.cssRect(editing.hit.pageView, unionRect(editing.units.map((u) => u.rect)));
+    const page = editing.layer.getBoundingClientRect();
+    const pivot = [page.left + union.left + union.width / 2 + editing.offset[0], page.top + union.top + union.height / 2 + editing.offset[1]];
+    clearTimeout(editing.nudgeTimer);
+    editing.rotating = true;
+    tools.removeHover();
+    dragRotation(e, pivot, {
+      base: this.baseAngle(editing),
+      onTurn: (turn) => {
+        editing.turn = turn;
+        this.layout(editing);
+      },
+      onEnd: (turn) => {
+        editing.rotating = false;
+        if (tools.editing !== editing) return;
+        if (turn === null || Math.abs(normalizeAngle(turn)) < 0.003) {
+          editing.turn = 0;
+          this.layout(editing);
+          // Um deslocamento das setas ainda não gravado: grava como antes.
+          if (editing.offset[0] || editing.offset[1]) editing.nudgeTimer = setTimeout(() => tools.track(this.commitTransform(editing)), NUDGE_COMMIT);
+          return;
+        }
+        editing.turn = turn;
+        tools.track(this.commitTransform(editing));
+      },
+    });
+  }
+
+  /** Botões da barra: gira a seleção `angle` radianos (90° para um lado ou para o outro). */
+  async rotateBy(angle) {
+    const editing = this.editing;
+    if (!editing || editing.busy) return;
+    editing.turn = angle;
+    this.layout(editing);
+    await this.tools.track(this.commitTransform(editing));
   }
 
   /** Depois de mudar o documento, seleciona de novo os objetos `keys` (na página recarregada). */
@@ -607,8 +695,8 @@ export class ObjectSelection {
 
   /** Grava um deslocamento das setas que ainda não foi gravado (sem selecionar de novo). */
   finishPending(editing) {
-    if (!editing || editing.busy || !(editing.offset[0] || editing.offset[1])) return null;
-    return this.commitMove(editing, { reselect: false });
+    if (!editing || editing.busy || editing.rotating || !(editing.offset[0] || editing.offset[1])) return null;
+    return this.commitTransform(editing, { reselect: false });
   }
 
   /** Concluir (antes de salvar, trocar de ferramenta...): grava o que ficou pendente e solta a seleção. */
@@ -627,7 +715,7 @@ export class ObjectSelection {
     editing.duplicate = false;
     this.layout(editing);
     clearTimeout(editing.nudgeTimer);
-    editing.nudgeTimer = setTimeout(() => this.tools.track(this.commitMove(editing)), NUDGE_COMMIT);
+    editing.nudgeTimer = setTimeout(() => this.tools.track(this.commitTransform(editing)), NUDGE_COMMIT);
   }
 
   async remove() {
@@ -645,7 +733,7 @@ export class ObjectSelection {
     if (!editing || editing.busy) return;
     const scale = editing.viewport.scale;
     editing.offset = [PASTE_STEP * scale, PASTE_STEP * scale];
-    await this.tools.track(this.commitMove(editing, { keep: true }));
+    await this.tools.track(this.commitTransform(editing, { keep: true }));
   }
 
   /** Guarda a seleção para colar (recortar também a tira da página). */

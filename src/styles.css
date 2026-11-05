@@ -1117,6 +1117,93 @@ textarea:focus {
   cursor: copy;
 }
 
+/* Alça de girar (objetos, imagem e caixa de texto): um botão redondo. */
+.rotate-handle {
+  position: absolute;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #fff;
+  color: #1e88e5;
+  box-shadow:
+    0 0 0 1.5px #1e88e5,
+    0 1px 3px rgb(0 0 0 / 0.25);
+  cursor: grab;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.rotate-handle:active,
+.rotating .rotate-handle {
+  cursor: grabbing;
+}
+
+.rotate-handle .icon {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2.2;
+}
+
+@media (pointer: coarse) {
+  .rotate-handle {
+    width: 32px;
+    height: 32px;
+  }
+
+  .rotate-handle .icon {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+/* Na seleção de objetos, o lugar vem do layout (embaixo, no meio); no arrasto, some. */
+.object-selection.dragging .object-rotate {
+  visibility: hidden;
+}
+
+/* Na imagem, embaixo da caixa, no meio (abaixo da alça de baixo). */
+.image-box .box-rotate {
+  left: 50%;
+  top: calc(100% + 14px);
+  margin-left: -12px;
+}
+
+@media (pointer: coarse) {
+  .image-box .box-rotate {
+    top: calc(100% + 20px);
+    margin-left: -16px;
+  }
+}
+
+/* No texto, ao lado da alça de mover. */
+.text-box .text-rotate {
+  top: calc(100% + 3px);
+  left: 30px;
+}
+
+@media (pointer: coarse) {
+  .text-box .text-rotate {
+    left: 38px;
+  }
+}
+
+/* O ângulo ao lado do ponteiro, enquanto gira. */
+.rotate-tip {
+  position: fixed;
+  z-index: 1000;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgb(20 20 28 / 0.86);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
 .overlay-layer > .object-ghost {
   position: absolute;
   inset: 0;
@@ -2671,6 +2758,38 @@ body.has-doc .welcome {
 .news-demo .d-sizer-on {
   fill: #1e88e5;
   opacity: 0;
+}
+
+.news-demo .d-turn {
+  fill: #fff;
+  stroke: #1e88e5;
+  stroke-width: 1.1;
+}
+
+.news-demo .d-turn-arrow,
+.news-demo .d-stem {
+  fill: none;
+  stroke: #1e88e5;
+  stroke-width: 1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.news-demo .d-grip {
+  fill: #fff;
+  stroke: rgb(30 136 229 / 0.6);
+  stroke-width: 0.6;
+}
+
+.news-demo .d-tip {
+  fill: rgb(20 20 28 / 0.86);
+}
+
+.news-demo .d-tip-text {
+  fill: #fff;
+  font-size: 6.5px;
+  font-weight: 650;
+  text-anchor: middle;
 }
 
 .news-demo .d-caret {
