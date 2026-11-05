@@ -7,13 +7,23 @@ Para a próxima versão: escreva no topo uma parte "## " com o número que ela
 vai ter (o mesmo da tag, sem o "v") e um item "- " por mudança, começando por
 um título curto em **negrito**. Ao publicar a versão, essa parte vai para a
 página dela no GitHub e para o aviso de novidades do programa.
+
+Recurso novo com animação: termine o item com um comentário "demo: nome", com
+o nome de uma das cenas de src/demos.js (veja os itens da 1.12.0). No programa,
+ele vira um cartão com a animação e o botão Experimentar; na página do GitHub,
+o comentário não aparece. Correções ficam sem animação.
 -->
+
+## 1.13.0
+
+- **Girar objetos e textos**: em **Editar texto e imagens**, a alça redonda embaixo do que está selecionado gira qualquer objeto (imagem, desenho, parágrafo) em volta do meio dele, e os botões ↺ e ↻ da barra giram 90°. Perto de um ângulo reto, ele gruda; com Shift, gira de 15 em 15 graus. Ao escrever ou editar um texto, a mesma alça ao lado da de mover gira as letras, com a fonte escolhida. No celular, é só arrastar a alça com o dedo. <!-- demo: girar -->
+- **Novidades com animações**: cada recurso novo aparece num cartão com uma animação curta mostrando como usar e um botão **Experimentar**, que já abre a ferramenta certa (sem documento aberto, pede um PDF antes). Um clique na animação pausa. As correções continuam numa lista simples.
 
 ## 1.12.0
 
-- **Mover, copiar e colar objetos**: em **Editar texto e imagens**, como no Acrobat, qualquer objeto da página (parágrafo, imagem, desenho, degradê) pode ser arrastado para outro lugar, também os de dentro dos grupos dos PDFs do Canva. Vários de uma vez com Shift+clique ou arrastando uma área em volta; **Copiar**, **Recortar** e **Colar** (Ctrl+C, Ctrl+X, Ctrl+V) levam para outra página ou para outro documento aberto; Delete exclui e as setas movem aos poucos. O que estava por cima continua por cima.
-- **Duplicar com Alt**: arrastar um objeto com Alt (ou Ctrl) deixa o original no lugar e cria uma cópia. Editando um texto, arrastar a alça com Alt duplica o texto com a mesma fonte, o mesmo tamanho e as mesmas cores.
-- **No celular**: toque num desenho ou segure o dedo em qualquer objeto para selecionar, toque em outros para juntar e arraste a seleção; segure o dedo numa parte vazia da página para **Colar aqui**.
+- **Mover, copiar e colar objetos**: em **Editar texto e imagens**, como no Acrobat, qualquer objeto da página (parágrafo, imagem, desenho, degradê) pode ser arrastado para outro lugar, também os de dentro dos grupos dos PDFs do Canva. Vários de uma vez com Shift+clique ou arrastando uma área em volta; **Copiar**, **Recortar** e **Colar** (Ctrl+C, Ctrl+X, Ctrl+V) levam para outra página ou para outro documento aberto; Delete exclui e as setas movem aos poucos. O que estava por cima continua por cima. <!-- demo: mover -->
+- **Duplicar com Alt**: arrastar um objeto com Alt (ou Ctrl) deixa o original no lugar e cria uma cópia. Editando um texto, arrastar a alça com Alt duplica o texto com a mesma fonte, o mesmo tamanho e as mesmas cores. <!-- demo: duplicar -->
+- **No celular**: toque num desenho ou segure o dedo em qualquer objeto para selecionar, toque em outros para juntar e arraste a seleção; segure o dedo numa parte vazia da página para **Colar aqui**. <!-- demo: celular -->
 - **Espaço com a fonte original do PDF**: em alguns PDFs (comum com fontes como a Avenir), o espaço digitado ao editar um texto aparecia como um quadrado, na caixa, na lista de fontes e no PDF salvo. Agora ele sai normal.
 - **Edições no lugar certo**: em alguns PDFs, um texto, uma assinatura ou uma imagem acrescentados podiam sair deslocados ou em outro tamanho. E muitas edições na mesma página não deixam mais o conteúdo dela cada vez mais aninhado.
 
@@ -32,11 +42,11 @@ página dela no GitHub e para o aviso de novidades do programa.
 
 ## 1.10.0
 
-- **Largura da caixa de texto**: alças nas laterais, como no Canva, para mudar a largura ao editar ou adicionar texto. O texto quebra em linhas dentro da caixa e é gravado assim no PDF, inclusive em páginas giradas.
+- **Largura da caixa de texto**: alças nas laterais, como no Canva, para mudar a largura ao editar ou adicionar texto. O texto quebra em linhas dentro da caixa e é gravado assim no PDF, inclusive em páginas giradas. <!-- demo: largura -->
 
 ## 1.9.0
 
-- **Editar parágrafos inteiros**: um clique numa palavra seleciona o parágrafo todo, como no Acrobat. O texto se reorganiza na caixa enquanto você edita, mantendo o alinhamento (inclusive justificado) e o espaço entre as linhas.
+- **Editar parágrafos inteiros**: um clique numa palavra seleciona o parágrafo todo, como no Acrobat. O texto se reorganiza na caixa enquanto você edita, mantendo o alinhamento (inclusive justificado) e o espaço entre as linhas. <!-- demo: paragrafo -->
 - **Linhas inteiras**: a edição junta os pedaços de uma mesma linha, mesmo em PDFs que guardam cada palavra separada.
 
 ## 1.8.0
@@ -47,14 +57,14 @@ página dela no GitHub e para o aviso de novidades do programa.
 
 ## 1.7.0
 
-- **Dividir PDF** numa tela como a do iLovePDF: por intervalos (personalizados, fixos ou no modo inteligente), por páginas ou por tamanho. Excluir várias páginas de uma vez.
-- **Recortar páginas**: moldura ajustável, margens em centímetros e corte automático das margens brancas.
-- **Tarjar informações**: marque áreas ou pesquise (CPF, CNPJ, e-mail, nomes); o que fica debaixo da tarja sai de verdade do arquivo.
+- **Dividir PDF** numa tela como a do iLovePDF: por intervalos (personalizados, fixos ou no modo inteligente), por páginas ou por tamanho. Excluir várias páginas de uma vez. <!-- demo: dividir -->
+- **Recortar páginas**: moldura ajustável, margens em centímetros e corte automático das margens brancas. <!-- demo: recortar -->
+- **Tarjar informações**: marque áreas ou pesquise (CPF, CNPJ, e-mail, nomes); o que fica debaixo da tarja sai de verdade do arquivo. <!-- demo: tarjar -->
 - **Reparar PDF**: recupera arquivos danificados e diz o que foi consertado. Um PDF com senha continua protegido.
 
 ## 1.6.0
 
-- **Impressão**: janela própria, como a do Acrobat, com visualização: tamanho da página, pôster, várias páginas por folha e livreto. No computador, imprime direto na impressora escolhida.
+- **Impressão**: janela própria, como a do Acrobat, com visualização: tamanho da página, pôster, várias páginas por folha e livreto. No computador, imprime direto na impressora escolhida. <!-- demo: imprimir -->
 
 ## 1.5.0
 
@@ -71,7 +81,7 @@ página dela no GitHub e para o aviso de novidades do programa.
 
 ## 1.3.0
 
-- **Preencher e assinar**, como no Acrobat: assinatura digitada (com estilos de letra), desenhada ou de imagem; assinatura e iniciais salvas; marcas ✓ ✗ ● e a data de hoje.
+- **Preencher e assinar**, como no Acrobat: assinatura digitada (com estilos de letra), desenhada ou de imagem; assinatura e iniciais salvas; marcas ✓ ✗ ● e a data de hoje. <!-- demo: assinar -->
 
 ## 1.2.1
 

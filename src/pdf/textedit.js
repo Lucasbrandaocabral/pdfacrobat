@@ -562,10 +562,11 @@ function cover(page, line, bg) {
  * edição, quando o texto quebrou nela; sem elas, cada \n começa uma linha.
  * `bg` é a cor do fundo, usada se o texto antigo tiver de ser coberto. Texto
  * vazio só apaga a linha. Com `keep`, o texto antigo fica (duplicar a linha,
- * com a mesma fonte e as mesmas cores, em outro lugar). Devolve se o texto
- * antigo saiu do conteúdo.
+ * com a mesma fonte e as mesmas cores, em outro lugar). `angle`: a direção do
+ * texto novo (a da linha, se ele não foi girado). Devolve se o texto antigo
+ * saiu do conteúdo.
  */
-export async function editText(doc, pageIndex, { line, text, rows = null, style, catalog, bg, origin = line.origin, keep = false }) {
+export async function editText(doc, pageIndex, { line, text, rows = null, style, catalog, bg, origin = line.origin, angle = line.angle, keep = false }) {
   const page = doc.getPage(pageIndex);
   const all = findTextRuns(doc, page);
   const runs = lineRuns(all, line);
@@ -575,7 +576,7 @@ export async function editText(doc, pageIndex, { line, text, rows = null, style,
   if (removed.length) removeRuns(doc, page, removed);
   isolatePage(doc, page);
   if (!runs && !keep) cover(page, line, bg);
-  if (text.trim()) await writeText(doc, page, { origin, angle: line.angle, rows: rows || rowsOf(text), style, catalog, original });
+  if (text.trim()) await writeText(doc, page, { origin, angle, rows: rows || rowsOf(text), style, catalog, original });
   return Boolean(runs);
 }
 
@@ -586,9 +587,10 @@ export async function editText(doc, pageIndex, { line, text, rows = null, style,
  * linha de base, se ele não foi movido), na largura `width` (a do parágrafo,
  * se ela não mudou). A distância entre as linhas acompanha o tamanho da
  * letra; o alinhamento é o do parágrafo. Com `keep`, o parágrafo antigo fica
- * (duplicar). Devolve se todo o texto antigo saiu do conteúdo.
+ * (duplicar). `angle`: a direção do texto (a do parágrafo, se ele não foi
+ * girado). Devolve se todo o texto antigo saiu do conteúdo.
  */
-export async function editBlock(doc, pageIndex, { block, rows, style, catalog, bg, origin = block.origin, width = block.width, keep = false }) {
+export async function editBlock(doc, pageIndex, { block, rows, style, catalog, bg, origin = block.origin, width = block.width, angle = block.angle, keep = false }) {
   const page = doc.getPage(pageIndex);
   const all = findTextRuns(doc, page);
   const found = block.lines.map((line) => lineRuns(all, line));
@@ -603,7 +605,7 @@ export async function editBlock(doc, pageIndex, { block, rows, style, catalog, b
   if (rows.some((row) => row.text.trim())) {
     await writeText(doc, page, {
       origin,
-      angle: block.angle,
+      angle,
       rows,
       style,
       catalog,

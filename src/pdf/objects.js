@@ -3,10 +3,10 @@
 // repetido (formulário desenhado mais de uma vez), inclusive dentro de
 // formulários desenhados uma vez só (comuns em PDFs do Canva).
 //
-// Mover apaga o original onde ele está (o resto da página não se mexe) e
-// desenha por cima uma cópia exata, deslocada: os mesmos comandos, com o estado
-// em que o original era desenhado (fonte, cores, espessura, transparência,
-// recorte e camada). Duplicar é o mesmo sem apagar. Copiar leva os objetos, só
+// Mover (ou girar) apaga o original onde ele está (o resto da página não se
+// mexe) e desenha por cima uma cópia exata, deslocada (ou girada): os mesmos
+// comandos, com o estado em que o original era desenhado (fonte, cores,
+// espessura, transparência, recorte e camada). Duplicar é o mesmo sem apagar. Copiar leva os objetos, só
 // com o que eles usam, para um PDF pequeno, que colar desenha em qualquer
 // página, deste ou de outro documento.
 import { PDFArray, PDFDict, PDFDocument, PDFName, PDFObjectCopier, PDFRawStream, PDFRef, PDFStream } from "@cantoo/pdf-lib";
@@ -31,6 +31,7 @@ const pathOf = (scope) => (scope ? `${pathOf(scope.parent)}/${scope.name}` : "")
 // Nome de PDF com os caracteres especiais em #xx.
 const escapeName = (name) => name.replace(/[^!-~]|[#()<>[\]{}/%]/g, (c) => `#${c.charCodeAt(0).toString(16).padStart(2, "0")}`);
 const translation = ([dx, dy]) => [1, 0, 0, 1, dx, dy];
+const sameMatrix = (a, b) => a.every((v, i) => v === b[i]);
 
 /** Os pedaços (bytes ou texto) emendados. Recebe uma lista: espalhar milhares de pedaços como argumentos estoura a pilha. */
 function concat(parts) {
@@ -74,7 +75,16 @@ export function unionRect(rects) {
 
 const intersect = (a, b) => (a && b ? [Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.min(a[2], b[2]), Math.min(a[3], b[3])] : a || b);
 const expand = (r, pad) => (r ? [r[0] - pad, r[1] - pad, r[2] + pad, r[3] + pad] : r);
-const shift = (r, [dx, dy]) => (r ? [r[0] + dx, r[1] + dy, r[2] + dx, r[3] + dy] : r);
+/** A caixa `r` levada pela matriz `m` (a caixa dos quatro cantos levados). */
+const transformRect = (r, m) =>
+  r
+    ? boxOf([
+        [r[0], r[1]],
+        [r[2], r[1]],
+        [r[0], r[3]],
+        [r[2], r[3]],
+      ].map(([x, y]) => transformPoint(m, x, y)))
+    : r;
 const overlaps = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
 const scaleOf = (m) => Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2])) || 1;
 const valid = (r) => (r && r.every(Number.isFinite) && r[0] <= r[2] && r[1] <= r[3] ? r : null);
@@ -486,11 +496,12 @@ function withNames(item, rename) {
 }
 
 /**
- * Os comandos que redesenham os objetos de `items` ({ obj, delta [dx, dy] no
- * espaço da página }), por cima de tudo e na ordem da lista. Objetos seguidos
- * com o mesmo estado ficam no mesmo bloco q ... Q. Com `layers`, a cópia fica
- * na mesma camada do original. Devolve os bytes e, de cada item, onde o bloco
- * dele fica nos bytes (null se não deu para desenhar).
+ * Os comandos que redesenham os objetos de `items` ({ obj, move: a matriz que
+ * os leva no espaço da página, deslocando ou girando }), por cima de tudo e na
+ * ordem da lista. Objetos seguidos com o mesmo estado ficam no mesmo bloco
+ * q ... Q. Com `layers`, a cópia fica na mesma camada do original. Devolve os
+ * bytes e, de cada item, onde o bloco dele fica nos bytes (null se não deu
+ * para desenhar).
  */
 function drawCopies(items, rename, { layers = true } = {}) {
   const parts = [];
@@ -512,19 +523,12 @@ function drawCopies(items, rename, { layers = true } = {}) {
   };
   const none = [];
   items.forEach((item, i) => {
-    const { obj, delta } = item;
+    const { obj, move } = item;
     const marks = layers ? obj.marks : none;
-    const named = (e) => withNames(e, (entry, cat, name) => rename(entry, cat, name, delta));
-    const same =
-      open &&
-      open.entries === obj.entries &&
-      open.marks === marks &&
-      open.delta[0] === delta[0] &&
-      open.delta[1] === delta[1] &&
-      open.ctm.every((v, k) => v === obj.ctm[k]);
+    const named = (e) => withNames(e, (entry, cat, name) => rename(entry, cat, name, move));
+    const same = open && open.entries === obj.entries && open.marks === marks && sameMatrix(open.move, move) && sameMatrix(open.ctm, obj.ctm);
     if (!same) {
       close();
-      const move = translation(delta);
       const own = [];
       let current = IDENTITY;
       const goTo = (ctm) => {
@@ -548,7 +552,7 @@ function drawCopies(items, rename, { layers = true } = {}) {
         ranges[i] = null;
         return;
       }
-      open = { entries: obj.entries, marks, ctm: obj.ctm, delta, range: [length, length] };
+      open = { entries: obj.entries, marks, ctm: obj.ctm, move, range: [length, length] };
       push("q\n", ...own);
       for (const mark of marks) push(named(mark), "\n");
     }
@@ -565,7 +569,8 @@ function drawCopies(items, rename, { layers = true } = {}) {
  * copiados quando vêm de outro documento (`source`). O nome muda quando a
  * página já usa o mesmo nome para outra coisa. Os recursos da página ficam só
  * dela (podiam ser os mesmos de outras páginas). Um padrão (Pattern) é
- * posicionado em relação à página: a cópia ganha um padrão deslocado junto.
+ * posicionado em relação à página: a cópia ganha um padrão deslocado (ou
+ * girado) junto.
  */
 function resourceImporter(doc, page, source) {
   const { context } = doc;
@@ -588,8 +593,8 @@ function resourceImporter(doc, page, source) {
     categories.set(cat, dict);
     return dict;
   };
-  return (item, cat, name, delta = [0, 0]) => {
-    const pattern = cat === "Pattern" ? multiply(item.scope?.base ?? IDENTITY, translation(delta)) : null;
+  return (item, cat, name, move = IDENTITY) => {
+    const pattern = cat === "Pattern" ? multiply(item.scope?.base ?? IDENTITY, move) : null;
     const moved = pattern && !isIdentity(pattern);
     const id = `${pathOf(item.scope)}|${cat}|${name}|${moved ? pattern.join(",") : ""}`;
     if (names.has(id)) return names.get(id);
@@ -777,32 +782,48 @@ const chosen = (objects, keys) => {
 };
 
 /**
- * Desloca na página `page` (índice ou PDFPage) os objetos `keys` (de
- * pageObjects) em `delta` [dx, dy] (pontos do PDF): o original sai do lugar e
- * uma cópia exata fica por cima. O que estava por cima de um objeto movido
- * continua por cima dele (é desenhado de novo, no mesmo lugar). Com `keep`, o
- * original fica (duplicar). Devolve as chaves dos objetos movidos (ou das
- * cópias) na página.
+ * Leva na página `page` (índice ou PDFPage) os objetos `keys` (de pageObjects)
+ * pela matriz `matrix` (no espaço da página, em pontos do PDF: deslocar,
+ * girar em volta de um ponto...): o original sai do lugar e uma cópia exata,
+ * levada, fica por cima. O que estava por cima de um objeto mexido continua
+ * por cima dele (é desenhado de novo, no mesmo lugar). Com `keep`, o original
+ * fica (duplicar). Devolve as chaves dos objetos levados (ou das cópias) na página.
  */
-export function moveObjects(doc, page, keys, delta, { keep = false } = {}) {
+export function transformObjects(doc, page, keys, matrix, { keep = false } = {}) {
   page = pageOf(doc, page);
   const all = pageObjects(doc, page);
   const targets = new Set(chosen(all, keys));
   if (!targets.size) return [];
-  if (keep) return appendCopies(doc, page, doc, [...targets].map((obj) => ({ obj, delta, target: true })));
+  if (keep) return appendCopies(doc, page, doc, [...targets].map((obj) => ({ obj, move: matrix, target: true })));
   const items = [];
   const above = [];
   for (const obj of all) {
     if (targets.has(obj)) {
-      items.push({ obj, delta, target: true });
-      if (obj.rect) above.push(shift(obj.rect, delta));
+      items.push({ obj, move: matrix, target: true });
+      if (obj.rect) above.push(transformRect(obj.rect, matrix));
     } else if (above.length && obj.rect && !obj.invisible && above.some((r) => overlaps(r, obj.rect))) {
-      items.push({ obj, delta: [0, 0], target: false });
+      items.push({ obj, move: IDENTITY, target: false });
       above.push(obj.rect);
     }
   }
   blankObjects(doc, page, items.map((item) => item.obj));
   return appendCopies(doc, page, doc, items);
+}
+
+/** Desloca os objetos `keys` em `delta` [dx, dy] (pontos do PDF); veja transformObjects. */
+export function moveObjects(doc, page, keys, delta, options) {
+  return transformObjects(doc, page, keys, translation(delta), options);
+}
+
+/**
+ * A matriz que gira `angle` radianos (no sentido anti-horário do PDF) em volta
+ * de `center` [x, y] e depois desloca em `delta`.
+ */
+export function rotationAbout(center, angle, delta = [0, 0]) {
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const [cx, cy] = center;
+  return [cos, sin, -sin, cos, cx - cx * cos + cy * sin + delta[0], cy - cx * sin - cy * cos + delta[1]];
 }
 
 /** Tira da página (índice ou PDFPage) os objetos `keys`. Devolve quantos saíram. */
@@ -828,7 +849,7 @@ export async function copyObjects(doc, page, keys) {
   const crop = page.getCropBox();
   target.setCropBox(crop.x, crop.y, crop.width, crop.height);
   target.setRotation(page.getRotation());
-  appendCopies(clip, target, doc, targets.map((obj) => ({ obj, delta: [0, 0], target: true })));
+  appendCopies(clip, target, doc, targets.map((obj) => ({ obj, move: IDENTITY, target: true })));
   return { pdf: await clip.save(), rect: unionRect(targets.map((o) => o.rect)), count: targets.length };
 }
 
@@ -841,5 +862,5 @@ export async function pasteObjects(doc, page, pdf, delta = [0, 0]) {
   page = pageOf(doc, page);
   const clip = await PDFDocument.load(pdf, { updateMetadata: false });
   const objects = pageObjects(clip, clip.getPage(0));
-  return appendCopies(doc, page, clip, objects.map((obj) => ({ obj, delta, target: true })));
+  return appendCopies(doc, page, clip, objects.map((obj) => ({ obj, move: translation(delta), target: true })));
 }

@@ -4,7 +4,7 @@
 // texto/imagens).
 import { PDFDocument } from "@cantoo/pdf-lib";
 import { AnnotationEditorParamsType, AnnotationEditorType, brokenSpaceFaces, fontInfo, getTextItems, loadPdf, pdfjsLib } from "./pdfjs.js";
-import { $, $$, askText, el, hexToRgb, rgbToHex, toast } from "./ui.js";
+import { $, $$, UserError, askText, el, hexToRgb, rgbToHex, toast } from "./ui.js";
 import { icon } from "./icons.js";
 import * as annotations from "./pdf/annotations.js";
 import { findImages, imageHasMask, isolatePage, moveImage, readPageContent, removeImage } from "./pdf/content.js";
@@ -12,7 +12,8 @@ import { drawImageInBox, drawPngOnPage, jpegRotation } from "./pdf/ops.js";
 import { drawMark, today } from "./pdf/fill.js";
 import { LINE_HEIGHT, addText, describeLine, editBlock, editText, fontStyle, groupLines, groupParagraphs } from "./pdf/textedit.js";
 import { baseFontName, findTextRuns, lineRuns, removeRuns } from "./pdf/textops.js";
-import { pageObjects } from "./pdf/objects.js";
+import { pageObjects, rotationAbout, transformObjects } from "./pdf/objects.js";
+import { dragRotation, normalizeAngle, rotateHandle, screenAngle } from "./rotate.js";
 import { ObjectSelection, objectUnits, unitAt } from "./objectsel.js";
 import { catalogFont, cssFamily, exactFamily, fallbackFont, fontById, loadFontFace, matchFont, rememberFont, spaceFamily } from "./fonts.js";
 import { closeFontPicker, fontPickerOpen, openFontPicker } from "./fontpicker.js";
@@ -381,7 +382,7 @@ export class ToolController {
     const tool = this.tool;
     if (!["note", "shape", "sign", "stamp", "mark", "edit", "addtext"].includes(tool)) return;
     const editTool = tool === "edit" || tool === "addtext";
-    if (editTool && e.target.closest?.(".text-box, .image-box, .float-bar, .font-picker")) return;
+    if (editTool && e.target.closest?.(".text-box, .image-box, .float-bar, .font-picker, .rotate-handle")) return;
     const hit = this.pageHit(e);
     if (!hit) {
       if (editTool && this.area.contains(e.target)) this.finishEdit();
@@ -1047,7 +1048,9 @@ export class ToolController {
     const grip = el("span", { class: "text-grip", title: mode === "edit" ? "Arraste para mover (com Alt ou Ctrl, duplica)" : "Arraste para mover", "aria-hidden": "true" });
     // As alças das laterais mudam a largura: o texto quebra nela, como no Canva.
     const sizers = ["left", "right"].map((side) => el("span", { class: "text-sizer", dataset: { side }, title: "Arraste para mudar a largura", "aria-hidden": "true" }));
-    const box = el("div", { class: "text-box" }, [grip, editor, ...sizers]);
+    // Ao lado da de mover, a de girar as letras (em volta do meio da caixa).
+    const rotator = rotateHandle("text-rotate");
+    const box = el("div", { class: "text-box" }, [grip, rotator, editor, ...sizers]);
     const editing = {
       kind: "text",
       mode,
@@ -1065,6 +1068,7 @@ export class ToolController {
       original,
       anchor,
       offset: [0, 0],
+      turn: 0,
       viewport: hit.pageView.viewport,
     };
     editing.bar = this.textBar(editing);
@@ -1094,6 +1098,7 @@ export class ToolController {
       document.execCommand("insertText", false, pasted.replace(/\r\n?/g, "\n"));
     });
     grip.addEventListener("pointerdown", (e) => this.startTextDrag(e));
+    rotator.addEventListener("pointerdown", (e) => this.startTextRotate(e));
     for (const sizer of sizers) sizer.addEventListener("pointerdown", (e) => this.startTextResize(e, sizer.dataset.side));
 
     this.styleTextEditor();
@@ -1244,6 +1249,7 @@ export class ToolController {
     }
     x += editing.offset[0];
     y += editing.offset[1];
+    theta += editing.turn;
     Object.assign(box.style, {
       left: `${x}px`,
       top: `${y - baseline}px`,
@@ -1330,6 +1336,43 @@ export class ToolController {
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
     window.addEventListener("pointercancel", up);
+  }
+
+  /**
+   * Arrastar a alça redonda gira o texto em volta do meio da caixa (com Shift,
+   * de 15 em 15°; perto de um ângulo reto, gruda nele). As letras saem no PDF
+   * nesse ângulo, com a fonte escolhida.
+   */
+  startTextRotate(e) {
+    const editing = this.editing;
+    if (editing?.kind !== "text" || e.button > 0) return;
+    const { box, layer } = editing;
+    const r = box.getBoundingClientRect();
+    const l = layer.getBoundingClientRect();
+    // O meio da caixa (girada ou não, é o meio do retângulo em volta dela), na página.
+    const center = [r.left + r.width / 2 - l.left, r.top + r.height / 2 - l.top];
+    const from = { offset: [...editing.offset], turn: editing.turn, point: [...editing.baselinePoint] };
+    const turnTo = (turn) => {
+      const cos = Math.cos(turn);
+      const sin = Math.sin(turn);
+      const [px, py] = [from.point[0] - center[0], from.point[1] - center[1]];
+      // O começo da linha de base gira em volta do meio; a caixa vai junto.
+      const point = [center[0] + px * cos - py * sin, center[1] + px * sin + py * cos];
+      editing.offset = [from.offset[0] + point[0] - from.point[0], from.offset[1] + point[1] - from.point[1]];
+      editing.turn = from.turn + turn;
+      this.placeTextEditor();
+    };
+    box.classList.add("rotating");
+    dragRotation(e, [center[0] + l.left, center[1] + l.top], {
+      base: editing.theta,
+      onTurn: turnTo,
+      onEnd: (turn) => {
+        box.classList.remove("rotating");
+        if (this.editing !== editing) return;
+        if (turn === null) turnTo(0);
+        editing.editor.focus({ preventScroll: true });
+      },
+    });
   }
 
   /** Duplicando, o texto original aparece no lugar dele (sem a página limpa nem o fundo por cima). */
@@ -1465,13 +1508,14 @@ export class ToolController {
     const rows = editing.width !== null ? visualRows(editing.editor, paragraph?.align === "justify") : null;
     const [bx, by] = editing.baselinePoint;
     const origin = viewport.convertToPdfPoint(bx, by);
+    // Na direção do texto na tela (de pé, mesmo com a página girada; ou como ele foi girado).
+    const ahead = viewport.convertToPdfPoint(bx + 10 * Math.cos(editing.theta), by + 10 * Math.sin(editing.theta));
+    const angle = Math.atan2(ahead[1] - origin[1], ahead[0] - origin[0]);
+    const rotated = Math.abs(normalizeAngle(editing.turn)) > 0.003;
     this.clearEdit();
     const fontId = state.font === "original" ? state.substitute : state.font;
     if (mode === "add") {
       if (!text.trim()) return;
-      // Na direção do texto na tela (de pé, mesmo com a página girada).
-      const ahead = viewport.convertToPdfPoint(bx + 10, by);
-      const angle = Math.atan2(ahead[1] - origin[1], ahead[0] - origin[0]);
       this.saveNewTextStyle(state);
       rememberFont(fontId);
       await this.run("Adicionando texto…", async () => {
@@ -1480,7 +1524,8 @@ export class ToolController {
       });
       return;
     }
-    const moved = Math.hypot(...editing.offset) > 0.5;
+    // Girar leva junto o começo do texto (o giro é em volta do meio da caixa).
+    const moved = Math.hypot(...editing.offset) > 0.5 || rotated;
     const initial = editing.initial;
     const restyled =
       ["font", "bold", "italic", "size", "spacing"].some((k) => state[k] !== initial[k]) || state.color.some((v, i) => Math.abs(v - initial.color[i]) > 0.002);
@@ -1490,6 +1535,8 @@ export class ToolController {
     const keep = Boolean(editing.duplicate) && moved;
     if (keep && !text.trim()) return;
     if (text === editing.text0 && !moved && !restyled && !resized) return;
+    // Sem girar, a direção de antes, exata (a da tela passa por arredondamentos).
+    const direction = rotated ? { angle } : {};
     if (state.font !== "original") rememberFont(fontId);
     const label = keep ? "Duplicando texto…" : text.trim() ? "Aplicando texto…" : "Apagando texto…";
     await this.run(label, async () => {
@@ -1497,24 +1544,30 @@ export class ToolController {
       const style = { ...state, spacing: state.spacing || 0 };
       if (paragraph) {
         const start = moved ? origin : paragraph.origin;
-        await hit.tab.edit((doc) => editBlock(doc, hit.pageIndex, { block: paragraph, rows, style, catalog, bg, origin: start, width: editing.width, keep }));
+        await hit.tab.edit((doc) => editBlock(doc, hit.pageIndex, { block: paragraph, rows, style, catalog, bg, origin: start, width: editing.width, keep, ...direction }));
       } else {
-        await hit.tab.edit((doc) => editText(doc, hit.pageIndex, { line, text, rows, style, catalog, bg, origin: moved ? origin : line.origin, keep }));
+        await hit.tab.edit((doc) => editText(doc, hit.pageIndex, { line, text, rows, style, catalog, bg, origin: moved ? origin : line.origin, keep, ...direction }));
       }
     });
   }
 
   /**
    * Caixa com alças para mover e redimensionar, com a prévia dentro: a imagem
-   * em edição ou a assinatura sendo posicionada.
+   * em edição ou a assinatura sendo posicionada. Com `rotate`, a alça redonda
+   * embaixo gira (a imagem).
    */
-  openBox(hit, kind, rect, { handles = ALL_HANDLES, preview, buttons, extra }) {
+  openBox(hit, kind, rect, { handles = ALL_HANDLES, preview, buttons, extra, rotate = false }) {
     const layer = this.overlayFor(hit);
     const box = el("div", { class: "image-box" }, [preview]);
     for (const h of handles) box.append(el("span", { class: "handle", dataset: { h } }));
+    if (rotate) {
+      const rotator = rotateHandle("box-rotate");
+      rotator.addEventListener("pointerdown", (e) => this.startImageRotate(e));
+      box.append(rotator);
+    }
     const bar = el("div", { class: "float-bar" }, buttons);
     layer.append(box, bar);
-    this.editing = { kind, hit, layer, box, bar, preview, viewport: hit.pageView.viewport, rect: { ...rect }, original: { ...rect }, aspect: rect.width / rect.height, ...extra };
+    this.editing = { kind, hit, layer, box, bar, preview, viewport: hit.pageView.viewport, rect: { ...rect }, original: { ...rect }, aspect: rect.width / rect.height, turn: 0, ...extra };
     this.layoutImageBox();
     box.addEventListener("pointerdown", (e) => this.startImageDrag(e));
     return this.editing;
@@ -1526,9 +1579,14 @@ export class ToolController {
     // Até a prévia exata ficar pronta, mostra o recorte do que está na tela.
     const preview = pageCanvas ? cropCanvas(pageCanvas, css) : el("span");
     preview.classList.add("box-preview");
+    const turn = (name, title, angle) =>
+      el("button", { class: "btn icon-only", type: "button", title, "aria-label": title, html: icon(name), onclick: () => this.rotateImageBy(angle) });
     const editing = this.openBox(hit, "image", css, {
       preview,
+      rotate: true,
       buttons: [
+        turn("rotateCcw", "Girar 90° para a esquerda", -Math.PI / 2),
+        turn("rotateCw", "Girar 90° para a direita", Math.PI / 2),
         el("button", { class: "btn", type: "button", html: `${icon("image")}<span>Substituir</span>`, onclick: () => this.replaceImage() }),
         el("button", { class: "btn", type: "button", html: `${icon("trash")}<span>Excluir</span>`, onclick: () => this.deleteImage() }),
         el("button", { class: "btn primary", type: "button", text: "Concluir", onclick: () => this.finishEdit() }),
@@ -1594,11 +1652,13 @@ export class ToolController {
   }
 
   layoutImageBox() {
-    const { box, bar, rect, layer } = this.editing;
-    Object.assign(box.style, { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px` });
+    const { box, bar, rect, layer, turn = 0, rotating } = this.editing;
+    Object.assign(box.style, { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px`, transform: turn ? `rotate(${turn}rad)` : "" });
+    bar.hidden = Boolean(rotating);
     // Barra acima da caixa (abaixo quando não cabe) e sem passar da borda da página.
     const left = Math.max(0, Math.min(rect.left, layer.clientWidth - bar.offsetWidth));
-    const top = rect.top >= 40 ? rect.top - 40 : rect.top + rect.height + 8;
+    // Embaixo, a barra passa da alça de girar (quando a caixa tem uma).
+    const top = rect.top >= 40 ? rect.top - 40 : rect.top + rect.height + (box.querySelector(".rotate-handle") ? 52 : 8);
     Object.assign(bar.style, { left: `${left}px`, top: `${top}px` });
   }
 
@@ -1691,6 +1751,43 @@ export class ToolController {
     window.addEventListener("pointerup", up);
   }
 
+  /**
+   * Alça redonda da imagem: gira a caixa com o ponteiro (em volta do meio dela;
+   * com Shift, de 15 em 15°) e, ao soltar, grava (com o que mais mudou).
+   */
+  startImageRotate(e) {
+    const editing = this.editing;
+    if (editing?.kind !== "image" || e.button > 0) return;
+    const r = editing.box.getBoundingClientRect();
+    const [m0, m1] = editing.image.ctm || [1, 0];
+    editing.rotating = true;
+    editing.box.classList.add("rotating");
+    dragRotation(e, [r.left + r.width / 2, r.top + r.height / 2], {
+      base: screenAngle(editing.viewport, Math.atan2(m1, m0)),
+      onTurn: (turn) => {
+        editing.turn = turn;
+        this.layoutImageBox();
+      },
+      onEnd: (turn) => {
+        editing.rotating = false;
+        editing.box.classList.remove("rotating");
+        if (this.editing !== editing) return;
+        editing.turn = turn === null || Math.abs(normalizeAngle(turn)) < 0.003 ? 0 : turn;
+        this.layoutImageBox();
+        if (editing.turn) this.track(this.commitImage());
+      },
+    });
+  }
+
+  /** Botões da barra da imagem: gira `angle` radianos (90° para um lado ou para o outro). */
+  rotateImageBy(angle) {
+    const editing = this.editing;
+    if (editing?.kind !== "image") return null;
+    editing.turn = angle;
+    this.layoutImageBox();
+    return this.track(this.commitImage());
+  }
+
   imagePdfRect() {
     const { rect, viewport: vp } = this.editing;
     const a = vp.convertToPdfPoint(rect.left, rect.top + rect.height);
@@ -1699,12 +1796,30 @@ export class ToolController {
   }
 
   async commitImage() {
-    const { hit, image, rect, original } = this.editing;
+    const { hit, image, rect, original, turn = 0 } = this.editing;
     const changed = ["left", "top", "width", "height"].some((k) => Math.abs(rect[k] - original[k]) > 0.5);
-    const target = this.imagePdfRect();
+    const target = changed ? this.imagePdfRect() : image.rect;
+    const rotated = Math.abs(normalizeAngle(turn)) > 0.003;
     this.clearEdit();
-    if (!changed) return;
-    await this.run("Movendo imagem…", () => hit.tab.edit((doc) => moveImage(doc, doc.getPage(hit.pageIndex), image.index, target)));
+    if (!rotated) {
+      if (changed) await this.run("Movendo imagem…", () => hit.tab.edit((doc) => moveImage(doc, doc.getPage(hit.pageIndex), image.index, target)));
+      return;
+    }
+    const keys = await this.run("Girando imagem…", () =>
+      hit.tab.edit((doc) => {
+        const page = doc.getPage(hit.pageIndex);
+        if (changed) moveImage(doc, page, image.index, target);
+        // A imagem (já no lugar novo) entre os objetos da página, pela caixa dela.
+        const near = (a, b) => Math.abs(a - b) < 0.75;
+        const found = pageObjects(doc, page).find((o) => o.kind === "image" && !o.scope && o.rect?.every((v, i) => near(v, target[i])));
+        if (!found) throw new UserError("Não foi possível girar esta imagem.");
+        // A tela tem o y para baixo: o horário dela é o anti-horário do PDF.
+        const center = [(target[0] + target[2]) / 2, (target[1] + target[3]) / 2];
+        return transformObjects(doc, page, [found.key], rotationAbout(center, -turn));
+      }),
+    );
+    // A imagem girada fica selecionada, para girar mais, mover ou duplicar.
+    if (keys?.length) await this.objects.reselect(hit.tab, hit.pageNumber, keys);
   }
 
   deleteImage() {
@@ -1826,7 +1941,7 @@ function estimateSpacing(editor, line, scale) {
 
 /** O retângulo na tela da caixa de texto com as alças (que ficam por fora dela). */
 function handlesRect(box) {
-  const rects = [box, ...box.querySelectorAll(".text-grip, .text-sizer")].map((node) => node.getBoundingClientRect());
+  const rects = [box, ...box.querySelectorAll(".text-grip, .text-sizer, .rotate-handle")].map((node) => node.getBoundingClientRect());
   return {
     left: Math.min(...rects.map((r) => r.left)),
     top: Math.min(...rects.map((r) => r.top)),
