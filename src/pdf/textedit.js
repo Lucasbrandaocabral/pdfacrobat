@@ -557,18 +557,20 @@ function cover(page, line, bg) {
  * movida). `rows` ({ text, justify }): as linhas como ficaram na caixa de
  * edição, quando o texto quebrou nela; sem elas, cada \n começa uma linha.
  * `bg` é a cor do fundo, usada se o texto antigo tiver de ser coberto. Texto
- * vazio só apaga a linha. Devolve se o texto antigo saiu do conteúdo.
+ * vazio só apaga a linha. Com `keep`, o texto antigo fica (duplicar a linha,
+ * com a mesma fonte e as mesmas cores, em outro lugar). Devolve se o texto
+ * antigo saiu do conteúdo.
  */
-export async function editText(doc, pageIndex, { line, text, rows = null, style, catalog, bg, origin = line.origin }) {
+export async function editText(doc, pageIndex, { line, text, rows = null, style, catalog, bg, origin = line.origin, keep = false }) {
   const page = doc.getPage(pageIndex);
   const all = findTextRuns(doc, page);
   const runs = lineRuns(all, line);
   const original = style.font === "original" ? originalOf(doc, runs) : null;
   // Sem os trechos visíveis (texto numa imagem escaneada), cobre a linha e tira o texto invisível do OCR.
-  const removed = runs || hiddenRuns(all, line);
+  const removed = keep ? [] : runs || hiddenRuns(all, line);
   if (removed.length) removeRuns(doc, page, removed);
   isolatePage(doc, page);
-  if (!runs) cover(page, line, bg);
+  if (!runs && !keep) cover(page, line, bg);
   if (text.trim()) await writeText(doc, page, { origin, angle: line.angle, rows: rows || rowsOf(text), style, catalog, original });
   return Boolean(runs);
 }
@@ -579,20 +581,20 @@ export async function editText(doc, pageIndex, { line, text, rows = null, style,
  * editText), a partir de `origin` (o começo da faixa do parágrafo na primeira
  * linha de base, se ele não foi movido), na largura `width` (a do parágrafo,
  * se ela não mudou). A distância entre as linhas acompanha o tamanho da
- * letra; o alinhamento é o do parágrafo.
- * Devolve se todo o texto antigo saiu do conteúdo.
+ * letra; o alinhamento é o do parágrafo. Com `keep`, o parágrafo antigo fica
+ * (duplicar). Devolve se todo o texto antigo saiu do conteúdo.
  */
-export async function editBlock(doc, pageIndex, { block, rows, style, catalog, bg, origin = block.origin, width = block.width }) {
+export async function editBlock(doc, pageIndex, { block, rows, style, catalog, bg, origin = block.origin, width = block.width, keep = false }) {
   const page = doc.getPage(pageIndex);
   const all = findTextRuns(doc, page);
   const found = block.lines.map((line) => lineRuns(all, line));
   const runs = found.flatMap((r) => r || []);
   const original = style.font === "original" ? originalOf(doc, runs) : null;
-  const hidden = block.lines.flatMap((line, i) => (found[i] ? [] : hiddenRuns(all, line)));
-  if (runs.length || hidden.length) removeRuns(doc, page, [...runs, ...hidden]);
+  const hidden = keep ? [] : block.lines.flatMap((line, i) => (found[i] ? [] : hiddenRuns(all, line)));
+  if (!keep && (runs.length || hidden.length)) removeRuns(doc, page, [...runs, ...hidden]);
   isolatePage(doc, page);
   block.lines.forEach((line, i) => {
-    if (!found[i]) cover(page, line, bg);
+    if (!found[i] && !keep) cover(page, line, bg);
   });
   if (rows.some((row) => row.text.trim())) {
     await writeText(doc, page, {

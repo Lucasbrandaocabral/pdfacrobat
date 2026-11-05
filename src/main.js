@@ -372,6 +372,11 @@ const actions = {
   sign: () => fillSign.sign(app, "signature"),
   "sign-initials": () => fillSign.sign(app, "initials"),
   "check-updates": () => checkForUpdates(),
+  "select-all": () => {
+    // Num campo ou no texto em edição, o texto dele; na ferramenta Editar, os objetos da página.
+    if (isTyping(document.activeElement) || app.tools.tool !== "edit") document.execCommand("selectAll");
+    else app.tools.objects.selectAll();
+  },
 };
 
 // Ações que não mexem no documento deixam aberta a edição em andamento (a
@@ -395,6 +400,7 @@ const LEAVES_EDIT_OPEN = new Set([
   "about",
   "news",
   "confirm-close",
+  "select-all",
 ]);
 
 async function runAction(name) {

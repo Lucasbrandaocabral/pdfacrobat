@@ -12,6 +12,8 @@ import { drawImageInBox, drawPngOnPage, jpegRotation } from "./pdf/ops.js";
 import { drawMark, today } from "./pdf/fill.js";
 import { LINE_HEIGHT, addText, describeLine, editBlock, editText, fontStyle, groupLines, groupParagraphs } from "./pdf/textedit.js";
 import { baseFontName, findTextRuns, lineRuns, removeRuns } from "./pdf/textops.js";
+import { pageObjects } from "./pdf/objects.js";
+import { ObjectSelection, objectUnits, unitAt } from "./objectsel.js";
 import { catalogFont, cssFamily, exactFamily, fallbackFont, fontById, loadFontFace, matchFont, rememberFont } from "./fonts.js";
 import { closeFontPicker, fontPickerOpen, openFontPicker } from "./fontpicker.js";
 import { Perm, loadForEdit } from "./pdf/security.js";
@@ -80,6 +82,7 @@ export class ToolController {
 
     this.buildStampMenu();
     this.bindEvents();
+    this.objects = new ObjectSelection(this);
     manager.on("ready", (tab) => {
       if (tab.active) this.applyEditorMode(tab);
     });
@@ -164,6 +167,7 @@ export class ToolController {
     this.ghost.hidden = true;
     this.ghost.dataset.kind = "";
     this.cancelDrag();
+    this.objects?.closeMenu();
     if (tool !== "edit" || this.editing?.kind === "signature") this.finishEdit();
     if (this.tab?.doc) this.applyEditorMode(this.tab);
   }
@@ -293,6 +297,8 @@ export class ToolController {
     this.area.addEventListener("pointerup", (e) => this.onPointerUp(e));
     this.area.addEventListener("pointerleave", () => {
       this.ghost.hidden = true;
+      cancelAnimationFrame(this.hoverFrame);
+      this.lastPage = null;
       this.removeHover();
     });
     document.addEventListener("keydown", (e) => this.onKeyDown(e), true);
@@ -317,13 +323,19 @@ export class ToolController {
     const field = e.target.closest?.("input, textarea, select");
     if (e.key === "Escape") {
       if (this.editing && !field) {
-        // Só desfaz a edição aberta: a ferramenta continua escolhida.
+        // Só desfaz a edição aberta: a ferramenta continua escolhida. A seleção
+        // de objetos grava antes o que as setas moveram.
         e.preventDefault();
         e.stopPropagation();
-        this.clearEdit();
+        if (this.editing.kind === "objects") this.finishEdit();
+        else this.clearEdit();
       } else if (this.drag) {
         this.cancelDrag();
       }
+      return;
+    }
+    if (!field && (!this.editing || this.editing.kind === "objects") && this.objects.key(e)) {
+      e.stopPropagation();
       return;
     }
     const box = this.editing?.kind === "image" || this.editing?.kind === "signature";
@@ -383,7 +395,7 @@ export class ToolController {
     else if (tool === "stamp") this.placeStamp(hit);
     else if (tool === "mark") this.placeMark(hit);
     else if (tool === "addtext") this.addTextAt(hit);
-    else this.editAt(hit);
+    else this.objects.press(e, hit);
   }
 
   /** Só conclui no fim de um toque sem arrastar: rolar a página com o dedo não conta. */
@@ -401,7 +413,7 @@ export class ToolController {
     }
     if (this.pending) this.movePendingGhost(e);
     else if (PLACING.has(this.tool)) this.moveGhost(e);
-    else if (this.tool === "edit" && !this.editing) {
+    else if (this.tool === "edit" && (!this.editing || (this.editing.kind === "objects" && !this.editing.dragging))) {
       cancelAnimationFrame(this.hoverFrame);
       this.hoverFrame = requestAnimationFrame(() => this.updateHover(e));
     }
@@ -798,7 +810,16 @@ export class ToolController {
         const [x0, y0, x1, y1] = page.view;
         const area = Math.abs((x1 - x0) * (y1 - y0));
         const scanned = !lines.length && images.some(({ rect: r }) => (r[2] - r[0]) * (r[3] - r[1]) > 0.5 * area);
-        return { lines, blocks, images, scanned };
+        // Todos os objetos da página (texto, imagens, desenhos), para mover, copiar e colar.
+        let objects = [];
+        try {
+          if (content) objects = pageObjects(lib, libPage, { content, runs });
+        } catch (err) {
+          console.warn("Não foi possível ler os objetos da página", err);
+        }
+        const data = { lines, blocks, images, scanned, objects };
+        data.units = objectUnits(data, page.view);
+        return data;
       })();
       tab.pageCache.set(key, promise);
       promise.then((data) => tab.pageCache.set(`${key}-ready`, data)).catch(() => tab.pageCache.delete(key));
@@ -820,17 +841,28 @@ export class ToolController {
 
   updateHover(e) {
     // O quadro pode chegar depois do clique que abriu a edição.
-    if (this.editing || this.tool !== "edit") return this.removeHover();
+    const objects = this.editing?.kind === "objects";
+    this.hoverEvent = e;
+    if ((this.editing && !objects) || this.editing?.dragging || this.objects.gesture || this.tool !== "edit") return this.removeHover();
     const hit = this.pageHit(e);
     if (!hit) return this.removeHover();
+    // A página sob o mouse é onde Colar põe os objetos (no toque, a que está na tela).
+    if (e.pointerType !== "touch") this.lastPage = { tab: hit.tab, pageNumber: hit.pageNumber };
     const data = hit.tab.pageCache.get(`edit-${hit.pageNumber}-ready`);
     if (!data) {
-      this.pageData(hit.tab, hit.pageNumber);
+      this.pageData(hit.tab, hit.pageNumber)
+        .then(() => this.hoverEvent === e && this.updateHover(e))
+        .catch(() => {});
       return this.removeHover();
     }
     const target = this.hitTest(data, hit.pdf);
-    if (!target) return this.removeHover();
-    const rect = this.cssRect(hit.pageView, target.kind === "text" ? target.block.rect : target.image.rect);
+    // Qualquer objeto (desenho, imagem dentro de um grupo...); o texto e a imagem como no clique.
+    const unit = unitAt(data.units || [], hit.pdf);
+    const targetRect = target && (target.kind === "text" ? target.block.rect : target.image.rect);
+    const area = (r) => (r[2] - r[0]) * (r[3] - r[1]);
+    const shown = unit && (!targetRect || (unit.kind !== "text" && !unit.image && area(unit.rect) < area(targetRect))) ? unit.rect : targetRect;
+    if (!shown) return this.removeHover();
+    const rect = this.cssRect(hit.pageView, shown);
     const layer = this.overlayFor(hit);
     let box = layer.querySelector(".edit-hover");
     if (!box) {
@@ -839,25 +871,13 @@ export class ToolController {
       layer.append(box);
     }
     Object.assign(box.style, { left: `${rect.left - 2}px`, top: `${rect.top - 2}px`, width: `${rect.width + 4}px`, height: `${rect.height + 4}px` });
+    // Em cima de um desenho ou de uma imagem num grupo, o cursor é o de mover.
+    this.area.classList.toggle("over-object", shown !== targetRect);
   }
 
   removeHover() {
     $$(".edit-hover").forEach((n) => n.remove());
-  }
-
-  async editAt(hit) {
-    if (this.editing) {
-      await this.finishEdit();
-      return;
-    }
-    const data = await this.pageData(hit.tab, hit.pageNumber);
-    // Enquanto lia a página, outra edição pode ter começado (ou a ferramenta mudou).
-    if (this.editing || this.tool !== "edit") return;
-    const target = this.hitTest(data, hit.pdf);
-    this.removeHover();
-    if (!target) return this.explainNothingHere(data);
-    if (target.kind === "text") this.startTextEdit(hit, target.block);
-    else this.startImageEdit(hit, target.image);
+    this.area.classList.remove("over-object");
   }
 
   /** Clique fora de texto e de imagem: explica por que não há o que editar ali. */
@@ -1015,7 +1035,7 @@ export class ToolController {
     if (mode === "add") editor.dataset.placeholder = "Digite o texto";
     // Até a página sem o texto antigo ficar pronta, o fundo cobre o texto antigo.
     if (mode === "edit") editor.style.background = cssColor(bg || [1, 1, 1]);
-    const grip = el("span", { class: "text-grip", title: "Arraste para mover", "aria-hidden": "true" });
+    const grip = el("span", { class: "text-grip", title: mode === "edit" ? "Arraste para mover (com Alt ou Ctrl, duplica)" : "Arraste para mover", "aria-hidden": "true" });
     // As alças das laterais mudam a largura: o texto quebra nela, como no Canva.
     const sizers = ["left", "right"].map((side) => el("span", { class: "text-sizer", dataset: { side }, title: "Arraste para mudar a largura", "aria-hidden": "true" }));
     const box = el("div", { class: "text-box" }, [grip, editor, ...sizers]);
@@ -1269,16 +1289,23 @@ export class ToolController {
     else if (bottom > view.bottom - 8 && bottom - top < view.height) container.scrollTop += bottom - (view.bottom - 8);
   }
 
-  /** Arrastar pela alça move o texto. */
+  /**
+   * Arrastar a alça de pontos move o texto. Com Alt (ou Ctrl) apertado, o
+   * texto original fica no lugar e a caixa vira uma cópia dele, com a mesma
+   * fonte, o mesmo tamanho e as mesmas cores.
+   */
   startTextDrag(e) {
     e.preventDefault();
     e.stopPropagation();
     const editing = this.editing;
     const start = [e.clientX, e.clientY];
     const from = [...editing.offset];
+    const copy = (ev) => editing.mode === "edit" && (ev.altKey || ev.ctrlKey || ev.metaKey);
+    this.setTextDuplicate(editing, copy(e));
     const move = (ev) => {
       if (this.editing !== editing) return;
       editing.offset = [from[0] + ev.clientX - start[0], from[1] + ev.clientY - start[1]];
+      this.setTextDuplicate(editing, copy(ev));
       this.placeTextEditor();
     };
     const up = () => {
@@ -1290,6 +1317,20 @@ export class ToolController {
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
     window.addEventListener("pointercancel", up);
+  }
+
+  /** Duplicando, o texto original aparece no lugar dele (sem a página limpa nem o fundo por cima). */
+  setTextDuplicate(editing, on) {
+    if (Boolean(editing.duplicate) === on) return;
+    editing.duplicate = on;
+    editing.box.classList.toggle("duplicating", on);
+    if (editing.clean) editing.clean.hidden = on;
+    if (on) {
+      editing.cover = editing.editor.style.background;
+      editing.editor.style.background = "transparent";
+    } else if (editing.cover !== undefined) {
+      editing.editor.style.background = editing.cover;
+    }
   }
 
   /**
@@ -1392,8 +1433,12 @@ export class ToolController {
       if (!clean || this.editing !== editing) return;
       editing.layer.prepend(clean);
       editing.clean = clean;
+      clean.hidden = Boolean(editing.duplicate);
       // Linha que não saiu do conteúdo continua coberta pelo fundo da caixa (como vai ficar no PDF).
-      if (complete) editing.editor.style.background = "transparent";
+      if (complete) {
+        if (editing.duplicate) editing.cover = "transparent";
+        else editing.editor.style.background = "transparent";
+      }
     } catch (err) {
       console.warn("Sem prévia do texto:", err);
     }
@@ -1428,16 +1473,20 @@ export class ToolController {
       ["font", "bold", "italic", "size", "spacing"].some((k) => state[k] !== initial[k]) || state.color.some((v, i) => Math.abs(v - initial.color[i]) > 0.002);
     // Na linha sozinha, a largura só muda algo se o texto quebrou na caixa.
     const resized = paragraph ? Math.abs(editing.width - paragraph.width) > 0.5 : rows !== null && rows.length > text.split("\n").length;
+    // Duplicar só faz sentido com o texto em outro lugar (e com algo escrito).
+    const keep = Boolean(editing.duplicate) && moved;
+    if (keep && !text.trim()) return;
     if (text === editing.text0 && !moved && !restyled && !resized) return;
     if (state.font !== "original") rememberFont(fontId);
-    await this.run(text.trim() ? "Aplicando texto…" : "Apagando texto…", async () => {
+    const label = keep ? "Duplicando texto…" : text.trim() ? "Aplicando texto…" : "Apagando texto…";
+    await this.run(label, async () => {
       const catalog = await catalogFont(fontId, state.bold);
       const style = { ...state, spacing: state.spacing || 0 };
       if (paragraph) {
         const start = moved ? origin : paragraph.origin;
-        await hit.tab.edit((doc) => editBlock(doc, hit.pageIndex, { block: paragraph, rows, style, catalog, bg, origin: start, width: editing.width }));
+        await hit.tab.edit((doc) => editBlock(doc, hit.pageIndex, { block: paragraph, rows, style, catalog, bg, origin: start, width: editing.width, keep }));
       } else {
-        await hit.tab.edit((doc) => editText(doc, hit.pageIndex, { line, text, rows, style, catalog, bg, origin: moved ? origin : line.origin }));
+        await hit.tab.edit((doc) => editText(doc, hit.pageIndex, { line, text, rows, style, catalog, bg, origin: moved ? origin : line.origin, keep }));
       }
     });
   }
@@ -1513,7 +1562,7 @@ export class ToolController {
       const [page] = await copy.copyPages(lib, [hit.pageIndex]);
       copy.addPage(page);
       if (change(copy, copy.getPage(0)) === false) return null;
-      ({ doc: pdf } = await loadPdf(await copy.save()));
+      ({ doc: pdf } = await loadPdf(await copy.save(), { worker: hit.tab.worker }));
       const pdfPage = await pdf.getPage(1);
       const vp = pdfPage.getViewport({ scale: viewport.scale, rotation: viewport.rotation });
       const clean = el("canvas", { class: "clean-page" });
@@ -1562,6 +1611,7 @@ export class ToolController {
       editing.editor.focus({ preventScroll: true });
       return;
     }
+    if (editing.kind === "objects") return this.objects.followZoom(editing);
     if (editing.kind !== "signature") return this.finishEdit();
     const { viewport: old, rect } = editing;
     const a = viewport.convertToViewportPoint(...old.convertToPdfPoint(rect.left, rect.top));
@@ -1675,6 +1725,7 @@ export class ToolController {
     if (kind === "signature") return this.commitSignature();
     if (kind === "text") return this.track(this.commitText());
     if (kind === "image") return this.track(this.commitImage());
+    if (kind === "objects") return this.track(this.objects.finish());
     return this.committing;
   }
 
@@ -1698,12 +1749,21 @@ export class ToolController {
 
   clearEdit() {
     if (!this.editing) return;
-    const { box, bar, clean } = this.editing;
+    const { box, bar, clean, dispose } = this.editing;
     this.editing = null;
     closeFontPicker();
+    dispose?.();
     box?.remove();
     bar?.remove();
     clean?.remove();
+  }
+
+  /** Um "hit" da página `pageNumber` (sem ponto), para as camadas por cima dela. */
+  pageHitFor(tab, pageNumber) {
+    const div = tab.pageView(pageNumber)?.div;
+    if (!div) return null;
+    const box = div.getBoundingClientRect();
+    return this.hitFromPage(tab, div, box.left, box.top);
   }
 }
 

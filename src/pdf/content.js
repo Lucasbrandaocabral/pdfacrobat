@@ -207,17 +207,42 @@ export function openStateDepth(bytes) {
   return depth;
 }
 
+/**
+ * O conteúdo termina com o estado gráfico do começo? Sim quando tudo o que não
+ * é q/Q fica entre um q e o Q dele (o que o próprio app desenha é assim).
+ */
+function restoresState(bytes) {
+  let depth = 0;
+  for (const { op } of parseOperations(bytes)) {
+    if (op === "q") depth++;
+    else if (op === "Q") {
+      if (!depth) return false;
+      depth--;
+    } else if (!depth) return false;
+  }
+  return depth === 0;
+}
+
 const isolated = new WeakSet();
 
 /**
  * Isola o conteúdo existente da página em q/Q antes de desenhar por cima, para
  * que transformações deixadas pelo autor do PDF não desloquem o novo desenho.
+ * Conteúdo já isolado (de uma edição anterior) fica como está: cada edição
+ * acrescentaria mais um nível de q/Q.
  */
 export function isolatePage(doc, page) {
   if (isolated.has(page.node)) return;
   isolated.add(page.node);
+  // O pdf-lib também envolveria o conteúdo em q/Q ao mexer na página
+  // (autoNormalizeCTM), em toda edição: quem isola é esta função, só quando precisa.
+  page.node.autoNormalizeCTM = false;
   if (!page.node.Contents()) return;
-  const depth = openStateDepth(readPageContent(doc, page));
+  const content = readPageContent(doc, page);
+  if (restoresState(content)) return;
+  // Com um stream só (e não uma lista), o pdf-lib não teria onde pôr o q e o Q.
+  page.node.normalize();
+  const depth = openStateDepth(content);
   const start = doc.context.register(doc.context.contentStream([pushGraphicsState()]));
   const end = doc.context.register(
     doc.context.contentStream(Array.from({ length: depth + 1 }, () => popGraphicsState())),
