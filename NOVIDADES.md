@@ -17,6 +17,7 @@ o comentário não aparece. Correções ficam sem animação.
 ## 1.13.0
 
 - **Girar objetos e textos**: em **Editar texto e imagens**, a alça redonda embaixo do que está selecionado gira qualquer objeto (imagem, desenho, parágrafo) em volta do meio dele, e os botões ↺ e ↻ da barra giram 90°. Perto de um ângulo reto, ele gruda; com Shift, gira de 15 em 15 graus. Ao escrever ou editar um texto, a mesma alça ao lado da de mover gira as letras, com a fonte escolhida. No celular, é só arrastar a alça com o dedo. <!-- demo: girar -->
+- **Duplicar imagens**: na caixa que abre ao clicar numa imagem, o botão **Duplicar** põe uma cópia ao lado, já aberta para mover ou mudar o tamanho. Arrastar a imagem com Alt (ou Ctrl) deixa o original no lugar e leva a cópia, como nos objetos e no texto. No celular, o botão aparece só com o ícone.
 - **Novidades com animações**: cada recurso novo aparece num cartão com uma animação curta mostrando como usar e um botão **Experimentar**, que já abre a ferramenta certa (sem documento aberto, pede um PDF antes). Um clique na animação pausa. As correções continuam numa lista simples.
 
 ## 1.12.0
