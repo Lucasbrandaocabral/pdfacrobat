@@ -258,7 +258,8 @@ function buildMenu() {
         item("Refazer", "redo", "CmdOrCtrl+Y"),
         sep,
         { role: "copy", label: "Copiar" },
-        { role: "selectAll", label: "Selecionar tudo" },
+        // Na ferramenta Editar, seleciona os objetos da página; fora dela, o texto.
+        item("Selecionar tudo", "select-all", "CmdOrCtrl+A"),
         sep,
         item("Localizar…", "find", "CmdOrCtrl+F"),
         sep,

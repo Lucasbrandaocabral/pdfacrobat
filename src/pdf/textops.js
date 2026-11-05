@@ -8,7 +8,7 @@ import { Encodings, Font } from "@cantoo/pdf-lib/standard-fonts";
 import { decodeStream, multiply, parseOperations, readPageContent, tokenize, transformPoint, writePageContent } from "./content.js";
 
 const IDENTITY = [1, 0, 0, 1, 0, 0];
-const MAX_DEPTH = 6;
+export const MAX_DEPTH = 6;
 // Formulários lidos por página, no máximo (quantos e quanto conteúdo):
 // formulários que desenham uns aos outros muitas vezes fariam a conta crescer
 // sem fim (um arquivo pequeno travaria o app). Os que passam do limite contam
@@ -770,13 +770,13 @@ function showWith(run, array) {
 }
 
 /** Avanço vazio do mesmo tamanho do trecho: o texto some e o resto fica no lugar. */
-function blankReplacement(run) {
+export function blankReplacement(run) {
   const unit = run.fontSize * run.th;
   return showWith(run, unit ? fmt((-run.advance * 1000) / unit) : "");
 }
 
 /** Conteúdo com os trechos [start, end) de `edits` trocados pelo texto de cada um. */
-function rewrite(content, edits) {
+export function rewriteContent(content, edits) {
   const parts = [];
   let at = 0;
   for (const edit of [...edits].sort((a, b) => a.start - b.start)) {
@@ -796,7 +796,7 @@ function rewrite(content, edits) {
 
 /** Conteúdo com os trechos `runs` trocados por avanços vazios do mesmo tamanho. */
 export function blankRuns(content, runs, replacement = blankReplacement) {
-  return rewrite(
+  return rewriteContent(
     content,
     runs.map((run) => ({ start: run.start, end: run.end, text: replacement(run) })),
   );
@@ -875,7 +875,7 @@ export function removeRuns(doc, page, runs, replacement = blankReplacement, { co
   }
   for (const [scope, list] of groups) {
     const content = scope ? decodeStream(scope.stream) : readPageContent(doc, page);
-    copies.setContent(scope, rewrite(content, list));
+    copies.setContent(scope, rewriteContent(content, list));
   }
 }
 
