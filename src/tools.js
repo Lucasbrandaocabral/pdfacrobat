@@ -7,7 +7,7 @@ import { AnnotationEditorParamsType, AnnotationEditorType, brokenSpaceFaces, fon
 import { $, $$, UserError, askText, el, hexToRgb, rgbToHex, toast } from "./ui.js";
 import { icon } from "./icons.js";
 import * as annotations from "./pdf/annotations.js";
-import { findImages, imageHasMask, isolatePage, moveImage, readPageContent, removeImage } from "./pdf/content.js";
+import { findImages, imageHasMask, isolatePage, moveImage, multiply, readPageContent, removeImage } from "./pdf/content.js";
 import { drawImageInBox, drawPngOnPage, jpegRotation } from "./pdf/ops.js";
 import { drawMark, today } from "./pdf/fill.js";
 import { LINE_HEIGHT, addText, describeLine, editBlock, editText, fontStyle, groupLines, groupParagraphs } from "./pdf/textedit.js";
@@ -1565,7 +1565,7 @@ export class ToolController {
       rotator.addEventListener("pointerdown", (e) => this.startImageRotate(e));
       box.append(rotator);
     }
-    const bar = el("div", { class: "float-bar" }, buttons);
+    const bar = el("div", { class: kind === "image" ? "float-bar image-bar" : "float-bar" }, buttons);
     layer.append(box, bar);
     this.editing = { kind, hit, layer, box, bar, preview, viewport: hit.pageView.viewport, rect: { ...rect }, original: { ...rect }, aspect: rect.width / rect.height, turn: 0, ...extra };
     this.layoutImageBox();
@@ -1587,6 +1587,7 @@ export class ToolController {
       buttons: [
         turn("rotateCcw", "Girar 90° para a esquerda", -Math.PI / 2),
         turn("rotateCw", "Girar 90° para a direita", Math.PI / 2),
+        el("button", { class: "btn", type: "button", title: "Duplicar (ou arraste com Alt ou Ctrl)", html: `${icon("duplicate")}<span>Duplicar</span>`, onclick: () => this.duplicateImage() }),
         el("button", { class: "btn", type: "button", html: `${icon("image")}<span>Substituir</span>`, onclick: () => this.replaceImage() }),
         el("button", { class: "btn", type: "button", html: `${icon("trash")}<span>Excluir</span>`, onclick: () => this.deleteImage() }),
         el("button", { class: "btn primary", type: "button", text: "Concluir", onclick: () => this.finishEdit() }),
@@ -1715,11 +1716,15 @@ export class ToolController {
     const startRect = { ...editing.rect };
     const sx = e.clientX;
     const sy = e.clientY;
+    // Na imagem, arrastar com Alt (ou Ctrl) deixa o original no lugar e leva uma cópia.
+    const copy = (ev) => editing.kind === "image" && !handle && (ev.altKey || ev.ctrlKey || ev.metaKey);
+    if (!handle) this.setImageDuplicate(editing, copy(e));
     const move = (ev) => {
       const dx = ev.clientX - sx;
       const dy = ev.clientY - sy;
       let r = { ...startRect };
       if (!handle) {
+        this.setImageDuplicate(editing, copy(ev));
         r.left += dx;
         r.top += dy;
         r = this.clampToPage(r);
@@ -1788,6 +1793,57 @@ export class ToolController {
     return this.track(this.commitImage());
   }
 
+  /** Duplicando a imagem, ela continua no lugar (sem a página limpa por cima) e a caixa é a cópia. */
+  setImageDuplicate(editing, on) {
+    if (editing.kind !== "image" || Boolean(editing.duplicate) === on) return;
+    editing.duplicate = on;
+    editing.box.classList.toggle("duplicating", on);
+    if (editing.clean) editing.clean.hidden = on;
+  }
+
+  /**
+   * Botão Duplicar da imagem: aplica o que já mudou na caixa e põe uma cópia um
+   * pouco ao lado, aberta na caixa da imagem (para mover ou mudar o tamanho).
+   */
+  async duplicateImage() {
+    const editing = this.editing;
+    if (editing?.kind !== "image") return;
+    const { hit, image, rect, original, turn = 0, viewport } = editing;
+    const changed = ["left", "top", "width", "height"].some((k) => Math.abs(rect[k] - original[k]) > 0.5);
+    const target = changed ? this.imagePdfRect() : image.rect;
+    const rotated = Math.abs(normalizeAngle(turn)) > 0.003;
+    // Ao lado: 10 pontos para a direita e para baixo na tela (com a página girada também).
+    const a = viewport.convertToPdfPoint(0, 0);
+    const b = viewport.convertToPdfPoint(10 * viewport.scale, 10 * viewport.scale);
+    const step = [1, 0, 0, 1, b[0] - a[0], b[1] - a[1]];
+    this.clearEdit();
+    const copyRect = await this.run("Duplicando imagem…", () =>
+      hit.tab.edit((doc) => {
+        const page = doc.getPage(hit.pageIndex);
+        if (changed) moveImage(doc, page, image.index, target);
+        let found = imageObjectAt(doc, page, target);
+        if (found && rotated) {
+          const [key] = transformObjects(doc, page, [found.key], rotationAbout(centerOf(target), -turn));
+          found = pageObjects(doc, page).find((o) => o.key === key);
+        }
+        if (!found) throw new UserError("Não foi possível duplicar esta imagem.");
+        const [copy] = transformObjects(doc, page, [found.key], step, { keep: true });
+        return pageObjects(doc, page).find((o) => o.key === copy)?.rect ?? null;
+      }),
+    );
+    if (copyRect) await this.openImageAt(hit.tab, hit.pageNumber, copyRect);
+  }
+
+  /** Abre a caixa da imagem na imagem da página `pageNumber` com a caixa `rect` (depois de o documento recarregar). */
+  async openImageAt(tab, pageNumber, rect) {
+    await tab.loaded;
+    if (this.tool !== "edit" || this.manager.active !== tab || this.editing) return;
+    const data = await this.pageData(tab, pageNumber);
+    const image = (data.images || []).find((im) => sameBox(im.rect, rect));
+    const hit = this.pageHitFor(tab, pageNumber);
+    if (image && hit && !this.editing) this.startImageEdit(hit, image);
+  }
+
   imagePdfRect() {
     const { rect, viewport: vp } = this.editing;
     const a = vp.convertToPdfPoint(rect.left, rect.top + rect.height);
@@ -1796,11 +1852,27 @@ export class ToolController {
   }
 
   async commitImage() {
-    const { hit, image, rect, original, turn = 0 } = this.editing;
+    const { hit, image, rect, original, turn = 0, duplicate } = this.editing;
     const changed = ["left", "top", "width", "height"].some((k) => Math.abs(rect[k] - original[k]) > 0.5);
     const target = changed ? this.imagePdfRect() : image.rect;
     const rotated = Math.abs(normalizeAngle(turn)) > 0.003;
     this.clearEdit();
+    if (duplicate && (changed || rotated)) {
+      // O original fica onde estava; a cópia vai para a caixa, com o tamanho e o giro dela.
+      const copies = await this.run("Duplicando imagem…", () =>
+        hit.tab.edit((doc) => {
+          const page = doc.getPage(hit.pageIndex);
+          const found = imageObjectAt(doc, page, image.rect);
+          if (!found) throw new UserError("Não foi possível duplicar esta imagem.");
+          let matrix = boxToBox(image.rect, target);
+          if (rotated) matrix = multiply(matrix, rotationAbout(centerOf(target), -turn));
+          return transformObjects(doc, page, [found.key], matrix, { keep: true });
+        }),
+      );
+      // A cópia fica selecionada, para girar, mover ou duplicar de novo.
+      if (copies?.length) await this.objects.reselect(hit.tab, hit.pageNumber, copies);
+      return;
+    }
     if (!rotated) {
       if (changed) await this.run("Movendo imagem…", () => hit.tab.edit((doc) => moveImage(doc, doc.getPage(hit.pageIndex), image.index, target)));
       return;
@@ -1810,12 +1882,10 @@ export class ToolController {
         const page = doc.getPage(hit.pageIndex);
         if (changed) moveImage(doc, page, image.index, target);
         // A imagem (já no lugar novo) entre os objetos da página, pela caixa dela.
-        const near = (a, b) => Math.abs(a - b) < 0.75;
-        const found = pageObjects(doc, page).find((o) => o.kind === "image" && !o.scope && o.rect?.every((v, i) => near(v, target[i])));
+        const found = imageObjectAt(doc, page, target);
         if (!found) throw new UserError("Não foi possível girar esta imagem.");
         // A tela tem o y para baixo: o horário dela é o anti-horário do PDF.
-        const center = [(target[0] + target[2]) / 2, (target[1] + target[3]) / 2];
-        return transformObjects(doc, page, [found.key], rotationAbout(center, -turn));
+        return transformObjects(doc, page, [found.key], rotationAbout(centerOf(target), -turn));
       }),
     );
     // A imagem girada fica selecionada, para girar mais, mover ou duplicar.
@@ -1896,6 +1966,22 @@ export class ToolController {
 }
 
 const cssColor = (rgb) => `rgb(${rgb.map((v) => Math.round(v * 255)).join(", ")})`;
+
+/** Se duas caixas [x0, y0, x1, y1] do PDF são a mesma (com folga para arredondamentos). */
+const sameBox = (a, b) => Boolean(a && b) && a.every((v, i) => Math.abs(v - b[i]) < 0.75);
+const centerOf = (r) => [(r[0] + r[2]) / 2, (r[1] + r[3]) / 2];
+
+/** A imagem desenhada na página (entre os objetos dela) com a caixa `rect`, ou null. */
+function imageObjectAt(doc, page, rect) {
+  return pageObjects(doc, page).find((o) => o.kind === "image" && !o.scope && sameBox(o.rect, rect)) ?? null;
+}
+
+/** A matriz que leva a caixa `from` à caixa `to` (deslocando e mudando o tamanho), como moveImage. */
+function boxToBox(from, to) {
+  const sx = (to[2] - to[0]) / (from[2] - from[0] || 1);
+  const sy = (to[3] - to[1]) / (from[3] - from[1] || 1);
+  return [sx, 0, 0, sy, to[0] - from[0] * sx, to[1] - from[1] * sy];
+}
 
 /** "ABCDEF+MontserratThin-Bold" -> "Montserrat Thin Bold". */
 function prettyFontName(name) {
