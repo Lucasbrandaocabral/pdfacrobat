@@ -9,6 +9,10 @@ um título curto em **negrito**. Ao publicar a versão, essa parte vai para a
 página dela no GitHub e para o aviso de novidades do programa.
 -->
 
+## 1.11.1
+
+- **Espaço com a fonte original do PDF**: em alguns PDFs (comum com fontes como a Avenir), o espaço digitado ao editar um texto aparecia como um quadrado, na caixa, na lista de fontes e no PDF salvo. Agora ele sai normal.
+
 ## 1.11.0
 
 - **Novidades**: depois de atualizar, o programa avisa e mostra o que mudou. A lista de todas as versões fica em **Ajuda → Novidades**, na tela inicial e na janela **Sobre**.

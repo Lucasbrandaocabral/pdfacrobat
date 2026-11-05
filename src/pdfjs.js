@@ -102,3 +102,38 @@ export function fontInfo(page, fontName) {
     return { name: "", face: null };
   }
 }
+
+const spaceChecks = new Map();
+
+/**
+ * Das fontes carregadas pelo PDF.js (`faces`, nomes no CSS), as que desenham o
+ * espaço como o quadrado de "letra que falta": a fonte do PDF diz ter o espaço,
+ * mas o desenho dele não veio no arquivo (comum quando o PDF posiciona cada
+ * palavra sem desenhar os espaços). Um espaço de verdade não deixa tinta.
+ */
+export async function brokenSpaceFaces(faces) {
+  const results = await Promise.all(
+    faces.map((face) => {
+      if (!spaceChecks.has(face)) spaceChecks.set(face, inkOfSpace(face));
+      return spaceChecks.get(face).then((broken) => broken && face);
+    }),
+  );
+  return new Set(results.filter(Boolean));
+}
+
+async function inkOfSpace(face) {
+  const font = `64px "${face}", monospace`;
+  try {
+    await document.fonts.load(font, " ");
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 96;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.font = font;
+    ctx.fillText(" \u00a0", 8, 72);
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    for (let i = 3; i < data.length; i += 4) if (data[i]) return true;
+  } catch {
+    // Sem como medir: fica como está.
+  }
+  return false;
+}
