@@ -4328,3 +4328,19 @@ button.page-card:focus-visible {
     min-height: 0;
   }
 }
+
+/* Guias do alinhamento automático ao arrastar. */
+.snap-guide {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+  background: #e0227a;
+}
+.snap-guide.x {
+  width: 1px;
+  margin-left: -0.5px;
+}
+.snap-guide.y {
+  height: 1px;
+  margin-top: -0.5px;
+}
