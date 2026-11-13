@@ -181,9 +181,11 @@ const sameColor = (a, b) => (!a && !b) || (a && b && a.every((v, i) => Math.abs(
 /**
  * Parágrafos: linhas seguidas da mesma fonte, tamanho, cor e direção, com a
  * mesma distância entre elas e alinhadas (à esquerda, à direita, ao centro ou
- * justificadas), sem outro texto entre elas nem no meio delas (uma palavra em
- * negrito, por exemplo: aí as linhas ficam separadas, para a edição não
- * misturar as fontes), formam um bloco, editado de uma vez como no Acrobat.
+ * justificadas), sem outro texto entre elas, formam um bloco, editado de uma
+ * vez como no Acrobat. Trechos de outra fonte no meio da linha (uma palavra em
+ * negrito ou em itálico) fazem parte dela: o bloco guarda em `spans` que
+ * trecho do texto é de qual fonte ({ text, line }), e `main`, a linha da fonte
+ * mais usada. `lines` tem todos os trechos (linhas de groupLines).
  * Linhas estreitas (colunas de valores de uma tabela) não viram parágrafo.
  *
  * Cada bloco: `lines` (de cima para baixo), `align` ("left", "right",
@@ -201,26 +203,26 @@ export function groupParagraphs(lines) {
     const from = line.origin[0] * cos + line.origin[1] * sin;
     return { from, to: from + line.width, y: -line.origin[0] * sin + line.origin[1] * cos };
   };
-  const sorted = lines
-    .map((line) => ({ line, ...frameOf(line) }))
-    .sort((p, q) => Math.round(p.line.angle * 50) - Math.round(q.line.angle * 50) || q.y - p.y || p.from - q.from);
   // Pode juntar-se a outras: texto achado no conteúdo, sem letras espaçadas.
   const joinable = (line) => Boolean(line.runs) && !line.letterSpaced;
+  const rows = visualRows(lines, frameOf, joinable);
+  const sorted = [...rows].sort((p, q) => Math.round(p.angle * 50) - Math.round(q.angle * 50) || q.y - p.y || p.from - q.from);
   const blocks = [];
-  for (const entry of sorted) {
-    const { line } = entry;
-    const size = line.size;
+  for (const row of sorted) {
+    const size = row.size;
     const tol = 0.6 * size;
     const joins = (block) => {
-      const first = block.lines[0];
-      if (!block.joinable || !joinable(line)) return false;
-      if (first.fontKey !== line.fontKey || Math.abs(first.size - size) > 0.05 * first.size || angleGap(first.angle, line.angle) > 0.02) return false;
-      if (!sameColor(first.color, line.color)) return false;
-      const frames = block.lines.map((l) => frameOf(l, first.angle));
-      const me = frameOf(line, first.angle);
+      const first = block.rows[0];
+      if (!block.joinable || !row.joinable) return false;
+      // Uma fonte em comum entre todas as linhas (a do parágrafo).
+      const keys = block.keys.filter((key) => row.keys.includes(key));
+      if (!keys.length || Math.abs(first.size - size) > 0.05 * first.size || angleGap(first.angle, row.angle) > 0.02) return false;
+      if (!sameColor(first.color, row.color)) return false;
+      const frames = block.rows.map((r) => rowFrame(r, first.angle));
+      const me = rowFrame(row, first.angle);
       const last = frames[frames.length - 1];
       const gap = last.y - me.y;
-      if (gap < 0.9 * size || gap > 2.2 * size) return false;
+      if (gap < 0.9 * size || gap > 2.6 * size) return false;
       if (frames.length >= 2 && Math.abs(gap - (frames[0].y - frames[1].y)) > 0.15 * size) return false;
       if (Math.min(last.to, me.to) - Math.max(last.from, me.from) < 0.3 * Math.min(last.to - last.from, me.to - me.from)) return false;
       // Alinhamentos que continuam possíveis com esta linha.
@@ -228,55 +230,119 @@ export function groupParagraphs(lines) {
       const left = lefts.length ? Math.min(...lefts) : null;
       const align = new Set(block.align);
       if (align.has("left")) {
-        const ok = left === null ? Math.abs(me.from - frames[0].from) <= tol || (me.from < frames[0].from && frames[0].from - me.from <= 4 * size) : Math.abs(me.from - left) <= tol;
+        const ok = left === null ? Math.abs(me.from - frames[0].from) <= tol || (me.from < frames[0].from && frames[0].from - me.from <= 8 * size) : Math.abs(me.from - left) <= tol;
         if (!ok) align.delete("left");
       }
       if (align.has("right") && Math.abs(me.to - last.to) > tol) align.delete("right");
       if (align.has("center") && Math.abs((me.from + me.to) / 2 - (last.from + last.to) / 2) > tol) align.delete("center");
       if (!align.size) return false;
-      // Nada entre as linhas nem no meio delas (outra fonte, outro texto).
+      // Nada entre as linhas nem no meio delas (outro texto).
       const span = [Math.min(me.from, ...frames.map((f) => f.from)) - 0.1 * size, Math.max(me.to, ...frames.map((f) => f.to)) + 0.1 * size];
-      const members = new Set([...block.lines, line]);
-      for (const other of lines) {
+      const members = new Set([...block.rows, row]);
+      for (const other of rows) {
         if (members.has(other) || angleGap(other.angle, first.angle) > 0.02) continue;
-        const f = frameOf(other, first.angle);
+        const f = rowFrame(other, first.angle);
         if (f.to <= span[0] || f.from >= span[1]) continue;
         if (f.y < last.y + 0.3 * size && f.y > me.y - 0.3 * size) return false;
         if (frames.some((g) => Math.abs(g.y - f.y) < 0.3 * size)) return false;
       }
       block.align = [...align];
+      block.keys = keys;
       return true;
     };
     const block = blocks.find(joins);
-    if (block) block.lines.push(line);
-    else blocks.push({ lines: [line], joinable: joinable(line), align: ["left", "right", "center"] });
+    if (block) block.rows.push(row);
+    else blocks.push({ rows: [row], keys: row.keys, joinable: row.joinable, align: ["left", "right", "center"] });
   }
+  // Fora de um parágrafo, cada trecho (de uma fonte) é editado sozinho.
+  const alone = (blockRows) => blockRows.flatMap((r) => r.parts.map((line) => describeBlock([rowOf([line])], ["left"])));
   return blocks.flatMap((block) => {
+    if (block.rows.length === 1) return alone(block.rows);
     // Faixa estreita demais para ser um parágrafo (valores de uma tabela): cada linha fica sozinha.
-    if (block.lines.length > 1) {
-      const frames = block.lines.map((l) => frameOf(l, block.lines[0].angle));
-      const width = Math.max(...frames.map((f) => f.to)) - Math.min(...frames.map((f) => f.from));
-      if (width < 10 * block.lines[0].size) return block.lines.map((line) => describeBlock([line], ["left"]));
-    }
-    return [describeBlock(block.lines, block.align)];
+    const frames = block.rows.map((r) => rowFrame(r, block.rows[0].angle));
+    const width = Math.max(...frames.map((f) => f.to)) - Math.min(...frames.map((f) => f.from));
+    if (width < 10 * block.rows[0].size) return alone(block.rows);
+    return [describeBlock(block.rows, block.align)];
   });
 
-  function describeBlock(blockLines, aligns) {
-    const first = blockLines[0];
+  function rowFrame(row, angle) {
+    const frames = row.parts.map((line) => frameOf(line, angle));
+    return { from: Math.min(...frames.map((f) => f.from)), to: Math.max(...frames.map((f) => f.to)), y: frames[0].y };
+  }
+
+  /** Uma linha do parágrafo: os trechos `parts` (linhas de groupLines), da esquerda para a direita. */
+  function rowOf(parts) {
+    // A fonte da linha é a que mais ocupa a largura dela.
+    const main = [...parts].sort((a, b) => b.width - a.width)[0];
+    const frames = parts.map((line) => frameOf(line, main.angle));
+    const from = Math.min(...frames.map((f) => f.from));
+    const to = Math.max(...frames.map((f) => f.to));
+    return { parts, main, keys: [...new Set(parts.map((line) => line.fontKey))], size: main.size, angle: main.angle, color: main.color, from, to, y: frameOf(main).y, width: to - from, joinable: parts.every(joinable) };
+  }
+
+  /**
+   * As linhas como se leem: trechos de fontes diferentes na mesma linha de
+   * base, um logo depois do outro (uma palavra em negrito ou em itálico no
+   * meio da frase), formam uma linha só.
+   */
+  function visualRows(all, frame, canJoin) {
+    const out = [];
+    const order = all.map((line) => ({ line, ...frame(line) })).sort((p, q) => Math.round(p.line.angle * 50) - Math.round(q.line.angle * 50) || q.y - p.y || p.from - q.from);
+    for (const { line } of order) {
+      const size = line.size;
+      const group = out.find((parts) => {
+        const last = parts[parts.length - 1];
+        if (!canJoin(line) || !parts.every(canJoin)) return false;
+        if (Math.abs(last.size - size) > 0.05 * last.size || angleGap(last.angle, line.angle) > 0.02 || !sameColor(last.color, line.color)) return false;
+        const a = frame(last, last.angle);
+        const b = frame(line, last.angle);
+        if (Math.abs(a.y - b.y) > 0.2 * size) return false;
+        const gap = b.from - a.to;
+        return gap > -0.3 * size && gap < size;
+      });
+      if (group) group.push(line);
+      else out.push([line]);
+    }
+    return out.map(rowOf);
+  }
+
+  function describeBlock(blockRows, aligns) {
+    const first = blockRows[0];
+    const blockLines = blockRows.flatMap((r) => r.parts);
     const size = first.size;
     const angle = first.angle;
-    const frames = blockLines.map((l) => frameOf(l, angle));
+    const frames = blockRows.map((r) => rowFrame(r, angle));
     const rects = blockLines.map((l) => l.rect);
     const rect = [Math.min(...rects.map((r) => r[0])), Math.min(...rects.map((r) => r[1])), Math.max(...rects.map((r) => r[2])), Math.max(...rects.map((r) => r[3]))];
     const textOf = (l) => l.text || l.str;
-    if (blockLines.length === 1) {
-      return { lines: blockLines, single: true, align: "left", leading: null, left: frames[0].from, width: first.width, indent: 0, origin: first.origin, text: textOf(first), rect, size, angle };
+    if (blockRows.length === 1) {
+      const line = first.main;
+      return { lines: blockLines, single: true, align: "left", leading: null, left: frames[0].from, width: line.width, indent: 0, origin: line.origin, text: textOf(line), rect, size, angle };
     }
+    // O texto de cada linha, trecho a trecho (com o espaço entre eles, quando há).
+    const spansOf = (row) => {
+      const out = [];
+      row.parts.forEach((line, i) => {
+        const prev = row.parts[i - 1];
+        if (prev) {
+          const gap = frameOf(line, angle).from - frameOf(prev, angle).to;
+          const raw = (l) => (l.items || []).map((item) => item.str).join("");
+          const spaced = gap > 0.12 * size || /\s$/.test(raw(prev)) || /^\s/.test(raw(line));
+          if (spaced && !/\s$/.test(out[out.length - 1].text)) out[out.length - 1].text += " ";
+        }
+        out.push({ text: textOf(line), line });
+      });
+      return out;
+    };
+    const rowSpans = blockRows.map(spansOf);
+    const rowText = rowSpans.map((spans) => spans.map((s) => s.text).join(""));
     const right = Math.max(...frames.map((f) => f.to));
     const nonLast = frames.slice(0, -1);
     let align = aligns.includes("left") ? "left" : aligns.includes("right") ? "right" : aligns.includes("center") ? "center" : "left";
-    // Justificado: as linhas (menos a última) terminam todas na margem direita.
-    if (align === "left" && nonLast.length >= 2 && nonLast.every((f) => right - f.to <= 0.15 * size)) align = "justify";
+    // Justificado: as linhas (menos a última e as que terminam numa quebra de
+    // linha) chegam à margem direita.
+    const flush = nonLast.filter((f) => right - f.to <= 0.15 * size).length;
+    if (align === "left" && flush >= 2 && flush >= 0.6 * nonLast.length) align = "justify";
     const leftEdge = align === "left" || align === "justify" ? Math.min(...frames.slice(1).map((f) => f.from)) : Math.min(...frames.map((f) => f.from));
     const left = Math.min(leftEdge, frames[0].from);
     const indent = (align === "left" || align === "justify") && frames[0].from - leftEdge > 0.6 * size ? frames[0].from - leftEdge : 0;
@@ -285,8 +351,8 @@ export function groupParagraphs(lines) {
     const leading = gaps[Math.floor(gaps.length / 2)];
     // A linha termina antes da margem por vontade (quebra de linha) ou porque a
     // próxima palavra não cabia (o texto continua na linha de baixo)?
-    const soft = blockLines.slice(1).map((next, k) => {
-      const nextText = textOf(next);
+    const soft = blockRows.slice(1).map((next, k) => {
+      const nextText = rowText[k + 1];
       const word = nextText.split(/\s/)[0] || "";
       const wordWidth = (next.width * word.length) / Math.max(1, nextText.length);
       const lead = k === 0 ? indent : 0;
@@ -296,15 +362,26 @@ export function groupParagraphs(lines) {
     // Tantas linhas terminando antes da margem quanto continuando (ou mais): é
     // uma lista, cada linha fica na sua (o texto novo ainda quebra na largura).
     const list = soft.filter((s) => !s).length >= soft.filter(Boolean).length;
-    let text = textOf(first);
-    blockLines.slice(1).forEach((next, k) => {
-      text += soft[k] && !list ? (/-$/.test(text) ? "" : " ") + textOf(next) : `\n${textOf(next)}`;
+    const spans = [];
+    rowSpans.forEach((parts, k) => {
+      if (k > 0) {
+        const last = spans[spans.length - 1];
+        last.text += soft[k - 1] && !list ? (/-$/.test(last.text) ? "" : " ") : "\n";
+      }
+      spans.push(...parts);
     });
+    const text = spans.map((s) => s.text).join("");
+    // A fonte do parágrafo é a que escreve mais letras; com mais de uma (negrito
+    // ou itálico no meio), `spans` diz que trecho do texto é de qual.
+    const count = new Map();
+    for (const span of spans) count.set(span.line.fontKey, (count.get(span.line.fontKey) || 0) + span.text.length);
+    const mainKey = [...count].sort((a, b) => b[1] - a[1])[0][0];
+    const main = spans.find((s) => s.line.fontKey === mainKey).line;
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
     const y = frames[0].y;
     const origin = [left * cos - y * sin, left * sin + y * cos];
-    return { lines: blockLines, single: false, align, leading, left, width, indent, origin, text, rect, size, angle };
+    return { lines: blockLines, main, spans: count.size > 1 ? spans : null, single: false, align, leading, left, width, indent, origin, text, rect, size, angle };
   }
 }
 
@@ -417,66 +494,85 @@ function segmentsOf(text, fonts = [], splitSpaces = false, originalSpace = true)
  * original, veja segmentsOf). `catalog`: bytes e nome da fonte do catálogo e se o
  * negrito é de verdade. `original`: as fontes do PDF ({ fonts: [{ ref, dict,
  * encoder }] }) a usar no que elas tiverem; o resto sai com a do catálogo.
+ * `variants`: parágrafo com mais de uma fonte (negrito ou itálico no meio):
+ * cada uma com { original, catalog, bold, italic }, e cada linha diz em
+ * `marks` a variante de cada letra.
  */
-async function writeText(doc, page, { origin, angle, rows, style, catalog, original, leading, align = "left", width = 0, indent = 0 }) {
+async function writeText(doc, page, { origin, angle, rows, style, catalog, original, variants = null, leading, align = "left", width = 0, indent = 0 }) {
   const { size, spacing = 0 } = style;
   const step = leading ?? LINE_HEIGHT * size;
-  const fonts = original?.fonts ?? [];
-  const pieces = rows.map((row) => segmentsOf(row.text.normalize("NFC"), fonts, row.justify, style.originalSpace !== false));
-  let catalogFont = null;
-  let catalogKey = null;
-  let gapWidth = 0.278 * size;
-  const needsCatalog = pieces.some((line) => line.some((s) => s.kind === "catalog"));
-  const hasGaps = pieces.some((line) => line.some((s) => s.kind === "gap"));
-  if (needsCatalog || (hasGaps && catalog)) {
-    // O leitor de fontes é grande: só carrega quando for usar uma fonte do catálogo.
-    const { default: fontkit } = await import("@cantoo/fontkit");
-    if (needsCatalog) {
-      doc.registerFontkit(fontkit);
-      // Completando a fonte original, a do catálogo leva o nome dela: na próxima
-      // edição, o texto continua sendo visto como um só (as letras de cada uma).
-      const name = original?.name || catalog.name;
-      catalogFont = await doc.embedFont(catalog.bytes, { subset: true, customName: `${subsetTag()}+${name}` });
-      catalogKey = page.node.newFontDictionary(catalogFont.name, catalogFont.ref);
-      gapWidth = catalogFont.widthOfTextAtSize(" ", size);
-    } else {
-      // Só para a largura do espaço: a fonte do catálogo parecida com a original.
-      const font = fontkit.create(catalog.bytes);
-      const glyph = font.glyphForCodePoint(32);
-      if (glyph && font.unitsPerEm) gapWidth = (glyph.advanceWidth / font.unitsPerEm) * size;
+  const kinds = (variants || [{ original, catalog, bold: style.bold, italic: style.italic }]).map((v) => ({ ...v, fonts: v.original?.fonts ?? [] }));
+  const pieces = rows.map((row) => {
+    // Pedaços seguidos da mesma variante.
+    const chunks = [];
+    let at = 0;
+    for (const char of row.text) {
+      const v = variants ? Math.min(kinds.length - 1, row.marks?.[at] ?? 0) : 0;
+      at += char.length;
+      const last = chunks[chunks.length - 1];
+      if (last && last.v === v) last.text += char;
+      else chunks.push({ v, text: char });
     }
+    return chunks.flatMap(({ v, text }) => segmentsOf(text.normalize("NFC"), kinds[v].fonts, row.justify, style.originalSpace !== false).map((s) => ({ ...s, v })));
+  });
+  let gapWidth = 0.278 * size;
+  const uses = (v, kind) => pieces.some((line) => line.some((s) => s.v === v && s.kind === kind));
+  const hasGaps = pieces.some((line) => line.some((s) => s.kind === "gap"));
+  let fontkit = null;
+  const embedded = new Map();
+  for (const [v, kind] of kinds.entries()) {
+    if (!uses(v, "catalog")) continue;
+    // O leitor de fontes é grande: só carrega quando for usar uma fonte do catálogo.
+    fontkit ||= (await import("@cantoo/fontkit")).default;
+    doc.registerFontkit(fontkit);
+    // Completando a fonte original, a do catálogo leva o nome dela: na próxima
+    // edição, o texto continua sendo visto como um só (as letras de cada uma).
+    const name = kind.original?.name || kind.catalog.name;
+    const id = `${name}/${kind.catalog.name}/${Boolean(kind.catalog.bold)}`;
+    if (!embedded.has(id)) {
+      const font = await doc.embedFont(kind.catalog.bytes, { subset: true, customName: `${subsetTag()}+${name}` });
+      embedded.set(id, { font, key: page.node.newFontDictionary(font.name, font.ref) });
+    }
+    Object.assign(kind, { catalogFont: embedded.get(id).font, catalogKey: embedded.get(id).key });
+  }
+  if (kinds[0].catalogFont) gapWidth = kinds[0].catalogFont.widthOfTextAtSize(" ", size);
+  else if (hasGaps && kinds[0].catalog) {
+    // Só para a largura do espaço: a fonte do catálogo parecida com a original.
+    fontkit ||= (await import("@cantoo/fontkit")).default;
+    const font = fontkit.create(kinds[0].catalog.bytes);
+    const glyph = font.glyphForCodePoint(32);
+    if (glyph && font.unitsPerEm) gapWidth = (glyph.advanceWidth / font.unitsPerEm) * size;
   }
   const originalKeys = new Map();
-  const originalKey = (index) => {
-    if (!originalKeys.has(index)) {
-      const { ref, dict } = fonts[index];
-      originalKeys.set(index, page.node.newFontDictionary("Orig", ref instanceof PDFRef ? ref : doc.context.register(dict)));
-    }
-    return originalKeys.get(index);
+  const originalKey = (v, index) => {
+    const { ref, dict } = kinds[v].fonts[index];
+    if (!originalKeys.has(dict)) originalKeys.set(dict, page.node.newFontDictionary("Orig", ref instanceof PDFRef ? ref : doc.context.register(dict)));
+    return originalKeys.get(dict);
   };
   const cos = Math.cos(angle);
   const sin = Math.sin(angle);
   const color = rgb(...style.color);
-  const fakeBold = style.bold && !catalog?.bold;
+  const fakeBold = (kind) => Boolean(kind.bold && !kind.catalog?.bold);
   const ops = [pushGraphicsState(), setFillingColor(color)];
-  if (fakeBold) ops.push(setStrokingColor(color), setLineWidth(boldStroke(size)));
+  if (kinds.some(fakeBold)) ops.push(setStrokingColor(color), setLineWidth(boldStroke(size)));
   ops.push(beginText(), setCharacterSpacing(spacing));
   pieces.forEach((segments, i) => {
     const prepared = segments.map((segment) => {
+      const kind = kinds[segment.v];
       if (segment.kind === "gap") return { segment, key: null, hex: null, advance: (gapWidth + spacing) * segment.text.length };
       if (segment.kind === "original") {
-        const { encoder } = fonts[segment.font];
+        const { encoder } = kind.fonts[segment.font];
         const digits = encoder.twoByte ? 4 : 2;
         return {
           segment,
-          key: originalKey(segment.font),
+          key: originalKey(segment.v, segment.font),
           hex: PDFHexString.of(segment.codes.map((c) => c.toString(16).padStart(digits, "0")).join("")),
           advance: segment.codes.reduce((sum, c) => sum + encoder.width(c) * size + spacing, 0),
         };
       }
-      const hex = catalogFont.encodeText(segment.text);
+      const hex = kind.catalogFont.encodeText(segment.text);
       const count = hex.asString().replace(/[<>\s]/g, "").length / 4;
-      return { segment, key: catalogKey, hex, advance: catalogFont.widthOfTextAtSize(segment.text, size) + spacing * count };
+      return { segment, key: kind.catalogKey, hex, advance: kind.catalogFont.widthOfTextAtSize(segment.text, size) + spacing * count };
     });
     const lead = i === 0 ? indent : 0;
     const natural = prepared.reduce((sum, p) => sum + p.advance, 0);
@@ -494,8 +590,8 @@ async function writeText(doc, page, { origin, angle, rows, style, catalog, origi
       let skew = 0;
       let mode = TextRenderingMode.Fill;
       if (segment.kind === "catalog") {
-        if (style.italic) skew = ITALIC_SKEW;
-        if (fakeBold) mode = TextRenderingMode.FillAndOutline;
+        if (kinds[segment.v].italic) skew = ITALIC_SKEW;
+        if (fakeBold(kinds[segment.v])) mode = TextRenderingMode.FillAndOutline;
       }
       const at = [base[0] + x * cos, base[1] + x * sin];
       const matrix = multiply([1, 0, skew, 1, 0, 0], [cos, sin, -sin, cos, at[0], at[1]]);
@@ -588,14 +684,18 @@ export async function editText(doc, pageIndex, { line, text, rows = null, style,
  * se ela não mudou). A distância entre as linhas acompanha o tamanho da
  * letra; o alinhamento é o do parágrafo. Com `keep`, o parágrafo antigo fica
  * (duplicar). `angle`: a direção do texto (a do parágrafo, se ele não foi
- * girado). Devolve se todo o texto antigo saiu do conteúdo.
+ * girado). `variants`: no parágrafo com mais de uma fonte, uma por fonte ({
+ * lines, catalog, bold, italic }; as linhas de `rows` trazem em `marks` a de
+ * cada letra). Devolve se todo o texto antigo saiu do conteúdo.
  */
-export async function editBlock(doc, pageIndex, { block, rows, style, catalog, bg, origin = block.origin, width = block.width, angle = block.angle, keep = false }) {
+export async function editBlock(doc, pageIndex, { block, rows, style, catalog, variants = null, bg, origin = block.origin, width = block.width, angle = block.angle, keep = false }) {
   const page = doc.getPage(pageIndex);
   const all = findTextRuns(doc, page);
   const found = block.lines.map((line) => lineRuns(all, line));
   const runs = found.flatMap((r) => r || []);
-  const original = style.font === "original" ? originalOf(doc, runs) : null;
+  const runsOf = (list) => list.flatMap((line) => found[block.lines.indexOf(line)] || []);
+  const original = style.font === "original" ? originalOf(doc, runsOf(block.spans ? block.lines.filter((l) => l.fontKey === block.main.fontKey) : block.lines)) : null;
+  const kinds = variants?.map((v) => ({ ...v, original: style.font === "original" ? originalOf(doc, runsOf(v.lines)) : null })) ?? null;
   const hidden = keep ? [] : block.lines.flatMap((line, i) => (found[i] ? [] : hiddenRuns(all, line)));
   if (!keep && (runs.length || hidden.length)) removeRuns(doc, page, [...runs, ...hidden]);
   isolatePage(doc, page);
@@ -610,6 +710,7 @@ export async function editBlock(doc, pageIndex, { block, rows, style, catalog, b
       style,
       catalog,
       original,
+      variants: kinds,
       leading: (block.leading / block.size) * style.size,
       align: block.align === "justify" ? "left" : block.align,
       width,

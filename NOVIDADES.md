@@ -14,6 +14,11 @@ ele vira um cartão com a animação e o botão Experimentar; na página do GitH
 o comentário não aparece. Correções ficam sem animação.
 -->
 
+## 1.14.0
+
+- **Parágrafo inteiro, mesmo com negrito e itálico**: ao editar um texto, o clique agora pega o parágrafo todo também quando ele tem palavras em negrito ou em itálico no meio (antes, cada pedaço virava uma caixa separada). Cada trecho continua com a fonte dele, e o que você digita dentro de um trecho em negrito sai em negrito. Parágrafos com a primeira linha bem recuada e com espaço duplo entre as linhas também são reconhecidos. <!-- demo: estilos -->
+- **Alinhamento automático ao arrastar**: ao mover um objeto, um texto ou uma imagem, ele gruda quando chega perto da borda ou do meio de outro item da página (ou do meio e das bordas da página), e uma linha rosa mostra com o que alinhou, como no Canva. <!-- demo: alinhar -->
+
 ## 1.13.0
 
 - **Girar objetos e textos**: em **Editar texto e imagens**, a alça redonda embaixo do que está selecionado gira qualquer objeto (imagem, desenho, parágrafo) em volta do meio dele, e os botões ↺ e ↻ da barra giram 90°. Perto de um ângulo reto, ele gruda; com Shift, gira de 15 em 15 graus. Ao escrever ou editar um texto, a mesma alça ao lado da de mover gira as letras, com a fonte escolhida. No celular, é só arrastar a alça com o dedo. <!-- demo: girar -->

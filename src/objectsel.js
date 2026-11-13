@@ -8,6 +8,7 @@
 // os objetos em qualquer página, deste ou de outro documento aberto. No
 // celular, segurar o dedo num objeto o seleciona; depois, tocar em outros
 // junta mais e arrastar a seleção a move.
+import { showGuides, snapRect } from "./snap.js";
 import { $, el, toast } from "./ui.js";
 import { icon } from "./icons.js";
 import { loadPdf } from "./pdfjs.js";
@@ -189,6 +190,7 @@ export class ObjectSelection {
       window.removeEventListener("pointercancel", cancelled, true);
       clearTimeout(g.timer);
       if (this.gesture === g) this.gesture = null;
+      showGuides(this.editing?.layer);
       if (cancel) this.onCancel(g);
       else this.onUp(g, ev);
     };
@@ -365,9 +367,26 @@ export class ObjectSelection {
       if (Math.abs(dx) > Math.abs(dy)) dy = 0;
       else dx = 0;
     }
-    editing.offset = [dx, dy];
     editing.duplicate = g.mods.alt || g.mods.ctrl;
+    // Perto de outro item (ou do meio e das bordas da página), gruda alinhado.
+    let guides = [];
+    if (!editing.turn) {
+      const { hit, units } = editing;
+      const tools = this.tools;
+      g.targets ||= (g.data?.units || []).filter((u) => u.rect && !units.includes(u)).map((u) => tools.cssRect(hit.pageView, u.rect));
+      const union = tools.cssRect(hit.pageView, unionRect(units.map((u) => u.rect)));
+      const targets = editing.duplicate ? [...g.targets, union] : g.targets;
+      const page = editing.layer.getBoundingClientRect();
+      const snap = snapRect({ ...union, left: union.left + dx, top: union.top + dy }, targets, { width: page.width, height: page.height });
+      // Com Shift (só num sentido), o outro não sai do lugar.
+      const free = { x: !(g.mods.shift && dx === 0), y: !(g.mods.shift && dy === 0) };
+      if (free.x) dx += snap.dx;
+      if (free.y) dy += snap.dy;
+      guides = snap.guides.filter((guide) => free[guide.axis]);
+    }
+    editing.offset = [dx, dy];
     this.layout(editing);
+    showGuides(editing.layer, guides);
   }
 
   drop() {

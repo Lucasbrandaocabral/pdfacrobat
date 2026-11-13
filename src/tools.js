@@ -2,6 +2,7 @@
 // texto, desenho, imagem) e as nossas (sublinhar, tachar, nota, formas,
 // carimbo, assinatura, marcas do "Preencher e assinar" e edição de
 // texto/imagens).
+import { showGuides, snapRect } from "./snap.js";
 import { PDFDocument } from "@cantoo/pdf-lib";
 import { AnnotationEditorParamsType, AnnotationEditorType, brokenSpaceFaces, fontInfo, getTextItems, loadPdf, pdfjsLib } from "./pdfjs.js";
 import { $, $$, UserError, askText, el, hexToRgb, rgbToHex, toast } from "./ui.js";
@@ -277,6 +278,12 @@ export class ToolController {
   }
 
   /** Retângulo do PDF -> {left, top, width, height} em CSS da página. */
+  /** Os outros itens da página (em px dela), para alinhar com eles ao arrastar; `keep` escolhe quais. */
+  snapTargets(hit, keep = () => true) {
+    const data = hit.tab.pageCache.get(`edit-${hit.pageNumber}-ready`);
+    return (data?.units || []).filter((unit) => unit.rect && keep(unit)).map((unit) => this.cssRect(hit.pageView, unit.rect));
+  }
+
   cssRect(pageView, rect) {
     const [x1, y1, x2, y2] = pageView.viewport.convertToViewportRectangle(rect);
     return { left: Math.min(x1, x2), top: Math.min(y1, y2), width: Math.abs(x2 - x1), height: Math.abs(y2 - y1) };
@@ -990,13 +997,14 @@ export class ToolController {
 
   /** Edita o bloco clicado: o parágrafo inteiro ou uma linha sozinha. */
   startTextEdit(hit, block) {
-    const line = block.lines[0];
+    const line = block.main || block.lines[0];
     const css = this.cssRect(hit.pageView, block.rect);
     const { bg, fg } = this.sampleColors(hit, css);
     const match = matchFont(line.realName);
     const substitute = match || fallbackFont(line.style);
     // A própria fonte do PDF (com todas as cópias dela), quando o catálogo não tem a mesma (Arial, Calibri, fontes do Canva...).
-    const faces = line.faces?.length ? line.faces : line.face ? [line.face] : [];
+    const facesOf = (l) => (l.faces?.length ? l.faces : l.face ? [l.face] : []);
+    const faces = facesOf(line);
     // Fonte do PDF sem o desenho do espaço: o espaço vem da fonte parecida do
     // catálogo (na caixa, na lista de fontes e no PDF), e não o quadrado.
     const brokenSpace = block.lines.some((l) => l.brokenSpace);
@@ -1017,7 +1025,23 @@ export class ToolController {
     // dela (o lido do próprio PDF quando o PDF.js separa as letras, "C L I Q U E").
     const paragraph = block.single ? null : block;
     const text = paragraph ? block.text : line.text || line.str;
-    const editing = this.openTextBox(hit, { mode: "edit", line, paragraph, text, state, bg, original });
+    // Parágrafo com mais de uma fonte (negrito ou itálico no meio): cada trecho
+    // continua com a sua; a primeira variante é a fonte do parágrafo.
+    let variants = null;
+    if (paragraph?.spans) {
+      const keys = [line.fontKey, ...new Set(paragraph.spans.map((span) => span.line.fontKey).filter((key) => key !== line.fontKey))];
+      variants = keys.map((key) => {
+        const lines = paragraph.lines.filter((l) => l.fontKey === key);
+        const sample = lines[0];
+        const sub = matchFont(sample.realName) || fallbackFont(sample.style);
+        const own = [...new Set(lines.flatMap(facesOf))];
+        return { key, lines, bold: sub.bold, italic: sub.italic, family: sample.original && own.length ? own.map((face) => `"${face}"`).join(", ") : null };
+      });
+    }
+    const spans = variants ? paragraph.spans.map((span) => ({ text: span.text, variant: variants.findIndex((v) => v.key === span.line.fontKey) })) : null;
+    const editing = this.openTextBox(hit, { mode: "edit", line, paragraph, text, spans, state, bg, original });
+    editing.variants = variants;
+    this.styleTextEditor();
     editing.originalStyle = { bold: substitute.bold, italic: substitute.italic };
     if (block.lines.some((l) => l.runs)) this.prepareTextPreview(editing);
   }
@@ -1027,7 +1051,7 @@ export class ToolController {
    * `mode`: "edit" (troca a linha `line` ou, com `paragraph`, o parágrafo
    * inteiro) ou "add" (texto novo no ponto `anchor`).
    */
-  openTextBox(hit, { mode, line = null, paragraph = null, text, state, bg = null, original = null, anchor = null }) {
+  openTextBox(hit, { mode, line = null, paragraph = null, text, spans = null, state, bg = null, original = null, anchor = null }) {
     const layer = this.overlayFor(hit);
     const editor = el("div", {
       class: paragraph ? "text-editor paragraph" : "text-editor",
@@ -1041,7 +1065,8 @@ export class ToolController {
     } catch {
       editor.contentEditable = "true";
     }
-    editor.textContent = text;
+    if (spans) editor.append(...spans.map((span) => el("span", { dataset: { variant: String(span.variant) }, text: span.text })));
+    else editor.textContent = text;
     if (mode === "add") editor.dataset.placeholder = "Digite o texto";
     // Até a página sem o texto antigo ficar pronta, o fundo cobre o texto antigo.
     if (mode === "edit") editor.style.background = cssColor(bg || [1, 1, 1]);
@@ -1203,6 +1228,17 @@ export class ToolController {
       color: cssColor(state.color),
       letterSpacing: `${(state.spacing || 0) * viewport.scale}px`,
     });
+    // Os trechos de outra fonte: a deles (ou, trocando a fonte, o negrito e o itálico deles).
+    const kinds = this.textVariants(editing);
+    for (const span of editor.querySelectorAll("[data-variant]")) {
+      const kind = kinds?.[Number(span.dataset.variant)];
+      if (!kind || kind === kinds[0]) continue;
+      Object.assign(span.style, {
+        fontFamily: original && kind.family ? `${kind.family}, ${exactFamily(catalogId, kind.bold)}, sans-serif` : "",
+        fontWeight: (!original || !kind.family) && kind.bold ? "700" : "400",
+        fontStyle: (!original || !kind.family) && kind.italic ? "italic" : "normal",
+      });
+    }
     this.applyTextWidth();
     this.updateTextBar();
     this.placeTextEditor();
@@ -1213,6 +1249,7 @@ export class ToolController {
       await Promise.all([
         original ? loadFontFace(catalogId, state.bold, { exact: true }) : loadFontFace(catalogId, state.bold),
         space && loadFontFace(space.id, space.bold, { space: true }),
+        ...(kinds || []).slice(1).map((kind) => (original ? loadFontFace(catalogId, kind.bold, { exact: true }) : loadFontFace(catalogId, kind.bold))),
       ]);
     } catch {
       // Sem a fonte (sem internet na primeira vez, por exemplo), a prévia usa outra.
@@ -1225,6 +1262,21 @@ export class ToolController {
       editor.style.letterSpacing = `${state.spacing * viewport.scale}px`;
     }
     this.placeTextEditor();
+  }
+
+  /**
+   * As variantes do parágrafo com mais de uma fonte, como estão valendo: o
+   * negrito e o itálico de cada trecho, até a pessoa mudá-los na barra (aí
+   * valem para o texto todo).
+   */
+  textVariants(editing) {
+    if (!editing.variants) return null;
+    const { state, initial } = editing;
+    return editing.variants.map((v) => ({
+      ...v,
+      bold: state.bold !== initial.bold ? state.bold : v.bold,
+      italic: state.italic !== initial.italic ? state.italic : v.italic,
+    }));
   }
 
   /** Põe a caixa com a linha de base no lugar do texto (ou no ponto clicado, no texto novo). */
@@ -1321,13 +1373,30 @@ export class ToolController {
     const from = [...editing.offset];
     const copy = (ev) => editing.mode === "edit" && (ev.altKey || ev.ctrlKey || ev.metaKey);
     this.setTextDuplicate(editing, copy(e));
+    const own = editing.paragraph?.lines || (editing.line ? [editing.line] : []);
+    const targets = this.snapTargets(editing.hit, (unit) => !unit.block || !unit.block.lines.some((l) => own.includes(l)));
     const move = (ev) => {
       if (this.editing !== editing) return;
       editing.offset = [from[0] + ev.clientX - start[0], from[1] + ev.clientY - start[1]];
       this.setTextDuplicate(editing, copy(ev));
       this.placeTextEditor();
+      // Perto de outro item, gruda alinhado (com o texto de pé).
+      let guides = [];
+      if (Math.abs(editing.theta) < 1e-3) {
+        const page = editing.layer.getBoundingClientRect();
+        const box = editing.editor.getBoundingClientRect();
+        const rect = { left: box.left - page.left, top: box.top - page.top, width: box.width, height: box.height };
+        const snap = snapRect(rect, targets, { width: page.width, height: page.height });
+        guides = snap.guides;
+        if (snap.dx || snap.dy) {
+          editing.offset = [editing.offset[0] + snap.dx, editing.offset[1] + snap.dy];
+          this.placeTextEditor();
+        }
+      }
+      showGuides(editing.layer, guides);
     };
     const up = () => {
+      showGuides(editing.layer);
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", up);
@@ -1512,6 +1581,7 @@ export class ToolController {
     const ahead = viewport.convertToPdfPoint(bx + 10 * Math.cos(editing.theta), by + 10 * Math.sin(editing.theta));
     const angle = Math.atan2(ahead[1] - origin[1], ahead[0] - origin[0]);
     const rotated = Math.abs(normalizeAngle(editing.turn)) > 0.003;
+    const kinds = this.textVariants(editing);
     this.clearEdit();
     const fontId = state.font === "original" ? state.substitute : state.font;
     if (mode === "add") {
@@ -1544,7 +1614,8 @@ export class ToolController {
       const style = { ...state, spacing: state.spacing || 0 };
       if (paragraph) {
         const start = moved ? origin : paragraph.origin;
-        await hit.tab.edit((doc) => editBlock(doc, hit.pageIndex, { block: paragraph, rows, style, catalog, bg, origin: start, width: editing.width, keep, ...direction }));
+        const variants = kinds && (await Promise.all(kinds.map(async (v) => ({ lines: v.lines, bold: v.bold, italic: v.italic, catalog: await catalogFont(fontId, v.bold) }))));
+        await hit.tab.edit((doc) => editBlock(doc, hit.pageIndex, { block: paragraph, rows, style, catalog, variants, bg, origin: start, width: editing.width, keep, ...direction }));
       } else {
         await hit.tab.edit((doc) => editText(doc, hit.pageIndex, { line, text, rows, style, catalog, bg, origin: moved ? origin : line.origin, keep, ...direction }));
       }
@@ -1719,6 +1790,8 @@ export class ToolController {
     // Na imagem, arrastar com Alt (ou Ctrl) deixa o original no lugar e leva uma cópia.
     const copy = (ev) => editing.kind === "image" && !handle && (ev.altKey || ev.ctrlKey || ev.metaKey);
     if (!handle) this.setImageDuplicate(editing, copy(e));
+    const origin = editing.image?.rect;
+    const targets = handle ? [] : this.snapTargets(editing.hit, (unit) => !origin || !unit.rect.every((v, i) => Math.abs(v - origin[i]) < 0.5));
     const move = (ev) => {
       const dx = ev.clientX - sx;
       const dy = ev.clientY - sy;
@@ -1728,6 +1801,12 @@ export class ToolController {
         r.left += dx;
         r.top += dy;
         r = this.clampToPage(r);
+        // Perto de outro item, gruda alinhado.
+        const page = editing.layer.getBoundingClientRect();
+        const snap = editing.turn ? { dx: 0, dy: 0, guides: [] } : snapRect(r, targets, { width: page.width, height: page.height });
+        r.left += snap.dx;
+        r.top += snap.dy;
+        showGuides(editing.layer, snap.guides);
       } else {
         if (handle.includes("e")) r.width = Math.max(8, startRect.width + dx);
         if (handle.includes("s")) r.height = Math.max(8, startRect.height + dy);
@@ -1749,6 +1828,7 @@ export class ToolController {
       this.layoutImageBox();
     };
     const up = () => {
+      showGuides(editing.layer);
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
     };
@@ -2092,11 +2172,12 @@ function visualRows(editor, justify) {
 
 function rowsOnScreen(editor, justify) {
   const rows = [];
-  let row = { text: "", top: null };
+  let row = { text: "", marks: [], top: null };
   const lineHeight = parseFloat(getComputedStyle(editor).lineHeight) || 10;
   const breakRow = (hard) => {
-    rows.push({ text: hard ? row.text : row.text.replace(/ +$/, ""), hard });
-    row = { text: "", top: null };
+    const text = hard ? row.text : row.text.replace(/ +$/, "");
+    rows.push({ text, marks: row.marks.slice(0, text.length), hard });
+    row = { text: "", marks: [], top: null };
   };
   const range = document.createRange();
   const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
@@ -2108,6 +2189,8 @@ function rowsOnScreen(editor, justify) {
       continue;
     }
     const value = node.nodeValue;
+    // A variante (fonte) do trecho, no parágrafo com mais de uma.
+    const mark = Number(node.parentElement?.closest("[data-variant]")?.dataset.variant) || 0;
     for (let i = 0; i < value.length; i++) {
       const char = value[i] === "\u00a0" ? " " : value[i];
       if (char === "\n") {
@@ -2124,12 +2207,13 @@ function rowsOnScreen(editor, justify) {
         if (row.top === null) row.top = rect.top;
       }
       row.text += char;
+      row.marks.push(mark);
     }
   }
   breakRow(true);
   // Linhas vazias no fim (o <br> que o navegador deixa depois de um Enter) não mudam nada no PDF.
   while (rows.length > 1 && !rows[rows.length - 1].text) rows.pop();
-  return rows.map(({ text, hard }) => ({ text, justify: justify && !hard }));
+  return rows.map(({ text, marks, hard }) => ({ text, marks, justify: justify && !hard }));
 }
 
 /** Pixels de `canvas` dentro do retângulo CSS `css` (relativo à página). */

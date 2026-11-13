@@ -2748,6 +2748,12 @@ body.has-doc .welcome {
   vector-effect: non-scaling-stroke;
 }
 
+.news-demo .d-guide {
+  fill: none;
+  stroke: #e0227a;
+  stroke-width: 1;
+}
+
 .news-demo .d-hover {
   fill: rgb(30 136 229 / 0.05);
   stroke: #1e88e5;
@@ -4327,4 +4333,20 @@ button.page-card:focus-visible {
     height: 230px;
     min-height: 0;
   }
+}
+
+/* Guias do alinhamento automático ao arrastar. */
+.snap-guide {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+  background: #e0227a;
+}
+.snap-guide.x {
+  width: 1px;
+  margin-left: -0.5px;
+}
+.snap-guide.y {
+  height: 1px;
+  margin-top: -0.5px;
 }
