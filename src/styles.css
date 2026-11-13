@@ -2748,6 +2748,12 @@ body.has-doc .welcome {
   vector-effect: non-scaling-stroke;
 }
 
+.news-demo .d-guide {
+  fill: none;
+  stroke: #e0227a;
+  stroke-width: 1;
+}
+
 .news-demo .d-hover {
   fill: rgb(30 136 229 / 0.05);
   stroke: #1e88e5;

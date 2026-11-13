@@ -425,6 +425,82 @@ const SCENES = {
     }),
   },
 
+  // Arrastar para perto de outro item: gruda alinhado e a guia aparece.
+  alinhar: {
+    duration: 7500,
+    still: 0.4,
+    experimentar: {
+      category: "edit",
+      action: "tool:edit",
+      tip: "Arraste um objeto para perto de outro: ele gruda alinhado, com uma linha rosa.",
+      touchTip: "Segure o dedo num objeto e arraste para perto de outro: ele gruda alinhado.",
+    },
+    draw: () => ({
+      svg: [
+        page(50, 8, 140, 134),
+        heading(64, 18, 60, 5),
+        picture(64, 30, 44, 30),
+        bars([[64, 112, 112], [64, 119, 96], [64, 126, 104]]),
+        '<path class="d-guide gv" d="M64 26V102"/>',
+        '<path class="d-guide gh" d="M60 30H164"/>',
+        `<g class="obj">${picture(124, 74, 36, 24)}${outline(124, 74, 36, 24, "sel")}</g>`,
+        ripple(142, 86, "r1"),
+        cursor(),
+      ].join(""),
+      tracks: [
+        [".cur", "o", [[0, 0], [0.03, 1], [0.86, 1], [0.9, 0]]],
+        [".cur", "xy", [[0, 196, 134], [0.03, 196, 134], [0.12, 142, 86], [0.18, 142, 86], [0.32, 89, 86], [0.34, 82, 86], [0.46, 82, 86], [0.6, 137, 47], [0.62, 142, 42], [0.8, 142, 42], [0.9, 196, 134]]],
+        ...click("r1", 0.145),
+        [".sel", "o", show(0.145, 0.16, 0.8, 0.83)],
+        [".obj", "xy", [[0, 0, 0], [0.18, 0, 0], [0.32, -53, 0], [0.34, -60, 0], [0.46, -60, 0], [0.6, -5, -39], [0.62, 0, -44], [0.955, 0, -44], [0.955, 0, 0]]],
+        [".obj", "o", [[0, 1], [0.9, 1], [0.94, 0], [0.96, 0], [1, 1]]],
+        [".gv", "o", show(0.33, 0.345, 0.46, 0.48)],
+        [".gh", "o", show(0.61, 0.625, 0.8, 0.83)],
+      ],
+    }),
+  },
+
+  // Parágrafo com negrito no meio: antes, vários pedaços; agora, uma caixa só.
+  estilos: {
+    duration: 7500,
+    still: 0.7,
+    experimentar: {
+      category: "edit",
+      action: "tool:edit",
+      tip: "Clique num parágrafo com negrito ou itálico: ele vem inteiro para editar.",
+    },
+    draw: () => ({
+      svg: [
+        page(50, 8, 140, 134),
+        heading(62, 18, 70, 5.5),
+        bars([[62, 30, 116], [62, 37, 116], [62, 44, 64]]),
+        bars([[62, 58, 30], [62, 65, 116], [62, 72, 50], [146, 72, 32], [62, 79, 70]]),
+        bars([[95, 58, 36], [115, 72, 28]], 3.4, "d-hd"),
+        `<g class="rs">${bars([[134, 58, 28]])}</g>`,
+        '<rect class="d-new sc-l tw" x="131" y="58" width="13" height="3.4" rx="1.7"/>',
+        bars([[62, 96, 116], [62, 103, 116], [62, 110, 52]]),
+        `<g class="old">${[[60, 56, 34, 7.4], [93, 56, 40, 7.4], [132, 56, 48, 7.4], [60, 63, 120, 7.4], [60, 70, 54, 7.4], [113, 70, 32, 7.4], [144, 70, 36, 7.4], [60, 77, 74, 7.4]].map(([x, y, w, h]) => `<rect class="d-hover" x="${x}" y="${y}" width="${w}" height="${h}" rx="1"/>`).join("")}</g>`,
+        '<rect class="d-hover hov" x="59" y="55" width="122" height="30.4" rx="1"/>',
+        '<rect class="d-box bx" x="59" y="55" width="122" height="30.4" rx="1"/>',
+        '<g class="caret"><rect class="d-caret" x="-0.6" y="56.2" width="1.2" height="7.2"/></g>',
+        ripple(124, 60, "r1"),
+        cursor(),
+      ].join(""),
+      tracks: [
+        [".old", "o", show(0.05, 0.09, 0.26, 0.31)],
+        [".hov", "o", [[0, 0], [0.31, 0], [0.35, 0.9], [0.45, 0.9], [0.455, 0]]],
+        [".cur", "o", [[0, 0], [0.3, 0], [0.33, 1], [0.56, 1], [0.6, 0]]],
+        [".cur", "xy", [[0, 176, 138], [0.33, 176, 138], [0.42, 124, 60], [0.48, 124, 60], [0.56, 160, 124], [1, 176, 138]]],
+        ...click("r1", 0.45),
+        [".bx", "o", show(0.45, 0.455, 0.9, 0.94)],
+        [".caret", "o", [[0, 0], [0.45, 0], ...blink(0.455, 0.54), [0.54, 1], [0.72, 1], ...blink(0.73, 0.9), [0.9, 1], [0.92, 0]]],
+        [".caret", "xy", [[0, 131, 0], [0.54, 131, 0], [0.7, 145, 0], [0.92, 145, 0], [0.94, 131, 0]]],
+        [".tw", "s", [[0, 0, 1], [0.54, 0, 1], [0.7, 1, 1], [0.93, 1, 1], [0.93, 0, 1]]],
+        [".rs", "xy", [[0, 0, 0], [0.54, 0, 0], [0.7, 16, 0], [0.93, 16, 0], [0.93, 0, 0]]],
+      ],
+    }),
+  },
+
   // Preencher e assinar: ✓ na caixa, a data de hoje e a assinatura sendo feita.
   assinar: {
     duration: 6500,

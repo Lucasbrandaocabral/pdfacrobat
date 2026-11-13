@@ -16,8 +16,8 @@ o comentário não aparece. Correções ficam sem animação.
 
 ## 1.14.0
 
-- **Parágrafo inteiro, mesmo com negrito e itálico**: ao editar um texto, o clique agora pega o parágrafo todo também quando ele tem palavras em negrito ou em itálico no meio (antes, cada pedaço virava uma caixa separada). Cada trecho continua com a fonte dele, e o que você digita dentro de um trecho em negrito sai em negrito. Parágrafos com a primeira linha bem recuada e com espaço duplo entre as linhas também são reconhecidos.
-- **Alinhamento automático ao arrastar**: ao mover um objeto, um texto ou uma imagem, ele gruda quando chega perto da borda ou do meio de outro item da página (ou do meio e das bordas da página), e uma linha rosa mostra com o que alinhou, como no Canva.
+- **Parágrafo inteiro, mesmo com negrito e itálico**: ao editar um texto, o clique agora pega o parágrafo todo também quando ele tem palavras em negrito ou em itálico no meio (antes, cada pedaço virava uma caixa separada). Cada trecho continua com a fonte dele, e o que você digita dentro de um trecho em negrito sai em negrito. Parágrafos com a primeira linha bem recuada e com espaço duplo entre as linhas também são reconhecidos. <!-- demo: estilos -->
+- **Alinhamento automático ao arrastar**: ao mover um objeto, um texto ou uma imagem, ele gruda quando chega perto da borda ou do meio de outro item da página (ou do meio e das bordas da página), e uma linha rosa mostra com o que alinhou, como no Canva. <!-- demo: alinhar -->
 
 ## 1.13.0
 
