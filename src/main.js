@@ -21,6 +21,7 @@ import { redact } from "./features/redact.js";
 import { repair, repairAndOpen } from "./features/repair.js";
 import { setupUpdates } from "./updates.js";
 import { setupPinchZoom } from "./pinch.js";
+import { setupPalette } from "./palette.js";
 import { showNews } from "./novidades.js";
 import { setupAndroid } from "./android.js";
 
@@ -381,6 +382,7 @@ const actions = {
   watermark: () => documentFeatures.watermark(app),
   "header-footer": () => documentFeatures.headerFooter(app),
   "replace-text": () => documentFeatures.replaceText(app),
+  commands: () => openPalette(),
   protect: () => documentFeatures.protect(app),
   unprotect: () => documentFeatures.unprotect(app),
   compress: () => documentFeatures.compress(app),
@@ -455,6 +457,8 @@ function setCategory(name) {
     // Preferência só nesta sessão.
   }
 }
+
+const openPalette = setupPalette({ setCategory });
 
 function setupMenus() {
   const close = () => $$(".menu").forEach((m) => (m.hidden = true));
@@ -545,6 +549,7 @@ const SHORTCUTS = {
   p: "print",
   f: "find",
   h: "replace-text",
+  k: "commands",
   d: "properties",
   w: "close-tab",
   z: "undo",

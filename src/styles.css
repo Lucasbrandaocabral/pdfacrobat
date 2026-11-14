@@ -4418,3 +4418,61 @@ button.page-card:focus-visible {
   margin: 4px 6px;
   background: var(--border);
 }
+
+/* Busca de comandos (Ctrl+K). */
+.dialog.palette {
+  width: min(520px, calc(100vw - 32px));
+  margin-top: 12vh;
+  padding: 12px;
+}
+
+.dialog.palette input {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2);
+  color: inherit;
+  font: inherit;
+  font-size: 15px;
+}
+
+.palette-list {
+  max-height: min(50vh, 380px);
+  margin-top: 8px;
+  overflow-y: auto;
+}
+
+.palette-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.palette-item.active,
+.palette-item:hover {
+  background: var(--hover);
+}
+
+.palette-group {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.palette-empty {
+  padding: 10px 12px;
+}

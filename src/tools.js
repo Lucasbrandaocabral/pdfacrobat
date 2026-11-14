@@ -2,7 +2,7 @@
 // texto, desenho, imagem) e as nossas (sublinhar, tachar, nota, formas,
 // carimbo, assinatura, marcas do "Preencher e assinar" e edição de
 // texto/imagens).
-import { showGuides, snapRect } from "./snap.js";
+import { showGuides, snapEdge, snapRect } from "./snap.js";
 import { PDFDocument } from "@cantoo/pdf-lib";
 import { AnnotationEditorParamsType, AnnotationEditorType, brokenSpaceFaces, fontInfo, getTextItems, loadPdf, pdfjsLib } from "./pdfjs.js";
 import { $, $$, UserError, askText, el, hexToRgb, rgbToHex, toast } from "./ui.js";
@@ -1910,10 +1910,31 @@ export class ToolController {
     const copy = (ev) => editing.kind === "image" && !handle && (ev.altKey || ev.ctrlKey || ev.metaKey);
     if (!handle) this.setImageDuplicate(editing, copy(e));
     const origin = editing.image?.rect;
-    const targets = handle ? [] : this.snapTargets(editing.hit, (unit) => !origin || !unit.rect.every((v, i) => Math.abs(v - origin[i]) < 0.5));
+    const targets = this.snapTargets(editing.hit, (unit) => !origin || !unit.rect.every((v, i) => Math.abs(v - origin[i]) < 0.5));
     const move = (ev) => {
-      const dx = ev.clientX - sx;
-      const dy = ev.clientY - sy;
+      let dx = ev.clientX - sx;
+      let dy = ev.clientY - sy;
+      if (handle && !editing.turn) {
+        // Mudando o tamanho, a borda puxada gruda na borda de outro item (ou da página).
+        const page = editing.layer.getBoundingClientRect();
+        const size = { width: page.width, height: page.height };
+        const locked = handle.length === 2 && !ev.shiftKey;
+        const guides = [];
+        if (handle.includes("e") || handle.includes("w")) {
+          const edge = startRect.left + (handle.includes("e") ? startRect.width : 0) + dx;
+          const snap = snapEdge(edge, "x", startRect, targets, size);
+          dx += snap.shift;
+          if (snap.guide) guides.push(snap.guide);
+        }
+        // No canto, a altura acompanha a largura: só a largura gruda.
+        if (!locked && (handle.includes("s") || handle.includes("n"))) {
+          const edge = startRect.top + (handle.includes("s") ? startRect.height : 0) + dy;
+          const snap = snapEdge(edge, "y", startRect, targets, size);
+          dy += snap.shift;
+          if (snap.guide) guides.push(snap.guide);
+        }
+        showGuides(editing.layer, guides);
+      }
       let r = { ...startRect };
       if (!handle) {
         this.setImageDuplicate(editing, copy(ev));
