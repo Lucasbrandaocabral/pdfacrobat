@@ -1,7 +1,8 @@
 import "pdfjs-dist/web/pdf_viewer.css";
 import "./styles.css";
 import { renderIcons } from "./icons.js";
-import { $, $$, askText, baseName, debounce, el, notice, openDialog, runBusy, setBusy, toast } from "./ui.js";
+import { $, $$, askText, baseName, confirmAction, debounce, el, notice, openDialog, runBusy, setBusy, toast } from "./ui.js";
+import { setupDrafts } from "./drafts.js";
 import { TabManager } from "./tabs.js";
 import { Sidebar } from "./sidebar.js";
 import { ToolController } from "./tools.js";
@@ -27,6 +28,8 @@ import { setupAndroid } from "./android.js";
 
 const PDFJS_EDITOR_TOOLS = new Set(["highlight", "text", "ink", "image"]);
 const manager = new TabManager($("#viewer-area"), $("#tabbar"));
+// Cópia das alterações não salvas, para recuperar se o programa fechar sem querer.
+const drafts = setupDrafts(manager);
 
 const app = {
   manager,
@@ -98,6 +101,27 @@ async function openFiles(files) {
   }
 }
 
+/** Ao abrir o programa: oferece de volta os documentos que ficaram com alterações não salvas. */
+async function recoverDrafts() {
+  const pending = await drafts.pending();
+  if (!pending.length) return;
+  const names = pending.map((draft) => draft.name).join(", ");
+  const recover = await confirmAction({
+    title: pending.length === 1 ? "Recuperar as alterações não salvas?" : `Recuperar ${pending.length} documentos não salvos?`,
+    message: `${pending.length === 1 ? "Este documento ficou" : "Estes documentos ficaram"} com alterações não salvas da última vez: ${names}.`,
+    ok: "Recuperar",
+    kind: "question",
+  });
+  if (recover) {
+    for (const draft of pending) {
+      // Com o caminho de antes, Salvar grava no mesmo arquivo; se ele já está aberto, vai como cópia.
+      const path = draft.path && !manager.findByPath(draft.path) ? draft.path : null;
+      await openDocument(draft.bytes, { name: draft.name, path, dirty: true });
+    }
+  }
+  await drafts.discard(pending.map((draft) => draft.id));
+}
+
 async function chooseAndOpen() {
   const files = await platform.pickFiles({ multiple: true, kind: "pdf" });
   if (files.length) await openFiles(files);
@@ -159,7 +183,11 @@ async function confirmClose() {
   $('button[value="ok"]', dialog).textContent = dirty.length === 1 ? "Salvar" : "Salvar todos";
   const choice = await askChoice(dialog);
   if (choice === "ok") await saveAllAndClose();
-  else if (choice === "discard") platform.closeWindow();
+  else if (choice === "discard") {
+    // Fechou por vontade, sem salvar: não há o que recuperar depois.
+    await drafts.clear();
+    platform.closeWindow();
+  }
 }
 
 /** Janela "Sobre" com a marca e a versão; o botão Novidades abre o que mudou. */
@@ -720,6 +748,7 @@ try {
 }
 const initial = await platform.getInitialFile();
 if (initial?.length) await openFiles(initial);
+recoverDrafts();
 
 // Usado pelos testes automatizados.
 app.runAction = runAction;

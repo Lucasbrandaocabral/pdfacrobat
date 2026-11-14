@@ -458,6 +458,7 @@ export class TabManager {
     const index = this.tabs.indexOf(tab);
     if (index < 0) return;
     this.tabs.splice(index, 1);
+    this.emit("removed", tab);
     tab.destroy();
     if (this.active === tab) {
       this.active = null;
