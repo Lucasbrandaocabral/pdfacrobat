@@ -4350,3 +4350,71 @@ button.page-card:focus-visible {
   height: 1px;
   margin-top: -0.5px;
 }
+
+/* Menu suspenso (botão direito e "Organizar"). */
+.popup-menu {
+  position: fixed;
+  z-index: 1200;
+  min-width: 210px;
+  max-height: calc(100vh - 8px);
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.popup-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.popup-item:hover:not(:disabled),
+.popup-item:focus-visible {
+  background: var(--hover);
+  outline: none;
+}
+
+.popup-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.popup-icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+}
+
+.popup-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.popup-label {
+  flex: 1;
+}
+
+.popup-hint {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.popup-rule {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}

@@ -790,17 +790,26 @@ const chosen = (objects, keys) => {
  * fica (duplicar). Devolve as chaves dos objetos levados (ou das cópias) na página.
  */
 export function transformObjects(doc, page, keys, matrix, { keep = false } = {}) {
+  return transformEach(doc, page, [{ keys, matrix }], { keep });
+}
+
+/**
+ * Como transformObjects, mas com uma matriz para cada grupo de objetos:
+ * `moves` é uma lista de { keys, matrix } (alinhar vários objetos, por exemplo).
+ */
+export function transformEach(doc, page, moves, { keep = false } = {}) {
   page = pageOf(doc, page);
   const all = pageObjects(doc, page);
-  const targets = new Set(chosen(all, keys));
-  if (!targets.size) return [];
-  if (keep) return appendCopies(doc, page, doc, [...targets].map((obj) => ({ obj, move: matrix, target: true })));
+  const matrixOf = new Map();
+  for (const { keys, matrix } of moves) for (const obj of chosen(all, keys)) matrixOf.set(obj, matrix);
+  if (!matrixOf.size) return [];
+  if (keep) return appendCopies(doc, page, doc, [...matrixOf].map(([obj, move]) => ({ obj, move, target: true })));
   const items = [];
   const above = [];
   for (const obj of all) {
-    if (targets.has(obj)) {
-      items.push({ obj, move: matrix, target: true });
-      if (obj.rect) above.push(transformRect(obj.rect, matrix));
+    if (matrixOf.has(obj)) {
+      items.push({ obj, move: matrixOf.get(obj), target: true });
+      if (obj.rect) above.push(transformRect(obj.rect, matrixOf.get(obj)));
     } else if (above.length && obj.rect && !obj.invisible && above.some((r) => overlaps(r, obj.rect))) {
       items.push({ obj, move: IDENTITY, target: false });
       above.push(obj.rect);
@@ -808,6 +817,20 @@ export function transformObjects(doc, page, keys, matrix, { keep = false } = {})
   }
   blankObjects(doc, page, items.map((item) => item.obj));
   return appendCopies(doc, page, doc, items);
+}
+
+/**
+ * Passa os objetos `keys` para cima de todos os outros da página, sem sair do
+ * lugar e na ordem em que já estavam entre si (trazer para frente; ou, com os
+ * objetos que cobrem a seleção, enviá-la para trás). Devolve as chaves deles
+ * na página.
+ */
+export function raiseObjects(doc, page, keys) {
+  page = pageOf(doc, page);
+  const targets = chosen(pageObjects(doc, page), keys);
+  if (!targets.length) return [];
+  blankObjects(doc, page, targets);
+  return appendCopies(doc, page, doc, targets.map((obj) => ({ obj, move: IDENTITY, target: true })));
 }
 
 /** Desloca os objetos `keys` em `delta` [dx, dy] (pontos do PDF); veja transformObjects. */

@@ -410,6 +410,14 @@ export class ToolController {
     // Na janela, em captura: assim as nossas ferramentas recebem o clique antes
     // dos editores do PDF.js (que também escutam a janela durante um desenho).
     window.addEventListener("pointerdown", (e) => this.onPointerDown(e), true);
+    // Botão direito na página, na ferramenta de editar: o menu do objeto (ou da página).
+    window.addEventListener("contextmenu", (e) => {
+      if (this.tool !== "edit" || this.pending || e.target.closest?.(".text-box, .image-box, .float-bar, .font-picker, input, textarea")) return;
+      const hit = this.pageHit(e);
+      if (!hit) return;
+      e.preventDefault();
+      this.track(this.objects.context(e, hit));
+    });
     window.addEventListener("pointerup", (e) => this.endOutsideTap(e), true);
     window.addEventListener("pointercancel", () => (this.outsideTap = null), true);
     this.area.addEventListener("pointermove", (e) => this.onPointerMove(e));
