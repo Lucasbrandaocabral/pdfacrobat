@@ -2,6 +2,7 @@ package com.lucasbrandaocabral.pdfacrobat;
 
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
+import android.content.ClipData;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
@@ -19,6 +20,7 @@ import android.provider.DocumentsContract;
 import android.provider.OpenableColumns;
 import android.util.Base64;
 import androidx.activity.result.ActivityResult;
+import androidx.core.content.FileProvider;
 import androidx.core.content.IntentCompat;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -68,6 +70,14 @@ public class NativeFilesPlugin extends Plugin {
         // PDFs de impressões que não terminaram (o app foi fechado no meio).
         File[] leftovers = getContext().getCacheDir().listFiles((dir, name) -> name.startsWith("impressao") && name.endsWith(".pdf"));
         if (leftovers != null) for (File file : leftovers) file.delete();
+        // Cópias de documentos compartilhados antes (o outro app já as recebeu).
+        File[] shared = shareDir().listFiles();
+        if (shared != null) for (File file : shared) file.delete();
+    }
+
+    /** Pasta dos arquivos entregues a outros apps pelo "Compartilhar" (dentro da que o FileProvider serve). */
+    private File shareDir() {
+        return new File(new File(getContext().getCacheDir(), "compartilhados"), "envio");
     }
 
     // ---- Documentos recebidos ----
@@ -268,6 +278,42 @@ public class NativeFilesPlugin extends Plugin {
                 return new PrintAttributes.MediaSize("OFICIO_II", "Ofício II", 8504, 12992);
             default:
                 return null;
+        }
+    }
+
+    /**
+     * Compartilha o arquivo `data` (base64), de nome `name` e tipo `mimeType`,
+     * pela janela "Compartilhar" do Android (WhatsApp, e-mail, Drive...).
+     */
+    @PluginMethod
+    public void share(PluginCall call) {
+        String name = new File(call.getString("name", "documento.pdf")).getName().replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", "_");
+        if (name.isEmpty() || name.startsWith(".")) name = "documento.pdf";
+        String mimeType = call.getString("mimeType", "application/pdf");
+        File dir = shareDir();
+        File file = new File(dir, name);
+        try {
+            if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("sem a pasta temporária");
+            try (OutputStream out = new FileOutputStream(file)) {
+                out.write(Base64.decode(call.getString("data", ""), Base64.DEFAULT));
+            }
+        } catch (IOException | IllegalArgumentException e) {
+            call.reject("Não foi possível preparar o arquivo para compartilhar: " + e.getMessage(), e);
+            return;
+        }
+        Uri uri = FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".fileprovider", file);
+        Intent send = new Intent(Intent.ACTION_SEND);
+        send.setType(mimeType);
+        send.putExtra(Intent.EXTRA_STREAM, uri);
+        send.putExtra(Intent.EXTRA_SUBJECT, name);
+        // Só o app escolhido lê o arquivo, e só este arquivo.
+        send.setClipData(ClipData.newRawUri(name, uri));
+        send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        try {
+            getActivity().startActivity(Intent.createChooser(send, "Compartilhar"));
+            call.resolve();
+        } catch (ActivityNotFoundException e) {
+            call.reject("Nenhum app para compartilhar o arquivo.");
         }
     }
 

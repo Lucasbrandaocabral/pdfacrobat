@@ -134,6 +134,13 @@ async function createFromFiles(kind) {
   if (bytes) await openDocument(bytes, { name: kind === "images" ? "Imagens.pdf" : "Combinado.pdf", dirty: true });
 }
 
+/** Manda o documento como está (com as alterações ainda não salvas) para outro app, pela janela Compartilhar do sistema. */
+async function shareTab(tab) {
+  if (!tab) return;
+  await app.tools.settled();
+  await runBusy("Preparando para compartilhar…", async () => platform.shareFile(await tab.currentBytes(), /\.pdf$/i.test(tab.name) ? tab.name : `${tab.name}.pdf`));
+}
+
 async function saveTab(tab, { saveAs = false } = {}) {
   if (!tab) return false;
   // A edição aberta (ex.: assinatura ainda na caixa) entra no arquivo salvo.
@@ -374,6 +381,7 @@ const actions = {
   open: chooseAndOpen,
   save: () => saveTab(manager.active),
   "save-as": () => saveTab(manager.active, { saveAs: true }),
+  share: () => shareTab(manager.active),
   "save-all-and-close": saveAllAndClose,
   "confirm-close": confirmClose,
   about: showAbout,
@@ -739,6 +747,8 @@ if (platform.isAndroid) setupAndroid(app);
 window.addEventListener("beforeunload", (e) => {
   if (!platform.isDesktop && manager.tabs.some((t) => t.dirty)) e.preventDefault();
 });
+// O botão Compartilhar só aparece onde o sistema tem a janela de compartilhar.
+for (const node of $$("[data-only-share]")) node.hidden = !platform.canShare;
 updateTitle();
 registerServiceWorker();
 try {

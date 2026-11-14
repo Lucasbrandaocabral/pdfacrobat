@@ -193,6 +193,27 @@ export function onOpenFile(callback) {
   });
 }
 
+/** Dá para compartilhar um arquivo com outros apps (WhatsApp, e-mail...)? No app Android e nos navegadores de celular. */
+export const canShare = Boolean(nativeFiles) || (!api && typeof navigator.canShare === "function" && /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent));
+
+/** Abre a janela "Compartilhar" do sistema com o arquivo. Devolve false se a pessoa desistiu. */
+export async function shareFile(data, name) {
+  const type = mimeOf(name);
+  if (nativeFiles) {
+    await nativeFiles.share({ name, mimeType: type, data: toBase64(data) });
+    return true;
+  }
+  const file = new File([data], name, { type });
+  if (!navigator.canShare?.({ files: [file] })) throw new Error("Este navegador não compartilha arquivos. Salve o documento e envie o arquivo salvo.");
+  try {
+    await navigator.share({ files: [file], title: name });
+    return true;
+  } catch (err) {
+    if (err?.name === "AbortError") return false;
+    throw err;
+  }
+}
+
 /**
  * Imprime pelo serviço de impressão do Android, que já abre com o papel
  * (`paper`, chave de PAPERS) e a orientação sugeridos.
