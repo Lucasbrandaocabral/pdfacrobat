@@ -278,6 +278,117 @@ export class ToolController {
   }
 
   /** Retângulo do PDF -> {left, top, width, height} em CSS da página. */
+  /**
+   * Localizar e substituir: troca `find` por `replace` nas linhas de texto de
+   * todas as páginas, cada uma com a fonte, o tamanho e a cor dela. Numa linha
+   * de parágrafo justificado, o texto novo continua indo até a margem. Devolve
+   * { count, pages, skipped } (trocas, páginas mudadas e linhas que não deu
+   * para trocar).
+   */
+  async replaceAll(tab, { find, replace, matchCase = false }) {
+    const pattern = new RegExp(find.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), matchCase ? "g" : "gi");
+    const has = (text) => {
+      pattern.lastIndex = 0;
+      return pattern.test(text);
+    };
+    const jobs = [];
+    let count = 0;
+    let skipped = 0;
+    const pages = new Set();
+    for (let n = 1; n <= tab.doc.numPages; n++) {
+      // Só olha a fundo as páginas em que o texto aparece.
+      const page = await tab.doc.getPage(n);
+      const content = await page.getTextContent({ includeMarkedContent: false });
+      if (!has(content.items.map((item) => item.str).join(""))) continue;
+      const data = await this.pageData(tab, n);
+      for (const block of data.blocks) {
+        const cos = Math.cos(block.angle);
+        const sin = Math.sin(block.angle);
+        const start = (line) => line.origin[0] * cos + line.origin[1] * sin;
+        const height = (line) => -line.origin[0] * sin + line.origin[1] * cos;
+        // As linhas como se leem: os trechos de fontes diferentes na mesma linha de base vão juntos.
+        const rows = [];
+        for (const line of block.lines) {
+          const row = rows.find((parts) => Math.abs(height(parts[0]) - height(line)) <= 0.2 * line.size);
+          if (row) row.push(line);
+          else rows.push([line]);
+        }
+        const spanText = new Map((block.spans || []).map((span) => [span.line, span.text]));
+        for (const parts of rows) {
+          parts.sort((a, b) => start(a) - start(b));
+          const textOf = (line) => line.text || line.str;
+          if (!parts.some((line) => has(textOf(line)))) continue;
+          if (parts.some((line) => !line.runs)) {
+            skipped++;
+            continue;
+          }
+          pages.add(n);
+          // Os trechos da linha: o texto novo de cada um e a fonte dele.
+          const keys = [...new Set(parts.map((line) => line.fontKey))];
+          let text = "";
+          const marks = [];
+          parts.forEach((line, i) => {
+            const old = textOf(line);
+            count += old.match(pattern)?.length ?? 0;
+            // O espaço entre este trecho e o próximo (como o parágrafo o leu).
+            const gap = i < parts.length - 1 && /\s$/.test(spanText.get(line) ?? "") ? " " : "";
+            const piece = old.replace(pattern, () => replace) + gap;
+            text += piece;
+            for (let k = 0; k < piece.length; k++) marks.push(keys.indexOf(line.fontKey));
+          });
+          const first = parts[0];
+          const last = parts[parts.length - 1];
+          const width = start(last) + last.width - start(first);
+          // Linha de parágrafo justificado que ia até a margem: continua indo.
+          const justify = block.align === "justify" && Math.abs(block.left + block.width - (start(first) + width)) <= 0.15 * first.size && /\S\s+\S/.test(text);
+          const styleOf = (line) => {
+            const match = matchFont(line.realName);
+            const substitute = match || fallbackFont(line.style);
+            return { match, substitute };
+          };
+          // A fonte da linha é a do trecho mais largo.
+          const main = [...parts].sort((a, b) => b.width - a.width)[0];
+          const { match, substitute } = styleOf(main);
+          const style = {
+            font: main.original && !match?.exact ? "original" : substitute.id,
+            bold: substitute.bold,
+            italic: substitute.italic,
+            size: main.size,
+            color: main.color || [0, 0, 0],
+            spacing: main.spacing || 0,
+            originalSpace: !parts.some((line) => line.brokenSpace),
+          };
+          const catalog = await catalogFont(substitute.id, substitute.bold);
+          let variants = null;
+          if (keys.length > 1) {
+            variants = [];
+            for (const key of keys) {
+              const lines = parts.filter((line) => line.fontKey === key);
+              const sub = styleOf(lines[0]).substitute;
+              variants.push({ lines, bold: sub.bold, italic: sub.italic, catalog: await catalogFont(substitute.id, sub.bold) });
+            }
+          }
+          jobs.push({ pageIndex: n - 1, parts, main, text, marks, justify, width, style, catalog, variants });
+        }
+      }
+    }
+    if (jobs.length) {
+      await tab.edit(async (doc) => {
+        for (const { pageIndex, parts, main, text, marks, justify, width, style, catalog, variants } of jobs) {
+          if (!variants) {
+            const rows = justify ? [{ text, justify: true }] : null;
+            await editText(doc, pageIndex, { line: parts[0], text, rows, style, catalog, bg: null, width: justify ? width : 0 });
+            continue;
+          }
+          // Linha com mais de uma fonte: sai inteira de novo, cada trecho com a sua.
+          const row = { lines: parts, spans: true, main, leading: main.size, size: main.size, align: "left", indent: 0, origin: parts[0].origin, width, angle: main.angle };
+          await editBlock(doc, pageIndex, { block: row, rows: [{ text, marks, justify }], style, catalog, variants, bg: null });
+        }
+      });
+    }
+    return { count, pages: pages.size, skipped };
+  }
+
   /** Os outros itens da página (em px dela), para alinhar com eles ao arrastar; `keep` escolhe quais. */
   snapTargets(hit, keep = () => true) {
     const data = hit.tab.pageCache.get(`edit-${hit.pageNumber}-ready`);

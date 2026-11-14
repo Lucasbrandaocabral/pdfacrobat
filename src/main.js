@@ -20,6 +20,7 @@ import { crop } from "./features/crop.js";
 import { redact } from "./features/redact.js";
 import { repair, repairAndOpen } from "./features/repair.js";
 import { setupUpdates } from "./updates.js";
+import { setupPinchZoom } from "./pinch.js";
 import { showNews } from "./novidades.js";
 import { setupAndroid } from "./android.js";
 
@@ -379,6 +380,7 @@ const actions = {
   crop: () => crop(app),
   watermark: () => documentFeatures.watermark(app),
   "header-footer": () => documentFeatures.headerFooter(app),
+  "replace-text": () => documentFeatures.replaceText(app),
   protect: () => documentFeatures.protect(app),
   unprotect: () => documentFeatures.unprotect(app),
   compress: () => documentFeatures.compress(app),
@@ -525,6 +527,7 @@ function setupToolbar() {
     },
     { passive: false },
   );
+  setupPinchZoom($("#viewer-area"), () => manager.active);
   window.addEventListener("resize", debounce(() => manager.active?.refreshLayout(), 150));
 }
 
@@ -541,6 +544,7 @@ const SHORTCUTS = {
   s: "save",
   p: "print",
   f: "find",
+  h: "replace-text",
   d: "properties",
   w: "close-tab",
   z: "undo",
