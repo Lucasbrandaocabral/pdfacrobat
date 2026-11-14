@@ -118,6 +118,28 @@ export async function headerFooter(app) {
   });
 }
 
+/** Localizar e substituir: troca um texto em todas as páginas (uma edição só, que dá para desfazer). */
+export async function replaceText(app) {
+  const tab = requireTab(app);
+  if (!(await app.guard(tab, Perm.MODIFY, "editar o conteúdo"))) return;
+  await app.tools.finishEdit?.();
+  const dialog = $("#replace-dialog");
+  const form = $("form", dialog);
+  // Com um texto selecionado na página, ele já vem no campo.
+  const selected = String(window.getSelection?.() ?? "").trim();
+  if (selected && selected.length <= 80 && !selected.includes("\n")) form.elements.find.value = selected;
+  if (!(await openDialog(dialog, { focus: 'input[name="find"]' }))) return;
+  const v = formValues(form);
+  const find = String(v.find ?? "");
+  if (!find.trim()) return;
+  const result = await app.run("Substituindo o texto…", () => app.tools.replaceAll(tab, { find, replace: String(v.replace ?? ""), matchCase: Boolean(v.matchCase) }));
+  if (!result) return;
+  const { count, pages, skipped } = result;
+  const left = skipped ? ` ${skipped === 1 ? "Uma linha não pôde ser trocada" : `${skipped} linhas não puderam ser trocadas`} (texto que faz parte de uma imagem).` : "";
+  if (!count) toast(`Nenhum “${find}” encontrado no texto do documento.${left}`, { duration: 6000 });
+  else toast(`${count === 1 ? "1 troca feita" : `${count} trocas feitas`} em ${pages === 1 ? "1 página" : `${pages} páginas`}.${left}`, { duration: 6000 });
+}
+
 // ---- Proteção ----
 
 export async function protect(app) {

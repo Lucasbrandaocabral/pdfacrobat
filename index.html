@@ -114,6 +114,7 @@
           <button class="tool" data-tool="edit" data-icon="editText" title="Editar texto e imagens (E)"><span>Editar texto e imagens</span></button>
           <button class="tool" data-tool="addtext" data-icon="addText" title="Adicionar texto, com a fonte que quiser (T)"><span>Adicionar texto</span></button>
           <button class="tool" data-tool="image" data-icon="image" title="Adicionar imagem"><span>Adicionar imagem</span></button>
+          <button class="tool" data-action="replace-text" data-icon="replace" title="Localizar e substituir um texto no documento inteiro (Ctrl+H)"><span>Substituir</span></button>
           <span class="divider"></span>
           <button class="tool" data-action="watermark" data-icon="watermark" title="Marca d'água"><span>Marca d'água</span></button>
           <button class="tool" data-action="header-footer" data-icon="headerFooter" title="Cabeçalho, rodapé e numeração de páginas"><span>Cabeçalho e rodapé</span></button>
@@ -709,6 +710,25 @@
           <span class="spacer"></span>
           <button class="btn" value="cancel" formnovalidate>Cancelar</button>
           <button class="btn primary" value="ok">Aplicar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="replace-dialog" class="dialog">
+      <form method="dialog">
+        <h2>Localizar e substituir</h2>
+        <p class="muted small">Troca o texto em todas as páginas, com a mesma fonte, o mesmo tamanho e a mesma cor. Dá para desfazer (Ctrl+Z).</p>
+        <label class="field">Localizar
+          <input name="find" type="text" required autocomplete="off" />
+        </label>
+        <label class="field">Substituir por
+          <input name="replace" type="text" autocomplete="off" />
+        </label>
+        <label class="check"><input name="matchCase" type="checkbox" /> Diferenciar maiúsculas de minúsculas</label>
+        <div class="dialog-actions">
+          <span class="spacer"></span>
+          <button class="btn" value="cancel" formnovalidate>Cancelar</button>
+          <button class="btn primary" value="ok">Substituir tudo</button>
         </div>
       </form>
     </dialog>

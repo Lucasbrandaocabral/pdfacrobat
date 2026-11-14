@@ -60,6 +60,7 @@ const paths = {
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/>',
   close: '<path d="M18 6 6 18M6 6l12 12"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  replace: '<circle cx="9" cy="9" r="5"/><path d="m13 13 3 3M14 20h6M17 17l3 3-3 3"/>',
   swap: '<path d="M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4"/>',
   pdf: `${DOC}<path d="M8 13h8M8 17h5"/>`,
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',

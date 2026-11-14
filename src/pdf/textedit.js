@@ -600,6 +600,12 @@ async function writeText(doc, page, { origin, angle, rows, style, catalog, origi
     }
   });
   ops.push(endText(), popGraphicsState());
+  // Sempre num trecho novo do conteúdo: o que o pdf-lib guardou de uma escrita
+  // anterior nesta página pode já ter sido refeito (várias trocas seguidas).
+  page.contentStream = undefined;
+  page.contentStreamRef = undefined;
+  page.node.normalized = false;
+  page.node.normalize();
   page.pushOperators(...ops);
 }
 
@@ -659,10 +665,11 @@ function cover(page, line, bg) {
  * `bg` é a cor do fundo, usada se o texto antigo tiver de ser coberto. Texto
  * vazio só apaga a linha. Com `keep`, o texto antigo fica (duplicar a linha,
  * com a mesma fonte e as mesmas cores, em outro lugar). `angle`: a direção do
- * texto novo (a da linha, se ele não foi girado). Devolve se o texto antigo
- * saiu do conteúdo.
+ * texto novo (a da linha, se ele não foi girado). `width`: a largura que uma
+ * linha de `rows` com `justify` ocupa. Devolve se o texto antigo saiu do
+ * conteúdo.
  */
-export async function editText(doc, pageIndex, { line, text, rows = null, style, catalog, bg, origin = line.origin, angle = line.angle, keep = false }) {
+export async function editText(doc, pageIndex, { line, text, rows = null, style, catalog, bg, origin = line.origin, angle = line.angle, width = 0, keep = false }) {
   const page = doc.getPage(pageIndex);
   const all = findTextRuns(doc, page);
   const runs = lineRuns(all, line);
@@ -672,7 +679,7 @@ export async function editText(doc, pageIndex, { line, text, rows = null, style,
   if (removed.length) removeRuns(doc, page, removed);
   isolatePage(doc, page);
   if (!runs && !keep) cover(page, line, bg);
-  if (text.trim()) await writeText(doc, page, { origin, angle, rows: rows || rowsOf(text), style, catalog, original });
+  if (text.trim()) await writeText(doc, page, { origin, angle, rows: rows || rowsOf(text), style, catalog, original, width });
   return Boolean(runs);
 }
 
