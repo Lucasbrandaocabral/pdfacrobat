@@ -41,7 +41,7 @@
     "electron": "44.9.3",
     "electron-builder": "26.15.3",
     "fflate": "0.8.3",
-    "node-forge": "1.4.0",
+    "node-forge": "1.4.3",
     "pdf-lib": "1.17.1",
     "pdfjs-dist": "4.10.38",
     "tesseract.js": "7.0.0",
