@@ -4476,3 +4476,9 @@ button.page-card:focus-visible {
 .palette-empty {
   padding: 10px 12px;
 }
+
+/* Pincel de formatação: o próximo texto clicado recebe a formatação copiada. */
+.viewer-area.mode-paint .page,
+.viewer-area.mode-paint .page * {
+  cursor: copy !important;
+}

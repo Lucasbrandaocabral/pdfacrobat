@@ -150,6 +150,7 @@ export class ToolController {
 
   apply(tool) {
     this.resolvePending(null);
+    if (this.paint && tool !== "edit") this.setPaint(null);
     this.tool = tool;
     $$("[data-tool]").forEach((b) => {
       b.classList.toggle("active", b.dataset.tool === tool);
@@ -445,6 +446,12 @@ export class ToolController {
     if (e.key === "Escape" && this.pending) {
       e.preventDefault();
       this.resolvePending(null);
+      return;
+    }
+    if (e.key === "Escape" && this.paint && !this.editing) {
+      e.preventDefault();
+      this.setPaint(null);
+      toast("Formatação copiada descartada.");
       return;
     }
     // Digitando num campo (pesquisa, número da página, formulário): a tecla é dele.
@@ -1180,6 +1187,37 @@ export class ToolController {
     this.styleTextEditor();
     editing.originalStyle = { bold: substitute.bold, italic: substitute.italic };
     if (block.lines.some((l) => l.runs)) this.prepareTextPreview(editing);
+    // Com uma formatação copiada (o pincel), este texto a recebe e já fica pronto.
+    const paint = this.paint;
+    if (paint) {
+      this.setPaint(null);
+      Object.assign(editing.state, { font: paint.font, bold: paint.bold, italic: paint.italic, size: paint.size, color: [...paint.color] });
+      this.track(
+        this.styleTextEditor().then(() => {
+          if (this.editing === editing) return this.finishEdit();
+        }),
+      );
+    }
+  }
+
+  /** Guarda (ou esquece, com null) a formatação a aplicar no próximo texto clicado. */
+  setPaint(paint) {
+    this.paint = paint;
+    this.area.classList.toggle("mode-paint", Boolean(paint));
+  }
+
+  /** Pincel: copia a fonte, o tamanho, a cor, o negrito e o itálico do texto em edição para o próximo texto clicado. */
+  copyTextFormat() {
+    const editing = this.editing;
+    if (editing?.kind !== "text") return;
+    const { state } = editing;
+    const paint = { font: state.font === "original" ? state.substitute : state.font, bold: state.bold, italic: state.italic, size: state.size, color: [...state.color] };
+    this.track(
+      Promise.resolve(this.finishEdit()).then(() => {
+        this.setPaint(paint);
+        toast("Formatação copiada: clique no texto que vai recebê-la (Esc cancela).", { duration: 5000 });
+      }),
+    );
   }
 
   /**
@@ -1340,8 +1378,22 @@ export class ToolController {
     const done = keepFocus(
       el("button", { class: "btn primary", type: "button", text: "Concluir", title: mode === "add" || editing.paragraph ? "Concluir (Ctrl+Enter)" : "Concluir (Enter)", onclick: () => this.finishEdit() }),
     );
+    // O pincel só faz sentido num texto do PDF (o novo ainda nem existe).
+    const brush =
+      mode === "edit"
+        ? keepFocus(
+            el("button", {
+              class: "btn icon-only",
+              type: "button",
+              title: "Copiar a formatação para outro texto",
+              "aria-label": "Copiar a formatação para outro texto",
+              html: icon("brush"),
+              onclick: () => this.copyTextFormat(),
+            }),
+          )
+        : null;
     editing.controls = { fontButton, size, bold, italic, color };
-    return el("div", { class: "float-bar text-bar" }, [fontButton, size, bold, italic, color, remove, done]);
+    return el("div", { class: "float-bar text-bar" }, [fontButton, size, bold, italic, color, brush, remove, done]);
   }
 
   updateTextBar() {

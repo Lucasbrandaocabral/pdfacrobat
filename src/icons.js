@@ -74,6 +74,7 @@ const paths = {
   distributeV: '<path d="M3 4h18M3 20h18"/><rect x="7" y="9" width="10" height="6" rx="1"/>',
   command: '<path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3Z"/>',
   share: '<circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.2 10.8 7.6-4.5M8.2 13.2l7.6 4.5"/>',
+  brush: '<path d="M14 4h5a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-5zM14 5H6a2 2 0 0 0-2 2v0a2 2 0 0 0 2 2h1M10 9v3M9 12h2v7a1 1 0 0 1-2 0z"/>',
   swap: '<path d="M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4"/>',
   pdf: `${DOC}<path d="M8 13h8M8 17h5"/>`,
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
