@@ -11,7 +11,7 @@ import * as annotations from "./pdf/annotations.js";
 import { findImages, imageHasMask, isolatePage, moveImage, multiply, readPageContent, removeImage } from "./pdf/content.js";
 import { drawImageInBox, drawPngOnPage, jpegRotation } from "./pdf/ops.js";
 import { drawMark, today } from "./pdf/fill.js";
-import { LINE_HEIGHT, addText, describeLine, editBlock, editText, fontStyle, groupLines, groupParagraphs } from "./pdf/textedit.js";
+import { LINE_HEIGHT, addText, describeLine, editBlock, editText, fontStyle, groupLines, groupParagraphs, styleKey } from "./pdf/textedit.js";
 import { baseFontName, findTextRuns, lineRuns, removeRuns } from "./pdf/textops.js";
 import { pageObjects, rotationAbout, transformObjects } from "./pdf/objects.js";
 import { dragRotation, normalizeAngle, rotateHandle, screenAngle } from "./rotate.js";
@@ -324,7 +324,7 @@ export class ToolController {
           }
           pages.add(n);
           // Os trechos da linha: o texto novo de cada um e a fonte dele.
-          const keys = [...new Set(parts.map((line) => line.fontKey))];
+          const keys = [...new Set(parts.map(styleKey))];
           let text = "";
           const marks = [];
           parts.forEach((line, i) => {
@@ -334,7 +334,7 @@ export class ToolController {
             const gap = i < parts.length - 1 && /\s$/.test(spanText.get(line) ?? "") ? " " : "";
             const piece = old.replace(pattern, () => replace) + gap;
             text += piece;
-            for (let k = 0; k < piece.length; k++) marks.push(keys.indexOf(line.fontKey));
+            for (let k = 0; k < piece.length; k++) marks.push(keys.indexOf(styleKey(line)));
           });
           const first = parts[0];
           const last = parts[parts.length - 1];
@@ -363,9 +363,10 @@ export class ToolController {
           if (keys.length > 1) {
             variants = [];
             for (const key of keys) {
-              const lines = parts.filter((line) => line.fontKey === key);
+              const lines = parts.filter((line) => styleKey(line) === key);
               const sub = styleOf(lines[0]).substitute;
-              variants.push({ lines, bold: sub.bold, italic: sub.italic, catalog: await catalogFont(substitute.id, sub.bold) });
+              const tinted = lines[0].color && main.color && lines[0].color.some((v, k) => Math.abs(v - main.color[k]) > 0.02);
+              variants.push({ lines, bold: sub.bold, italic: sub.italic, color: tinted ? lines[0].color : null, catalog: await catalogFont(substitute.id, sub.bold) });
             }
           }
           jobs.push({ pageIndex: n - 1, parts, main, text, marks, justify, width, style, catalog, variants });
@@ -893,7 +894,6 @@ export class ToolController {
         const page = await tab.doc.getPage(pageNumber);
         // Cópias da mesma fonte (uma por palavra, em alguns PDFs) contam como uma só.
         const fontKey = (name) => baseFontName(fontInfo(page, name).name) || name;
-        const lines = groupLines(await getTextItems(page), { fontKey });
         const lib = await this.libDoc(tab);
         const libPage = lib.getPage(pageNumber - 1);
         let content;
@@ -905,6 +905,12 @@ export class ToolController {
         } catch (err) {
           console.warn("Não foi possível ler o texto da página", err);
         }
+        // A cor de cada pedaço de texto (a do trecho do conteúdo que começa no mesmo ponto), para uma palavra de outra cor ficar à parte.
+        const inks = new Map();
+        const spot = ([x, y]) => `${Math.round(x)}|${Math.round(y)}`;
+        for (const run of runs) if (run.origin && run.fill) inks.set(spot(run.origin), run.fill.map((v) => v.toFixed(2)).join(","));
+        const inkOf = (item) => inks.get(spot(item.origin)) || "";
+        const lines = groupLines(await getTextItems(page), { fontKey, inkOf });
         try {
           images = findImages(lib, libPage, content);
         } catch (err) {
@@ -1148,16 +1154,27 @@ export class ToolController {
     // continua com a sua; a primeira variante é a fonte do parágrafo.
     let variants = null;
     if (paragraph?.spans) {
-      const keys = [line.fontKey, ...new Set(paragraph.spans.map((span) => span.line.fontKey).filter((key) => key !== line.fontKey))];
+      const mainKey = styleKey(line);
+      const keys = [mainKey, ...new Set(paragraph.spans.map((span) => styleKey(span.line)).filter((key) => key !== mainKey))];
+      const sameColor = (a, b) => (!a && !b) || (a && b && a.every((v, i) => Math.abs(v - b[i]) < 0.02));
       variants = keys.map((key) => {
-        const lines = paragraph.lines.filter((l) => l.fontKey === key);
+        const lines = paragraph.lines.filter((l) => styleKey(l) === key);
         const sample = lines[0];
         const sub = matchFont(sample.realName) || fallbackFont(sample.style);
-        const own = [...new Set(lines.flatMap(facesOf))];
-        return { key, lines, bold: sub.bold, italic: sub.italic, family: sample.original && own.length ? own.map((face) => `"${face}"`).join(", ") : null };
+        // Só a cor muda (a fonte é a do parágrafo): o trecho usa a fonte da caixa.
+        const sameFont = sample.fontKey === line.fontKey;
+        const own = sameFont ? [] : [...new Set(lines.flatMap(facesOf))];
+        return {
+          key,
+          lines,
+          bold: sub.bold,
+          italic: sub.italic,
+          color: sameColor(sample.color, line.color) ? null : sample.color,
+          family: sample.original && own.length ? own.map((face) => `"${face}"`).join(", ") : null,
+        };
       });
     }
-    const spans = variants ? paragraph.spans.map((span) => ({ text: span.text, variant: variants.findIndex((v) => v.key === span.line.fontKey) })) : null;
+    const spans = variants ? paragraph.spans.map((span) => ({ text: span.text, variant: variants.findIndex((v) => v.key === styleKey(span.line)) })) : null;
     const editing = this.openTextBox(hit, { mode: "edit", line, paragraph, text, spans, state, bg, original });
     editing.variants = variants;
     this.styleTextEditor();
@@ -1294,8 +1311,21 @@ export class ToolController {
     const bold = keepFocus(el("button", { class: "btn toggle", type: "button", title: "Negrito (Ctrl+B)", html: "<b>N</b>", onclick: () => this.toggleTextStyle("bold") }));
     const italic = keepFocus(el("button", { class: "btn toggle", type: "button", title: "Itálico (Ctrl+I)", html: "<i>I</i>", onclick: () => this.toggleTextStyle("italic") }));
     const color = el("input", { class: "color-input", type: "color", title: "Cor do texto", "aria-label": "Cor do texto" });
+    // Com um trecho selecionado, a cor vale só para ele.
+    color.addEventListener("pointerdown", () => {
+      editing.colorSpans = null;
+      editing.colorRange = this.selectedRange(editing);
+    });
     color.addEventListener("input", () => {
-      state.color = hexToRgb(color.value);
+      const value = hexToRgb(color.value);
+      if (editing.colorSpans) {
+        for (const span of editing.colorSpans) span.dataset.variant = String(this.variantFor(editing, Number(span.dataset.base), { color: value }));
+      } else if (editing.colorRange) {
+        editing.colorSpans = this.formatSelection({ color: value }, editing.colorRange);
+        editing.colorRange = null;
+      } else {
+        state.color = value;
+      }
       this.styleTextEditor();
     });
     const remove = keepFocus(
@@ -1352,10 +1382,13 @@ export class ToolController {
     for (const span of editor.querySelectorAll("[data-variant]")) {
       const kind = kinds?.[Number(span.dataset.variant)];
       if (!kind || kind === kinds[0]) continue;
+      // Trecho que mudou de estilo: sai com a fonte do catálogo (a do PDF é como é).
+      const own = original && kind.family && !kind.restyled;
       Object.assign(span.style, {
-        fontFamily: original && kind.family ? `${kind.family}, ${exactFamily(catalogId, kind.bold)}, sans-serif` : "",
-        fontWeight: (!original || !kind.family) && kind.bold ? "700" : "400",
-        fontStyle: (!original || !kind.family) && kind.italic ? "italic" : "normal",
+        fontFamily: own ? `${kind.family}, ${exactFamily(catalogId, kind.bold)}, sans-serif` : original && kind.restyled ? `${exactFamily(catalogId, kind.bold)}, sans-serif` : "",
+        fontWeight: !own && kind.bold ? "700" : "400",
+        fontStyle: !own && kind.italic ? "italic" : "normal",
+        color: kind.color ? cssColor(kind.color) : "",
       });
     }
     this.applyTextWidth();
@@ -1391,11 +1424,86 @@ export class ToolController {
   textVariants(editing) {
     if (!editing.variants) return null;
     const { state, initial } = editing;
-    return editing.variants.map((v) => ({
-      ...v,
-      bold: state.bold !== initial.bold ? state.bold : v.bold,
-      italic: state.italic !== initial.italic ? state.italic : v.italic,
-    }));
+    return editing.variants.map((v) =>
+      // O trecho formatado à parte fica como a pessoa o deixou.
+      v.custom
+        ? { ...v }
+        : {
+            ...v,
+            bold: state.bold !== initial.bold ? state.bold : v.bold,
+            italic: state.italic !== initial.italic ? state.italic : v.italic,
+          },
+    );
+  }
+
+  /** O trecho selecionado dentro da caixa de texto (uma cópia do intervalo), ou null. */
+  selectedRange(editing) {
+    const selection = window.getSelection();
+    if (!selection?.rangeCount) return null;
+    const range = selection.getRangeAt(0);
+    return !range.collapsed && editing.editor.contains(range.commonAncestorContainer) ? range.cloneRange() : null;
+  }
+
+  /**
+   * A variante que é a `base` com a mudança `change` ({ bold, italic, color }):
+   * a que já existe assim, ou uma nova. Devolve o número dela.
+   */
+  variantFor(editing, base, change) {
+    if (!editing.variants) {
+      // Texto de uma fonte só: a primeira variante é ele (acompanha a barra).
+      const lines = editing.paragraph?.lines ?? (editing.line ? [editing.line] : []);
+      editing.variants = [{ key: null, lines, bold: editing.initial.bold, italic: editing.initial.italic, family: null }];
+    }
+    const from = this.textVariants(editing)[base] ?? this.textVariants(editing)[0];
+    const next = { bold: from.bold, italic: from.italic, color: from.color ?? null, ...change };
+    const restyled = Boolean(from.restyled) || next.bold !== from.bold || next.italic !== from.italic;
+    const root = from.custom ? from.root : base;
+    const sameColor = (a, b) => (!a && !b) || (a && b && a.every((v, i) => Math.abs(v - b[i]) < 0.002));
+    const found = editing.variants.findIndex((v) => v.custom && v.root === root && v.bold === next.bold && v.italic === next.italic && Boolean(v.restyled) === restyled && sameColor(v.color, next.color));
+    if (found >= 0) return found;
+    const origin = editing.variants[root];
+    editing.variants.push({ key: null, custom: true, root, restyled, lines: restyled ? [] : origin.lines, family: restyled ? null : origin.family, ...next });
+    return editing.variants.length - 1;
+  }
+
+  /**
+   * Aplica `change` ({ bold, italic, color }) só ao trecho `range` da caixa
+   * (o selecionado): ele passa para trechos próprios, com a variante certa.
+   * Devolve os trechos criados.
+   */
+  formatSelection(change, range = this.selectedRange(this.editing)) {
+    const editing = this.editing;
+    if (editing?.kind !== "text" || !range) return [];
+    const pieces = [];
+    const walker = document.createTreeWalker(editing.editor, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!range.intersectsNode(node)) continue;
+      const start = node === range.startContainer ? range.startOffset : 0;
+      const end = node === range.endContainer ? range.endOffset : node.length;
+      if (end > start) pieces.push({ node, start, end });
+    }
+    const spans = [];
+    for (const { node, start, end } of pieces) {
+      const base = Number(node.parentElement?.closest("[data-variant]")?.dataset.variant) || 0;
+      let target = node;
+      if (end < node.length) node.splitText(end);
+      if (start > 0) target = node.splitText(start);
+      const span = el("span", { dataset: { variant: String(this.variantFor(editing, base, change)), base: String(base) } });
+      target.replaceWith(span);
+      span.append(target);
+      spans.push(span);
+    }
+    if (spans.length) {
+      editing.formatted = true;
+      // O trecho continua selecionado, para outra mudança em seguida.
+      const selection = window.getSelection();
+      const again = document.createRange();
+      again.setStartBefore(spans[0]);
+      again.setEndAfter(spans[spans.length - 1]);
+      selection.removeAllRanges();
+      selection.addRange(again);
+    }
+    return spans;
   }
 
   /** Põe a caixa com a linha de base no lugar do texto (ou no ponto clicado, no texto novo). */
@@ -1617,6 +1725,21 @@ export class ToolController {
   toggleTextStyle(kind) {
     const editing = this.editing;
     if (editing?.kind !== "text") return;
+    // Com um trecho selecionado, só ele muda (o resto do texto fica como está).
+    const range = this.selectedRange(editing);
+    if (range) {
+      const kinds = this.textVariants(editing);
+      const walker = document.createTreeWalker(editing.editor, NodeFilter.SHOW_TEXT);
+      let all = true;
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (!range.intersectsNode(node) || !node.length) continue;
+        const v = Number(node.parentElement?.closest("[data-variant]")?.dataset.variant) || 0;
+        if (!(kinds ? kinds[v]?.[kind] : editing.state[kind])) all = false;
+      }
+      this.formatSelection({ [kind]: !all }, range);
+      this.styleTextEditor();
+      return;
+    }
     // A fonte do PDF é como é: negrito ou itálico passam para a fonte do catálogo.
     if (editing.state.font === "original") editing.state.font = editing.state.substitute;
     editing.state[kind] = !editing.state[kind];
@@ -1693,7 +1816,7 @@ export class ToolController {
     const { hit, mode, line, paragraph, state, bg, viewport } = editing;
     const text = editorText(editing.editor);
     // Com a largura definida, as linhas como aparecem na caixa (antes de ela sair da tela).
-    const rows = editing.width !== null ? visualRows(editing.editor, paragraph?.align === "justify") : null;
+    const rows = editing.width !== null || editing.variants ? visualRows(editing.editor, paragraph?.align === "justify") : null;
     const [bx, by] = editing.baselinePoint;
     const origin = viewport.convertToPdfPoint(bx, by);
     // Na direção do texto na tela (de pé, mesmo com a página girada; ou como ele foi girado).
@@ -1701,15 +1824,20 @@ export class ToolController {
     const angle = Math.atan2(ahead[1] - origin[1], ahead[0] - origin[0]);
     const rotated = Math.abs(normalizeAngle(editing.turn)) > 0.003;
     const kinds = this.textVariants(editing);
+    const formatted = Boolean(editing.formatted);
     this.clearEdit();
     const fontId = state.font === "original" ? state.substitute : state.font;
+    // As variantes como vão para o PDF: as linhas (para a fonte original), o estilo, a cor e a fonte do catálogo de cada uma.
+    const variantsOf = async () =>
+      kinds && (await Promise.all(kinds.map(async (v) => ({ lines: v.lines, bold: v.bold, italic: v.italic, color: v.color ?? null, catalog: await catalogFont(fontId, v.bold) }))));
     if (mode === "add") {
       if (!text.trim()) return;
       this.saveNewTextStyle(state);
       rememberFont(fontId);
       await this.run("Adicionando texto…", async () => {
         const catalog = await catalogFont(fontId, state.bold);
-        await hit.tab.edit((doc) => addText(doc, hit.pageIndex, { origin, angle, text, rows, style: state, catalog }));
+        const variants = await variantsOf();
+        await hit.tab.edit((doc) => addText(doc, hit.pageIndex, { origin, angle, text, rows, style: state, catalog, variants }));
       });
       return;
     }
@@ -1723,7 +1851,7 @@ export class ToolController {
     // Duplicar só faz sentido com o texto em outro lugar (e com algo escrito).
     const keep = Boolean(editing.duplicate) && moved;
     if (keep && !text.trim()) return;
-    if (text === editing.text0 && !moved && !restyled && !resized) return;
+    if (text === editing.text0 && !moved && !restyled && !resized && !formatted) return;
     // Sem girar, a direção de antes, exata (a da tela passa por arredondamentos).
     const direction = rotated ? { angle } : {};
     if (state.font !== "original") rememberFont(fontId);
@@ -1733,10 +1861,11 @@ export class ToolController {
       const style = { ...state, spacing: state.spacing || 0 };
       if (paragraph) {
         const start = moved ? origin : paragraph.origin;
-        const variants = kinds && (await Promise.all(kinds.map(async (v) => ({ lines: v.lines, bold: v.bold, italic: v.italic, catalog: await catalogFont(fontId, v.bold) }))));
+        const variants = await variantsOf();
         await hit.tab.edit((doc) => editBlock(doc, hit.pageIndex, { block: paragraph, rows, style, catalog, variants, bg, origin: start, width: editing.width, keep, ...direction }));
       } else {
-        await hit.tab.edit((doc) => editText(doc, hit.pageIndex, { line, text, rows, style, catalog, bg, origin: moved ? origin : line.origin, keep, ...direction }));
+        const variants = await variantsOf();
+        await hit.tab.edit((doc) => editText(doc, hit.pageIndex, { line, text, rows, style, catalog, variants, bg, origin: moved ? origin : line.origin, keep, ...direction }));
       }
     });
   }

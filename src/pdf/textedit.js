@@ -74,7 +74,7 @@ const angleGap = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b))
  * entre letras, que o PDF.js quebra em palavras ("C L I Q U E" + "A Q U I"),
  * também volta a formar a linha.
  */
-export function groupLines(items, { fontKey = (name) => name } = {}) {
+export function groupLines(items, { fontKey = (name) => name, inkOf = () => "" } = {}) {
   const entries = [];
   for (const item of items) {
     if (!item.str.trim() || !(item.size > 0) || !Number.isFinite(item.width)) continue;
@@ -84,6 +84,8 @@ export function groupLines(items, { fontKey = (name) => name } = {}) {
     entries.push({
       item,
       key: fontKey(item.fontName) || item.fontName,
+      // A cor do pedaço (`inkOf`, quando se sabe): uma palavra de outra cor fica à parte, como a de outra fonte.
+      ink: inkOf(item) || "",
       collapsed,
       spaced: Boolean(collapsed) && /\S \S/.test(item.str),
       // Posição da linha de base e ao longo dela (para ler de cima para baixo, da esquerda para a direita).
@@ -94,11 +96,12 @@ export function groupLines(items, { fontKey = (name) => name } = {}) {
   entries.sort((p, q) => Math.round(p.item.angle * 50) - Math.round(q.item.angle * 50) || q.across - p.across || p.along - q.along);
   const groups = [];
   for (const entry of entries) {
-    const { item, key, collapsed, spaced } = entry;
+    const { item, key, ink, collapsed, spaced } = entry;
     const cos = Math.cos(item.angle);
     const sin = Math.sin(item.angle);
     const fits = (g) => {
       if (g.key !== key || Math.abs(g.size - item.size) > 0.05 * g.size) return false;
+      if (g.ink && ink && g.ink !== ink) return false;
       if (angleGap(g.angle, item.angle) > 0.02) return false;
       const dx = item.origin[0] - g.origin[0];
       const dy = item.origin[1] - g.origin[1];
@@ -115,6 +118,7 @@ export function groupLines(items, { fontKey = (name) => name } = {}) {
     if (!group) {
       groups.push({
         key,
+        ink,
         size: item.size,
         angle: item.angle,
         origin: item.origin,
@@ -128,6 +132,7 @@ export function groupLines(items, { fontKey = (name) => name } = {}) {
     }
     const a = (item.origin[0] - group.origin[0]) * cos + (item.origin[1] - group.origin[1]) * sin;
     group.items.push({ item, a, collapsed });
+    group.ink ||= ink;
     group.collapsible &&= Boolean(collapsed);
     group.spaced ||= spaced;
     group.from = Math.min(group.from, a);
@@ -175,6 +180,9 @@ export function groupLines(items, { fontKey = (name) => name } = {}) {
 }
 
 // ---- Parágrafos ----
+
+/** O estilo de um trecho (a fonte e a cor), para saber quais trechos de um parágrafo são iguais. */
+export const styleKey = (line) => `${line.fontKey}|${(line.color || []).map((v) => v.toFixed(2)).join(",")}`;
 
 const sameColor = (a, b) => (!a && !b) || (a && b && a.every((v, i) => Math.abs(v - b[i]) < 0.02));
 
@@ -293,7 +301,8 @@ export function groupParagraphs(lines) {
       const group = out.find((parts) => {
         const last = parts[parts.length - 1];
         if (!canJoin(line) || !parts.every(canJoin)) return false;
-        if (Math.abs(last.size - size) > 0.05 * last.size || angleGap(last.angle, line.angle) > 0.02 || !sameColor(last.color, line.color)) return false;
+        // Outra fonte ou outra cor no meio da frase continua sendo a mesma linha.
+        if (Math.abs(last.size - size) > 0.05 * last.size || angleGap(last.angle, line.angle) > 0.02) return false;
         const a = frame(last, last.angle);
         const b = frame(line, last.angle);
         if (Math.abs(a.y - b.y) > 0.2 * size) return false;
@@ -374,9 +383,9 @@ export function groupParagraphs(lines) {
     // A fonte do parágrafo é a que escreve mais letras; com mais de uma (negrito
     // ou itálico no meio), `spans` diz que trecho do texto é de qual.
     const count = new Map();
-    for (const span of spans) count.set(span.line.fontKey, (count.get(span.line.fontKey) || 0) + span.text.length);
+    for (const span of spans) count.set(styleKey(span.line), (count.get(styleKey(span.line)) || 0) + span.text.length);
     const mainKey = [...count].sort((a, b) => b[1] - a[1])[0][0];
-    const main = spans.find((s) => s.line.fontKey === mainKey).line;
+    const main = spans.find((s) => styleKey(s.line) === mainKey).line;
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
     const y = frames[0].y;
@@ -556,6 +565,14 @@ async function writeText(doc, page, { origin, angle, rows, style, catalog, origi
   const ops = [pushGraphicsState(), setFillingColor(color)];
   if (kinds.some(fakeBold)) ops.push(setStrokingColor(color), setLineWidth(boldStroke(size)));
   ops.push(beginText(), setCharacterSpacing(spacing));
+  // A cor de cada variante (a do texto, se ela não tem a sua): só troca quando muda.
+  let inked = style.color;
+  const ink = (v) => {
+    const wanted = kinds[v].color || style.color;
+    if (wanted.every((value, k) => Math.abs(value - inked[k]) < 1e-4)) return [];
+    inked = wanted;
+    return kinds.some(fakeBold) ? [setFillingColor(rgb(...wanted)), setStrokingColor(rgb(...wanted))] : [setFillingColor(rgb(...wanted))];
+  };
   pieces.forEach((segments, i) => {
     const prepared = segments.map((segment) => {
       const kind = kinds[segment.v];
@@ -595,7 +612,7 @@ async function writeText(doc, page, { origin, angle, rows, style, catalog, origi
       }
       const at = [base[0] + x * cos, base[1] + x * sin];
       const matrix = multiply([1, 0, skew, 1, 0, 0], [cos, sin, -sin, cos, at[0], at[1]]);
-      ops.push(setFontAndSize(key, size), setTextRenderingMode(mode), setTextMatrix(...matrix), showText(hex));
+      ops.push(...ink(segment.v), setFontAndSize(key, size), setTextRenderingMode(mode), setTextMatrix(...matrix), showText(hex));
       x += advance + (segment.space ? extra : 0);
     }
   });
@@ -669,7 +686,7 @@ function cover(page, line, bg) {
  * linha de `rows` com `justify` ocupa. Devolve se o texto antigo saiu do
  * conteúdo.
  */
-export async function editText(doc, pageIndex, { line, text, rows = null, style, catalog, bg, origin = line.origin, angle = line.angle, width = 0, keep = false }) {
+export async function editText(doc, pageIndex, { line, text, rows = null, style, catalog, variants = null, bg, origin = line.origin, angle = line.angle, width = 0, keep = false }) {
   const page = doc.getPage(pageIndex);
   const all = findTextRuns(doc, page);
   const runs = lineRuns(all, line);
@@ -679,7 +696,9 @@ export async function editText(doc, pageIndex, { line, text, rows = null, style,
   if (removed.length) removeRuns(doc, page, removed);
   isolatePage(doc, page);
   if (!runs && !keep) cover(page, line, bg);
-  if (text.trim()) await writeText(doc, page, { origin, angle, rows: rows || rowsOf(text), style, catalog, original, width });
+  // Trechos com formatação própria (negrito, itálico ou cor só neles): os que mudam de estilo saem com a fonte do catálogo.
+  const kinds = variants?.map((v) => ({ ...v, original: v.lines?.length ? original : null })) ?? null;
+  if (text.trim()) await writeText(doc, page, { origin, angle, rows: rows || rowsOf(text), style, catalog, original, variants: kinds, width });
   return Boolean(runs);
 }
 
@@ -728,8 +747,9 @@ export async function editBlock(doc, pageIndex, { block, rows, style, catalog, v
 }
 
 /** Escreve texto novo na página (veja writeText; `rows` como em editText). */
-export async function addText(doc, pageIndex, { origin, angle = 0, text, rows = null, style, catalog }) {
+export async function addText(doc, pageIndex, { origin, angle = 0, text, rows = null, style, catalog, variants = null }) {
   const page = doc.getPage(pageIndex);
   isolatePage(doc, page);
-  await writeText(doc, page, { origin, angle, rows: rows || rowsOf(text), style, catalog, original: null });
+  const kinds = variants?.map((v) => ({ ...v, original: null })) ?? null;
+  await writeText(doc, page, { origin, angle, rows: rows || rowsOf(text), style, catalog, original: null, variants: kinds });
 }
