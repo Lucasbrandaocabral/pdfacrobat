@@ -6,6 +6,7 @@ import android.content.ClipData;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
@@ -22,6 +23,7 @@ import android.util.Base64;
 import androidx.activity.result.ActivityResult;
 import androidx.core.content.FileProvider;
 import androidx.core.content.IntentCompat;
+import androidx.core.content.pm.PackageInfoCompat;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -37,6 +39,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -73,6 +77,18 @@ public class NativeFilesPlugin extends Plugin {
         // Cópias de documentos compartilhados antes (o outro app já as recebeu).
         File[] shared = shareDir().listFiles();
         if (shared != null) for (File file : shared) file.delete();
+        // O instalador de uma atualização já feita (ou que ficou pela metade).
+        File[] updates = updateDir().listFiles();
+        if (updates != null) for (File file : updates) file.delete();
+    }
+
+    /** Pasta do APK da versão nova (dentro do que o FileProvider serve). */
+    private File updateDir() {
+        return new File(getContext().getCacheDir(), "atualizacao");
+    }
+
+    private File updateFile() {
+        return new File(updateDir(), "PDF-Acrobat.apk");
     }
 
     /** Pasta dos arquivos entregues a outros apps pelo "Compartilhar" (dentro da que o FileProvider serve). */
@@ -314,6 +330,96 @@ public class NativeFilesPlugin extends Plugin {
             call.resolve();
         } catch (ActivityNotFoundException e) {
             call.reject("Nenhum app para compartilhar o arquivo.");
+        }
+    }
+
+    // ---- Atualização ----
+
+    private static final String UPDATE_SOURCE = "https://github.com/Lucasbrandaocabral/pdfacrobat/releases/download/";
+    private static final String EVENT_UPDATE_PROGRESS = "updateProgress";
+    // Um APK maior que isto não é o do app.
+    private static final long MAX_UPDATE_BYTES = 300L * 1024 * 1024;
+
+    /**
+     * Baixa o APK da versão nova (`url`, das Releases do projeto) para a pasta
+     * do app, avisando o andamento (evento updateProgress, { percent }). Só
+     * serve um APK deste mesmo app e mais novo que o instalado.
+     */
+    @PluginMethod
+    public void downloadUpdate(PluginCall call) {
+        String url = call.getString("url", "");
+        if (!url.startsWith(UPDATE_SOURCE) || !url.endsWith(".apk")) {
+            call.reject("Endereço inválido.");
+            return;
+        }
+        io.execute(() -> {
+            File dir = updateDir();
+            File partial = new File(dir, "baixando.tmp");
+            File target = updateFile();
+            HttpURLConnection connection = null;
+            try {
+                if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("sem a pasta temporária");
+                connection = (HttpURLConnection) new URL(url).openConnection();
+                connection.setConnectTimeout(20000);
+                connection.setReadTimeout(30000);
+                connection.setInstanceFollowRedirects(true);
+                if (connection.getResponseCode() != HttpURLConnection.HTTP_OK) throw new IOException("HTTP " + connection.getResponseCode());
+                // O arquivo vem de outro endereço do GitHub (redirecionado), sempre por https.
+                if (!"https".equals(connection.getURL().getProtocol())) throw new IOException("conexão insegura");
+                long total = connection.getContentLengthLong();
+                if (total > MAX_UPDATE_BYTES) throw new IOException("arquivo grande demais");
+                long done = 0;
+                int last = -1;
+                try (InputStream in = connection.getInputStream(); OutputStream out = new FileOutputStream(partial)) {
+                    byte[] buffer = new byte[64 * 1024];
+                    int read;
+                    while ((read = in.read(buffer)) > 0) {
+                        out.write(buffer, 0, read);
+                        done += read;
+                        if (done > MAX_UPDATE_BYTES) throw new IOException("arquivo grande demais");
+                        int percent = total > 0 ? (int) (done * 100 / total) : 0;
+                        if (percent != last) {
+                            last = percent;
+                            JSObject progress = new JSObject();
+                            progress.put("percent", percent);
+                            notifyListeners(EVENT_UPDATE_PROGRESS, progress);
+                        }
+                    }
+                }
+                // Só o APK deste app, e de uma versão mais nova (a assinatura quem confere é o Android, ao instalar).
+                PackageInfo incoming = getContext().getPackageManager().getPackageArchiveInfo(partial.getAbsolutePath(), 0);
+                PackageInfo current = getContext().getPackageManager().getPackageInfo(getContext().getPackageName(), 0);
+                if (incoming == null || !getContext().getPackageName().equals(incoming.packageName)) throw new IOException("o arquivo baixado não é o do app");
+                if (PackageInfoCompat.getLongVersionCode(incoming) <= PackageInfoCompat.getLongVersionCode(current)) throw new IOException("a versão baixada não é mais nova");
+                target.delete();
+                if (!partial.renameTo(target)) throw new IOException("não foi possível guardar o arquivo");
+                call.resolve();
+            } catch (Exception e) {
+                partial.delete();
+                call.reject("Não foi possível baixar a atualização: " + e.getMessage(), e);
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        });
+    }
+
+    /** Abre o instalador do Android com o APK baixado por downloadUpdate (a pessoa confirma lá). */
+    @PluginMethod
+    public void installUpdate(PluginCall call) {
+        File file = updateFile();
+        if (!file.isFile()) {
+            call.reject("A atualização ainda não foi baixada.");
+            return;
+        }
+        Uri uri = FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".fileprovider", file);
+        Intent install = new Intent(Intent.ACTION_VIEW);
+        install.setDataAndType(uri, "application/vnd.android.package-archive");
+        install.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            getContext().startActivity(install);
+            call.resolve();
+        } catch (ActivityNotFoundException e) {
+            call.reject("Não foi possível abrir o instalador do Android.");
         }
     }
 

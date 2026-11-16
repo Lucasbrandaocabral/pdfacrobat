@@ -26,7 +26,7 @@ const VIEWS = {
     text: installOnQuit
       ? `A versão ${version} será instalada quando você fechar o programa.`
       : `A versão ${version} está pronta para ser instalada.`,
-    action: "Reiniciar e atualizar",
+    action: isAndroid ? "Instalar" : "Reiniciar e atualizar",
   }),
   opened: () =>
     isAndroid
@@ -110,6 +110,15 @@ export function setupUpdates({ closeDocuments, showNews }) {
       return;
     }
     if (!(await closeDocuments())) return;
+    if (isAndroid) {
+      // O instalador do Android abre por cima; a confirmação é lá.
+      try {
+        await updates.install();
+      } catch (err) {
+        toast(err?.message || "Não foi possível abrir o instalador do Android.", { duration: 7000 });
+      }
+      return;
+    }
     setBusy(current?.state === "opened" ? "Fechando…" : "Instalando a atualização…");
     updates.install();
   });

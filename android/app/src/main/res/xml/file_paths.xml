@@ -2,4 +2,6 @@
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Só uma pasta própria dos arquivos temporários (o teste do CI abre um PDF por ela). -->
     <cache-path name="compartilhados" path="compartilhados/" />
+    <!-- O APK da versão nova, entregue ao instalador do Android. -->
+    <cache-path name="atualizacao" path="atualizacao/" />
 </paths>

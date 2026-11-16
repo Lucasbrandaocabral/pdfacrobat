@@ -55,4 +55,6 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Instalar a versão nova baixada pelo próprio app (o Android ainda pede a confirmação da pessoa). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 </manifest>

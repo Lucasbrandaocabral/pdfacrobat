@@ -266,8 +266,8 @@ export function isNewer(version, than) {
 }
 
 /**
- * App Android: procura nas Releases do GitHub uma versão com APK mais nova e,
- * ao baixar, abre o download no navegador (tocar no arquivo instala).
+ * App Android: procura nas Releases do GitHub uma versão com APK mais nova,
+ * baixa o APK por dentro do app e abre o instalador do Android.
  */
 function androidUpdates() {
   const listeners = new Set();
@@ -301,12 +301,25 @@ function androidUpdates() {
     check: () => check(true),
     // Ao abrir o app, sem atrapalhar o carregamento.
     autoCheck: () => setTimeout(() => check(false), 5000),
+    // O próprio app baixa o APK (com o andamento) e depois abre o instalador do
+    // Android. Se o download por dentro não der certo, cai para o navegador.
     download: async () => {
       if (!apkUrl) return;
-      await nativeFiles.openUrl({ url: apkUrl });
-      emit({ ...status, state: "opened" });
+      const version = status.version;
+      emit({ state: "downloading", version, percent: 0 });
+      const listener = await nativeFiles.addListener("updateProgress", ({ percent }) => emit({ state: "downloading", version, percent }));
+      try {
+        await nativeFiles.downloadUpdate({ url: apkUrl });
+        emit({ state: "ready", version, installOnQuit: false });
+      } catch (err) {
+        console.warn("Atualização por dentro do app não funcionou:", err);
+        await nativeFiles.openUrl({ url: apkUrl });
+        emit({ state: "opened", version });
+      } finally {
+        listener?.remove?.();
+      }
     },
-    install: () => {},
+    install: () => nativeFiles.installUpdate(),
   };
 }
 
