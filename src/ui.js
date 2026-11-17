@@ -52,6 +52,61 @@ export async function runBusy(message, task) {
   }
 }
 
+/**
+ * Menu suspenso no ponto (x, y) da janela. `items`: { icon (html), label,
+ * hint, onclick, disabled }, ou "-" para uma linha separadora. Fecha ao
+ * escolher, com Esc, ao clicar fora ou ao rolar. Devolve a função que o fecha.
+ */
+export function popupMenu(items, { x, y }) {
+  document.querySelector(".popup-menu")?.remove();
+  const menu = el("div", { class: "popup-menu", role: "menu" });
+  const close = () => {
+    menu.remove();
+    window.removeEventListener("pointerdown", outside, true);
+    window.removeEventListener("keydown", onKey, true);
+    window.removeEventListener("wheel", close, true);
+    window.removeEventListener("resize", close);
+  };
+  const outside = (e) => {
+    if (!menu.contains(e.target)) close();
+  };
+  const onKey = (e) => {
+    if (e.key !== "Escape") return;
+    e.preventDefault();
+    e.stopPropagation();
+    close();
+  };
+  for (const item of items.filter(Boolean)) {
+    if (item === "-") {
+      if (menu.lastChild && !menu.lastChild.classList.contains("popup-rule")) menu.append(el("div", { class: "popup-rule" }));
+      continue;
+    }
+    const button = el("button", { class: "popup-item", type: "button", role: "menuitem" }, [
+      el("span", { class: "popup-icon", html: item.icon || "" }),
+      el("span", { class: "popup-label", text: item.label }),
+      item.hint ? el("span", { class: "popup-hint", text: item.hint }) : null,
+    ].filter(Boolean));
+    button.disabled = Boolean(item.disabled);
+    button.addEventListener("click", () => {
+      close();
+      item.onclick?.();
+    });
+    menu.append(button);
+  }
+  if (menu.lastChild?.classList.contains("popup-rule")) menu.lastChild.remove();
+  document.body.append(menu);
+  const left = Math.max(4, Math.min(x, window.innerWidth - menu.offsetWidth - 4));
+  const top = y + menu.offsetHeight + 4 > window.innerHeight ? Math.max(4, y - menu.offsetHeight) : y;
+  Object.assign(menu.style, { left: `${left}px`, top: `${top}px` });
+  setTimeout(() => {
+    window.addEventListener("pointerdown", outside, true);
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("wheel", close, true);
+    window.addEventListener("resize", close);
+  });
+  return close;
+}
+
 /** Erro com mensagem já pronta para o usuário. */
 export class UserError extends Error {
   constructor(message) {

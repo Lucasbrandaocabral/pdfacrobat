@@ -9,10 +9,10 @@
 // celular, segurar o dedo num objeto o seleciona; depois, tocar em outros
 // junta mais e arrastar a seleção a move.
 import { showGuides, snapRect } from "./snap.js";
-import { $, el, toast } from "./ui.js";
+import { $, el, popupMenu, toast } from "./ui.js";
 import { icon } from "./icons.js";
 import { loadPdf } from "./pdfjs.js";
-import { copyObjects, deleteObjects, moveObjects, pasteObjects, rotationAbout, textKey, transformObjects, unionRect } from "./pdf/objects.js";
+import { copyObjects, deleteObjects, moveObjects, pasteObjects, raiseObjects, rotationAbout, textKey, transformEach, transformObjects, unionRect } from "./pdf/objects.js";
 import { dragRotation, normalizeAngle, rotateHandle, screenAngle } from "./rotate.js";
 
 // Quanto o ponteiro anda (px) até contar como arrasto, por tipo de ponteiro.
@@ -478,6 +478,16 @@ export class ObjectSelection {
       el("span", { class: "float-hint object-count" }),
       turn("rotateCcw", "Girar 90° para a esquerda", -Math.PI / 2),
       turn("rotateCw", "Girar 90° para a direita", Math.PI / 2),
+      el("button", {
+        class: "btn",
+        type: "button",
+        title: "Alinhar, distribuir e mudar a ordem (frente e trás)",
+        html: `${icon("arrange")}<span>Organizar</span>`,
+        onclick: (e) => {
+          const box = e.currentTarget.getBoundingClientRect();
+          popupMenu(this.arrangeItems(), { x: box.left, y: box.bottom + 4 });
+        },
+      }),
       button("duplicate", "Duplicar", "Duplicar (ou arraste com Alt ou Ctrl)", () => this.duplicate()),
       button("copy", "Copiar", "Copiar (Ctrl+C)", () => this.copy({ cut: false })),
       button("cut", "Recortar", "Recortar (Ctrl+X)", () => this.copy({ cut: true })),
@@ -701,6 +711,18 @@ export class ObjectSelection {
   }
 
   /** Depois de mudar o documento, seleciona de novo os objetos `keys` (na página recarregada). */
+  /** Como reselect, mas pelos lugares (retângulos, em pontos do PDF) onde os objetos ficaram. */
+  async reselectAt(tab, pageNumber, rects) {
+    await tab.loaded;
+    const tools = this.tools;
+    if (tools.tool !== "edit" || tools.manager.active !== tab || tools.editing) return;
+    const data = await tools.pageData(tab, pageNumber);
+    const same = (a, b) => a.every((v, i) => Math.abs(v - b[i]) <= 1);
+    const units = (data.units || []).filter((u) => u.rect && !u.invisible && rects.some((r) => same(r, u.rect)));
+    const hit = tools.pageHitFor(tab, pageNumber);
+    if (units.length && hit && !tools.editing) this.select(hit, units, data);
+  }
+
   async reselect(tab, pageNumber, keys) {
     await tab.loaded;
     const tools = this.tools;
@@ -744,6 +766,132 @@ export class ObjectSelection {
     const keys = units.flatMap((u) => u.keys);
     this.tools.clearEdit();
     await this.tools.track(this.tools.run("Excluindo…", () => hit.tab.edit((doc) => deleteObjects(doc, hit.pageIndex, keys))));
+  }
+
+  /** Os itens de organizar a seleção: ordem (frente e trás) e, com vários objetos, alinhar e distribuir. */
+  arrangeItems() {
+    const count = this.editing?.units.length ?? 0;
+    const item = (name, label, onclick, disabled = false) => ({ icon: icon(name), label, onclick, disabled });
+    return [
+      item("toFront", "Trazer para frente", () => this.order(true)),
+      item("toBack", "Enviar para trás", () => this.order(false)),
+      "-",
+      item("alignLeft", "Alinhar à esquerda", () => this.align("left"), count < 2),
+      item("alignCenter", "Centralizar na horizontal", () => this.align("center"), count < 2),
+      item("alignRight", "Alinhar à direita", () => this.align("right"), count < 2),
+      item("alignTop", "Alinhar em cima", () => this.align("top"), count < 2),
+      item("alignMiddle", "Centralizar na vertical", () => this.align("middle"), count < 2),
+      item("alignBottom", "Alinhar embaixo", () => this.align("bottom"), count < 2),
+      "-",
+      item("distributeH", "Mesmo espaço na horizontal", () => this.align("spreadX"), count < 3),
+      item("distributeV", "Mesmo espaço na vertical", () => this.align("spreadY"), count < 3),
+    ];
+  }
+
+  /**
+   * Alinha os objetos da seleção entre si (pela borda ou pelo meio do conjunto)
+   * ou deixa o mesmo espaço entre eles, como se vê na tela.
+   */
+  async align(mode) {
+    const editing = this.editing;
+    if (!editing || editing.busy || editing.units.length < 2) return;
+    this.finishPending(editing);
+    const { hit, units } = editing;
+    const tools = this.tools;
+    const rects = units.map((unit) => ({ unit, ...tools.cssRect(hit.pageView, unit.rect) }));
+    const left = Math.min(...rects.map((r) => r.left));
+    const top = Math.min(...rects.map((r) => r.top));
+    const right = Math.max(...rects.map((r) => r.left + r.width));
+    const bottom = Math.max(...rects.map((r) => r.top + r.height));
+    const shift = new Map();
+    if (mode === "spreadX" || mode === "spreadY") {
+      const [start, size] = mode === "spreadX" ? ["left", "width"] : ["top", "height"];
+      const sorted = [...rects].sort((a, b) => a[start] - b[start]);
+      const total = (mode === "spreadX" ? right - left : bottom - top) - sorted.reduce((sum, r) => sum + r[size], 0);
+      let at = mode === "spreadX" ? left : top;
+      for (const r of sorted) {
+        shift.set(r.unit, mode === "spreadX" ? [at - r.left, 0] : [0, at - r.top]);
+        at += r[size] + total / (sorted.length - 1);
+      }
+    } else {
+      for (const r of rects) {
+        const dx = mode === "left" ? left - r.left : mode === "right" ? right - (r.left + r.width) : mode === "center" ? (left + right) / 2 - (r.left + r.width / 2) : 0;
+        const dy = mode === "top" ? top - r.top : mode === "bottom" ? bottom - (r.top + r.height) : mode === "middle" ? (top + bottom) / 2 - (r.top + r.height / 2) : 0;
+        shift.set(r.unit, [dx, dy]);
+      }
+    }
+    const vp = hit.pageView.viewport;
+    const zero = vp.convertToPdfPoint(0, 0);
+    const moves = [];
+    const places = [];
+    for (const [unit, [dx, dy]] of shift) {
+      const to = vp.convertToPdfPoint(dx, dy);
+      const delta = Math.hypot(dx, dy) < 0.3 ? [0, 0] : [to[0] - zero[0], to[1] - zero[1]];
+      places.push([unit.rect[0] + delta[0], unit.rect[1] + delta[1], unit.rect[2] + delta[0], unit.rect[3] + delta[1]]);
+      if (delta[0] || delta[1]) moves.push({ keys: unit.keys, matrix: [1, 0, 0, 1, ...delta] });
+    }
+    if (!moves.length) return toast("Os objetos já estão alinhados assim.");
+    editing.busy = true;
+    const { tab, pageIndex, pageNumber } = hit;
+    const moved = await tools.track(tools.run("Alinhando…", () => tab.edit((doc) => transformEach(doc, pageIndex, moves))));
+    if (tools.editing === editing) editing.busy = false;
+    if (moved?.length) await this.reselectAt(tab, pageNumber, places);
+  }
+
+  /**
+   * Muda a ordem da seleção na pilha da página: para frente de tudo, ou para
+   * trás do que a cobre (o que está no mesmo lugar passa para cima dela; o
+   * fundo da página continua sendo o fundo).
+   */
+  async order(front) {
+    const editing = this.editing;
+    if (!editing || editing.busy) return;
+    this.finishPending(editing);
+    const { hit, units } = editing;
+    const tools = this.tools;
+    const { tab, pageIndex, pageNumber } = hit;
+    let keys = units.flatMap((u) => u.keys);
+    if (!front) {
+      const area = unionRect(units.map((u) => u.rect));
+      const touches = (r) => r[0] < area[2] && r[2] > area[0] && r[1] < area[3] && r[3] > area[1];
+      const data = await tools.pageData(tab, pageNumber);
+      keys = (data.units || []).filter((u) => !units.includes(u) && !u.background && !u.invisible && u.rect && touches(u.rect)).flatMap((u) => u.keys);
+      if (!keys.length) return toast("Não há outro objeto no mesmo lugar para ficar na frente.");
+    }
+    const places = units.map((u) => u.rect);
+    editing.busy = true;
+    const raised = await tools.track(tools.run(front ? "Trazendo para frente…" : "Enviando para trás…", () => tab.edit((doc) => raiseObjects(doc, pageIndex, keys))));
+    if (tools.editing === editing) editing.busy = false;
+    if (raised?.length) await this.reselectAt(tab, pageNumber, places);
+  }
+
+  /** Botão direito (ou o menu do teclado) na página: as ações do objeto debaixo do ponteiro, ou as da página. */
+  async context(e, hit) {
+    const tools = this.tools;
+    if (tools.editing && !this.editing) await tools.finishEdit();
+    if (this.editing?.busy) return;
+    const data = await tools.pageData(hit.tab, hit.pageNumber);
+    const unit = unitAt(data.units || [], hit.pdf);
+    const current = this.samePage(this.editing, hit) ? this.editing.units : [];
+    if (unit && !current.includes(unit)) this.select(hit, [unit], data);
+    const item = (name, label, hint, onclick, disabled = false) => ({ icon: icon(name), label, hint, onclick, disabled });
+    const pasteItem = item("paste", "Colar aqui", "Ctrl+V", () => this.paste({ pageNumber: hit.pageNumber, at: hit.pdf }), !clipboard);
+    const items = unit
+      ? [
+          item("copy", "Copiar", "Ctrl+C", () => this.copy({ cut: false })),
+          item("cut", "Recortar", "Ctrl+X", () => this.copy({ cut: true })),
+          pasteItem,
+          item("duplicate", "Duplicar", "", () => this.duplicate()),
+          "-",
+          item("rotateCcw", "Girar 90° para a esquerda", "", () => this.rotateBy(-Math.PI / 2)),
+          item("rotateCw", "Girar 90° para a direita", "", () => this.rotateBy(Math.PI / 2)),
+          "-",
+          ...this.arrangeItems(),
+          "-",
+          item("trash", "Excluir", "Delete", () => this.remove()),
+        ]
+      : [pasteItem, item("selectAll", "Selecionar tudo", "Ctrl+A", () => this.selectAll(hit.pageNumber))];
+    popupMenu(items, { x: e.clientX, y: e.clientY });
   }
 
   /** Duplicar pela barra: a cópia fica um pouco ao lado, selecionada. */

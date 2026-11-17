@@ -193,6 +193,27 @@ export function onOpenFile(callback) {
   });
 }
 
+/** Dá para compartilhar um arquivo com outros apps (WhatsApp, e-mail...)? No app Android e nos navegadores de celular. */
+export const canShare = Boolean(nativeFiles) || (!api && typeof navigator.canShare === "function" && /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent));
+
+/** Abre a janela "Compartilhar" do sistema com o arquivo. Devolve false se a pessoa desistiu. */
+export async function shareFile(data, name) {
+  const type = mimeOf(name);
+  if (nativeFiles) {
+    await nativeFiles.share({ name, mimeType: type, data: toBase64(data) });
+    return true;
+  }
+  const file = new File([data], name, { type });
+  if (!navigator.canShare?.({ files: [file] })) throw new Error("Este navegador não compartilha arquivos. Salve o documento e envie o arquivo salvo.");
+  try {
+    await navigator.share({ files: [file], title: name });
+    return true;
+  } catch (err) {
+    if (err?.name === "AbortError") return false;
+    throw err;
+  }
+}
+
 /**
  * Imprime pelo serviço de impressão do Android, que já abre com o papel
  * (`paper`, chave de PAPERS) e a orientação sugeridos.
@@ -245,8 +266,8 @@ export function isNewer(version, than) {
 }
 
 /**
- * App Android: procura nas Releases do GitHub uma versão com APK mais nova e,
- * ao baixar, abre o download no navegador (tocar no arquivo instala).
+ * App Android: procura nas Releases do GitHub uma versão com APK mais nova,
+ * baixa o APK por dentro do app e abre o instalador do Android.
  */
 function androidUpdates() {
   const listeners = new Set();
@@ -280,12 +301,25 @@ function androidUpdates() {
     check: () => check(true),
     // Ao abrir o app, sem atrapalhar o carregamento.
     autoCheck: () => setTimeout(() => check(false), 5000),
+    // O próprio app baixa o APK (com o andamento) e depois abre o instalador do
+    // Android. Se o download por dentro não der certo, cai para o navegador.
     download: async () => {
       if (!apkUrl) return;
-      await nativeFiles.openUrl({ url: apkUrl });
-      emit({ ...status, state: "opened" });
+      const version = status.version;
+      emit({ state: "downloading", version, percent: 0 });
+      const listener = await nativeFiles.addListener("updateProgress", ({ percent }) => emit({ state: "downloading", version, percent }));
+      try {
+        await nativeFiles.downloadUpdate({ url: apkUrl });
+        emit({ state: "ready", version, installOnQuit: false });
+      } catch (err) {
+        console.warn("Atualização por dentro do app não funcionou:", err);
+        await nativeFiles.openUrl({ url: apkUrl });
+        emit({ state: "opened", version });
+      } finally {
+        listener?.remove?.();
+      }
     },
-    install: () => {},
+    install: () => nativeFiles.installUpdate(),
   };
 }
 

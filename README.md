@@ -67,7 +67,8 @@ Com o app instalado:
 - **Abrir com** e **Compartilhar**: PDFs do WhatsApp, do e-mail ou do gerenciador de arquivos abrem direto no PDF Acrobat.
 - **Salvar** abre o seletor de arquivos do Android (Downloads, Documentos, Google Drive...) e depois grava no mesmo arquivo; vários arquivos de uma vez vão para a pasta escolhida.
 - **Imprimir** abre a janela de impressão do app (tamanho, pôster, várias páginas por folha, livreto) e depois o serviço de impressão do Android, onde se escolhe a impressora (ou salvar como PDF).
-- Quando sai uma versão nova, o app avisa e o botão **Baixar** abre o download no navegador; é só tocar no arquivo baixado para instalar por cima, sem perder as assinaturas salvas.
+- **Compartilhar** (botão no alto) manda o documento, com as alterações, para o WhatsApp, o e-mail ou outro app.
+- Quando sai uma versão nova, o app avisa; o botão **Baixar** baixa a atualização por dentro do app, mostrando o andamento, e o **Instalar** abre o instalador do Android (na primeira vez, ele pede para permitir que o PDF Acrobat instale apps). A versão nova entra por cima, sem perder as assinaturas salvas. Se o download por dentro falhar, ele abre no navegador, como antes.
 
 O APK é gerado pelo mesmo workflow e assinado sempre com a mesma chave, que fica nos *secrets* do repositório (**Settings → Secrets and variables → Actions**): `ANDROID_KEYSTORE_BASE64` (o arquivo da chave em base64) e `ANDROID_KEYSTORE_PASSWORD`; em cada um, cole só o valor. Se um deles estiver errado, o erro do workflow diz qual cadastrar de novo. Guarde uma cópia do arquivo da chave: sem ela, uma versão nova não instala por cima da antiga. Sem os secrets, o workflow gera só um APK de teste (*Artifacts* → `apk-de-teste`), que não entra nas versões publicadas; o mesmo acontece em qualquer envio que não seja uma tag de versão, porque a chave só é usada nas versões publicadas. Para proteger mais a chave, cadastre os dois secrets no ambiente `release` (**Settings → Environments → release**, criado na primeira versão publicada), com a regra de só aceitar tags de versão (*Deployment branches and tags* → tag `v*`; aí as versões precisam ser publicadas com tags começando com v, como `v1.11.0`), e apague os do repositório.
 
@@ -102,6 +103,8 @@ Na versão web os arquivos são abertos e baixados pelo navegador (vários arqui
 | Ctrl+P | Imprimir |
 | Ctrl+F | Localizar (Enter = próximo, Shift+Enter = anterior) |
 | Ctrl+H | Localizar e substituir no documento inteiro |
+| Ctrl+K | Buscar um comando pelo nome (tarjar, dividir, senha...) |
+| Botão direito (em Editar texto e imagens) | Menu do objeto: copiar, colar, duplicar, girar, organizar, excluir |
 | Ctrl+D | Propriedades do documento |
 | Ctrl + / Ctrl − | Zoom |
 | F4 | Painel lateral |
@@ -151,6 +154,8 @@ src/tabs.js              abas (um visualizador do PDF.js por documento), desfaze
 src/tools.js             ferramentas na página: comentar, formas, carimbos, assinar, editar texto e imagens
 src/objectsel.js         objetos na ferramenta Editar: selecionar vários, arrastar, girar, duplicar, copiar, recortar e colar
 src/pinch.js             zoom com dois dedos na tela de toque
+src/palette.js           busca de comandos (Ctrl+K), a partir dos botões da barra
+src/drafts.js            rascunhos: cópia das alterações não salvas, para recuperar ao abrir de novo
 src/snap.js              alinhamento automático ao arrastar (gruda nas bordas e no meio dos outros itens e mostra a guia)
 src/rotate.js            girar com o ponteiro: a alça redonda, o ângulo na tela e os ímãs (ângulos retos, Shift de 15 em 15°)
 src/sidebar.js           miniaturas, marcadores e lista de comentários
@@ -202,7 +207,10 @@ cd android && ./gradlew assembleDebug   # APK de teste (precisa do JDK 21 e do A
 
 ## Limitações
 
-- **Editar texto:** o parágrafo é reconhecido pela posição das linhas; trechos em outra fonte no meio dele (palavras em negrito ou em itálico) continuam com a fonte deles, e o que se digita dentro de um trecho sai igual a ele; ainda não dá para pôr negrito só numa parte do texto (os botões da barra valem para o parágrafo todo), e o parágrafo sai com um tamanho e uma cor só. Trechos de outro tamanho ou de outra cor na mesma linha continuam editados à parte. Letras que a fonte original do PDF não tem saem com a fonte parecida do catálogo. Texto que faz parte de uma imagem (documento escaneado) é coberto com a cor do fundo; use antes o OCR. Texto transformado em desenho (curvas) não é editável como texto.
+- **Editar texto:** o parágrafo é reconhecido pela posição das linhas; trechos em outra fonte no meio dele (palavras em negrito ou em itálico) continuam com a fonte deles, e o que se digita dentro de um trecho sai igual a ele; com um trecho selecionado, o negrito, o itálico e a cor valem só para ele; o parágrafo sai com um tamanho só. Trechos de outro tamanho na mesma linha continuam editados à parte. Letras que a fonte original do PDF não tem saem com a fonte parecida do catálogo. Texto que faz parte de uma imagem (documento escaneado) é coberto com a cor do fundo; use antes o OCR. Texto transformado em desenho (curvas) não é editável como texto.
+- **Formatar só um trecho:** negrito, itálico e cor valem para o trecho selecionado; a fonte e o tamanho continuam valendo para a caixa inteira. O trecho que muda de negrito ou itálico sai com a fonte parecida do catálogo, e o itálico é feito inclinando as letras.
+- **Rascunhos:** a cópia das alterações não salvas fica só neste aparelho (no armazenamento do app ou do navegador) e some ao salvar ou fechar o documento; documentos com mais de 150 MB não são guardados.
+- **Atualização no Android:** o app baixa a versão nova e abre o instalador do Android, que pede a confirmação (e, na primeira vez, a permissão para o PDF Acrobat instalar apps).
 - **Localizar e substituir:** a troca é feita linha por linha, sem refazer as quebras do parágrafo: um texto novo bem mais comprido que o antigo pode passar da margem (aí, edite o parágrafo). Um texto que começa numa linha e termina na outra não é encontrado, nem o que faz parte de uma imagem (use antes o OCR).
 - **Mover e girar objetos:** a cópia movida (ou girada, em volta do meio da seleção) é desenhada de novo por cima, com o mesmo estado do original (fonte, cores, transparência, recorte), e o que estava por cima dela é redesenhado por cima também, para nada mudar de lugar na pilha. Duplicados e colados ficam por cima de tudo. O que cobre quase a página inteira (um fundo) não é pego por clique nem por arrasto: entra no Ctrl+A ou numa área que o pegue inteiro. Objetos de camadas escondidas não aparecem nem são selecionados; colados em outro documento, os objetos saem da camada em que estavam. Texto sem as medidas das letras e texto usado como recorte não viram objetos.
 - **Word:** a conversão leva o texto em parágrafos, sem o layout original (colunas, tabelas e imagens).

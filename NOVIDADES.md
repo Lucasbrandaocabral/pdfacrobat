@@ -19,6 +19,17 @@ o comentário não aparece. Correções ficam sem animação.
 - **Parágrafo inteiro, mesmo com negrito e itálico**: ao editar um texto, o clique agora pega o parágrafo todo também quando ele tem palavras em negrito ou em itálico no meio (antes, cada pedaço virava uma caixa separada). Cada trecho continua com a fonte dele, e o que você digita dentro de um trecho em negrito sai em negrito. Parágrafos com a primeira linha bem recuada e com espaço duplo entre as linhas também são reconhecidos. <!-- demo: estilos -->
 - **Alinhamento automático ao arrastar**: ao mover um objeto, um texto ou uma imagem, ele gruda quando chega perto da borda ou do meio de outro item da página (ou do meio e das bordas da página), e uma linha rosa mostra com o que alinhou, como no Canva. <!-- demo: alinhar -->
 - **Localizar e substituir**: em **Editar → Substituir** (Ctrl+H), troque uma palavra, uma data ou um valor no documento inteiro de uma vez. Cada troca sai com a fonte, o tamanho e a cor do lugar, e dá para desfazer com Ctrl+Z.
+- **Formatar só um trecho**: ao editar um texto, selecione uma palavra ou uma frase e use **N**, **I** ou a cor: só o trecho muda, o resto continua como estava.
+- **Organizar objetos**: o botão **Organizar** da barra da seleção alinha vários objetos (à esquerda, ao centro, à direita, em cima, no meio, embaixo), deixa o mesmo espaço entre eles e traz para frente ou envia para trás.
+- **Botão direito**: em **Editar texto e imagens**, o botão direito num objeto abre o menu com copiar, colar, duplicar, girar, organizar e excluir.
+- **Pincel de formatação**: na barra do texto, o pincel copia a fonte, o tamanho, a cor, o negrito e o itálico; o próximo texto clicado fica igual.
+- **Ímã ao mudar o tamanho**: puxando a borda de uma imagem, ela gruda na borda dos outros itens e da página.
+- **Recuperar o que não foi salvo**: se o programa ou o navegador fechar sem querer, ao abrir de novo ele oferece de volta os documentos com as alterações.
+- **Voltar onde parou**: um documento reaberto volta na página e no zoom em que estava.
+- **Busca de comandos**: Ctrl+K (ou o botão ⌘ no alto) abre uma busca: digite "tarjar", "dividir" ou "senha" e vá direto à ferramenta.
+- **Abas**: arraste as abas para mudar a ordem dos documentos abertos.
+- **Compartilhar no celular**: o botão de compartilhar manda o documento direto para o WhatsApp, o e-mail ou outro app.
+- **Atualização por dentro do app (Android)**: a versão nova é baixada pelo próprio app, com o andamento na tela, e o botão **Instalar** abre o instalador do Android.
 - **Zoom com dois dedos**: no celular e em telas de toque, afaste ou aproxime dois dedos sobre a página para aumentar ou diminuir o zoom.
 
 ## 1.13.0

@@ -41,6 +41,34 @@ export function snapRect(rect, targets, page, reach = REACH) {
   return { dx: x.shift, dy: y.shift, guides };
 }
 
+/**
+ * Ao mudar o tamanho: a borda que está sendo puxada (na posição `value` do
+ * eixo `axis`, "x" ou "y") gruda na borda de outro item ou nas bordas e no
+ * meio da página. `rect` é o item, para a guia ir dele até o outro. Devolve
+ * { shift, guide } (guide null se não grudou).
+ */
+export function snapEdge(value, axis, rect, targets, page, reach = REACH) {
+  const [start, size, cross, crossSize] = axis === "x" ? ["left", "width", "top", "height"] : ["top", "height", "left", "width"];
+  let best = null;
+  const consider = (at, other) => {
+    const gap = at - value;
+    if (Math.abs(gap) > reach) return;
+    if (!best || Math.abs(gap) < Math.abs(best.gap) - 0.01) best = { gap, at, matches: [other] };
+    else if (Math.abs(at - best.at) <= 0.01) best.matches.push(other);
+  };
+  for (const other of targets) {
+    consider(other[start], other);
+    consider(other[start] + other[size], other);
+  }
+  if (page) {
+    const whole = { left: 0, top: 0, width: page.width, height: page.height };
+    for (const at of [0, whole[size] / 2, whole[size]]) consider(at, whole);
+  }
+  if (!best) return { shift: 0, guide: null };
+  const spans = [rect, ...best.matches].flatMap((r) => [r[cross], r[cross] + r[crossSize]]);
+  return { shift: best.gap, guide: { axis, at: best.at, from: Math.min(...spans), to: Math.max(...spans) } };
+}
+
 /** Desenha as guias em `layer` (a camada da página); sem guias, tira as que havia. */
 export function showGuides(layer, guides = []) {
   if (!layer) return;

@@ -27,6 +27,36 @@ async function askOpenPassword(name, incorrect) {
   });
 }
 
+// Onde a leitura de cada documento parou (página e zoom), para voltar ali ao
+// abrir de novo: guardado no aparelho, pelos últimos documentos abertos.
+const PLACES_KEY = "ondeParou";
+const PLACES_MAX = 60;
+
+function readPlaces() {
+  try {
+    const list = JSON.parse(localStorage.getItem(PLACES_KEY) || "[]");
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+function placeOf(key) {
+  const found = readPlaces().find((item) => item?.key === key);
+  return found && Number.isInteger(found.page) ? { page: found.page, scaleValue: found.scaleValue || "auto" } : null;
+}
+
+function savePlace(key, place) {
+  try {
+    const list = readPlaces().filter((item) => item?.key !== key);
+    // No começo e com o zoom automático não há o que lembrar.
+    if (place.page > 1 || (place.scaleValue && place.scaleValue !== "auto")) list.unshift({ key, ...place });
+    localStorage.setItem(PLACES_KEY, JSON.stringify(list.slice(0, PLACES_MAX)));
+  } catch {
+    // Sem armazenamento (janela anônima, por exemplo), só não lembra.
+  }
+}
+
 export class DocTab {
   constructor(manager, { name, path }) {
     this.manager = manager;
@@ -81,8 +111,14 @@ export class DocTab {
       if (this.initPending) this.loadedPending = true;
       else this.finishLoad();
     });
-    bus.on("pagechanging", ({ pageNumber }) => emit("pagechange", pageNumber));
-    bus.on("scalechanging", (e) => emit("scalechange", e));
+    bus.on("pagechanging", ({ pageNumber }) => {
+      emit("pagechange", pageNumber);
+      this.rememberPlace();
+    });
+    bus.on("scalechanging", (e) => {
+      emit("scalechange", e);
+      this.rememberPlace();
+    });
     bus.on("updatefindmatchescount", ({ matchesCount }) => emit("findcount", matchesCount));
     bus.on("updatefindcontrolstate", (e) => emit("findstate", e));
     bus.on("pagerendered", (e) => emit("pagerendered", e));
@@ -92,6 +128,16 @@ export class DocTab {
         toast("O autor deste documento não permite copiar o texto.");
       }
     });
+  }
+
+  /** Guarda (sem pressa) a página e o zoom em que a leitura está. */
+  rememberPlace() {
+    if (!this.placeKey || this.pendingView || this.container.hidden) return;
+    clearTimeout(this.placeTimer);
+    this.placeTimer = setTimeout(() => {
+      if (!this.doc || !this.viewer.pagesCount) return;
+      savePlace(this.placeKey, { page: this.viewer.currentPageNumber, scaleValue: this.viewer.currentScaleValue });
+    }, 800);
   }
 
   applyInitialView() {
@@ -341,6 +387,7 @@ export class DocTab {
   }
 
   destroy() {
+    clearTimeout(this.placeTimer);
     try {
       this.viewer.setDocument(null);
     } catch {
@@ -384,8 +431,10 @@ export class TabManager {
     const tab = new DocTab(this, { name, path });
     this.tabs.push(tab);
     this.activate(tab);
+    // O mesmo arquivo (pelo caminho ou, no navegador, pelo nome e tamanho) volta para onde a leitura parou.
+    tab.placeKey = path || `${name}|${bytes.length}`;
     try {
-      await tab.load(bytes, { password });
+      await tab.load(bytes, { password, view: placeOf(tab.placeKey) });
     } catch (err) {
       this.remove(tab);
       throw err;
@@ -409,6 +458,7 @@ export class TabManager {
     const index = this.tabs.indexOf(tab);
     if (index < 0) return;
     this.tabs.splice(index, 1);
+    this.emit("removed", tab);
     tab.destroy();
     if (this.active === tab) {
       this.active = null;
@@ -437,6 +487,34 @@ export class TabManager {
             "aria-selected": String(tab === this.active),
             title: tab.path || tab.name,
             dataset: { tabId: tab.id },
+            draggable: "true",
+            // Arrastar uma aba muda a ordem dos documentos abertos.
+            ondragstart: (e) => {
+              this.dragged = tab;
+              e.dataTransfer.effectAllowed = "move";
+              e.dataTransfer.setData("text/plain", tab.name);
+            },
+            ondragover: (e) => {
+              if (!this.dragged || this.dragged === tab) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+            },
+            ondrop: (e) => {
+              const moving = this.dragged;
+              this.dragged = null;
+              if (!moving || moving === tab) return;
+              e.preventDefault();
+              e.stopPropagation();
+              const from = this.tabs.indexOf(moving);
+              const to = this.tabs.indexOf(tab);
+              if (from < 0 || to < 0) return;
+              this.tabs.splice(from, 1);
+              this.tabs.splice(to, 0, moving);
+              this.render();
+            },
+            ondragend: () => {
+              this.dragged = null;
+            },
             onclick: () => this.activate(tab),
             onauxclick: (e) => e.button === 1 && this.emit("closerequest", tab),
           },

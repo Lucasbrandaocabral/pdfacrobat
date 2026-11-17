@@ -1,7 +1,8 @@
 import "pdfjs-dist/web/pdf_viewer.css";
 import "./styles.css";
 import { renderIcons } from "./icons.js";
-import { $, $$, askText, baseName, debounce, el, notice, openDialog, runBusy, setBusy, toast } from "./ui.js";
+import { $, $$, askText, baseName, confirmAction, debounce, el, notice, openDialog, runBusy, setBusy, toast } from "./ui.js";
+import { setupDrafts } from "./drafts.js";
 import { TabManager } from "./tabs.js";
 import { Sidebar } from "./sidebar.js";
 import { ToolController } from "./tools.js";
@@ -21,11 +22,14 @@ import { redact } from "./features/redact.js";
 import { repair, repairAndOpen } from "./features/repair.js";
 import { setupUpdates } from "./updates.js";
 import { setupPinchZoom } from "./pinch.js";
+import { setupPalette } from "./palette.js";
 import { showNews } from "./novidades.js";
 import { setupAndroid } from "./android.js";
 
 const PDFJS_EDITOR_TOOLS = new Set(["highlight", "text", "ink", "image"]);
 const manager = new TabManager($("#viewer-area"), $("#tabbar"));
+// Cópia das alterações não salvas, para recuperar se o programa fechar sem querer.
+const drafts = setupDrafts(manager);
 
 const app = {
   manager,
@@ -97,6 +101,27 @@ async function openFiles(files) {
   }
 }
 
+/** Ao abrir o programa: oferece de volta os documentos que ficaram com alterações não salvas. */
+async function recoverDrafts() {
+  const pending = await drafts.pending();
+  if (!pending.length) return;
+  const names = pending.map((draft) => draft.name).join(", ");
+  const recover = await confirmAction({
+    title: pending.length === 1 ? "Recuperar as alterações não salvas?" : `Recuperar ${pending.length} documentos não salvos?`,
+    message: `${pending.length === 1 ? "Este documento ficou" : "Estes documentos ficaram"} com alterações não salvas da última vez: ${names}.`,
+    ok: "Recuperar",
+    kind: "question",
+  });
+  if (recover) {
+    for (const draft of pending) {
+      // Com o caminho de antes, Salvar grava no mesmo arquivo; se ele já está aberto, vai como cópia.
+      const path = draft.path && !manager.findByPath(draft.path) ? draft.path : null;
+      await openDocument(draft.bytes, { name: draft.name, path, dirty: true });
+    }
+  }
+  await drafts.discard(pending.map((draft) => draft.id));
+}
+
 async function chooseAndOpen() {
   const files = await platform.pickFiles({ multiple: true, kind: "pdf" });
   if (files.length) await openFiles(files);
@@ -107,6 +132,13 @@ async function createFromFiles(kind) {
   if (!files.length) return;
   const bytes = await runBusy("Criando PDF…", () => ops.combineFiles(files));
   if (bytes) await openDocument(bytes, { name: kind === "images" ? "Imagens.pdf" : "Combinado.pdf", dirty: true });
+}
+
+/** Manda o documento como está (com as alterações ainda não salvas) para outro app, pela janela Compartilhar do sistema. */
+async function shareTab(tab) {
+  if (!tab) return;
+  await app.tools.settled();
+  await runBusy("Preparando para compartilhar…", async () => platform.shareFile(await tab.currentBytes(), /\.pdf$/i.test(tab.name) ? tab.name : `${tab.name}.pdf`));
 }
 
 async function saveTab(tab, { saveAs = false } = {}) {
@@ -158,7 +190,11 @@ async function confirmClose() {
   $('button[value="ok"]', dialog).textContent = dirty.length === 1 ? "Salvar" : "Salvar todos";
   const choice = await askChoice(dialog);
   if (choice === "ok") await saveAllAndClose();
-  else if (choice === "discard") platform.closeWindow();
+  else if (choice === "discard") {
+    // Fechou por vontade, sem salvar: não há o que recuperar depois.
+    await drafts.clear();
+    platform.closeWindow();
+  }
 }
 
 /** Janela "Sobre" com a marca e a versão; o botão Novidades abre o que mudou. */
@@ -345,6 +381,7 @@ const actions = {
   open: chooseAndOpen,
   save: () => saveTab(manager.active),
   "save-as": () => saveTab(manager.active, { saveAs: true }),
+  share: () => shareTab(manager.active),
   "save-all-and-close": saveAllAndClose,
   "confirm-close": confirmClose,
   about: showAbout,
@@ -381,6 +418,7 @@ const actions = {
   watermark: () => documentFeatures.watermark(app),
   "header-footer": () => documentFeatures.headerFooter(app),
   "replace-text": () => documentFeatures.replaceText(app),
+  commands: () => openPalette(),
   protect: () => documentFeatures.protect(app),
   unprotect: () => documentFeatures.unprotect(app),
   compress: () => documentFeatures.compress(app),
@@ -455,6 +493,8 @@ function setCategory(name) {
     // Preferência só nesta sessão.
   }
 }
+
+const openPalette = setupPalette({ setCategory });
 
 function setupMenus() {
   const close = () => $$(".menu").forEach((m) => (m.hidden = true));
@@ -545,6 +585,7 @@ const SHORTCUTS = {
   p: "print",
   f: "find",
   h: "replace-text",
+  k: "commands",
   d: "properties",
   w: "close-tab",
   z: "undo",
@@ -706,6 +747,8 @@ if (platform.isAndroid) setupAndroid(app);
 window.addEventListener("beforeunload", (e) => {
   if (!platform.isDesktop && manager.tabs.some((t) => t.dirty)) e.preventDefault();
 });
+// O botão Compartilhar só aparece onde o sistema tem a janela de compartilhar.
+for (const node of $$("[data-only-share]")) node.hidden = !platform.canShare;
 updateTitle();
 registerServiceWorker();
 try {
@@ -715,6 +758,7 @@ try {
 }
 const initial = await platform.getInitialFile();
 if (initial?.length) await openFiles(initial);
+recoverDrafts();
 
 // Usado pelos testes automatizados.
 app.runAction = runAction;
