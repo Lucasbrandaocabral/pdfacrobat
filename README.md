@@ -104,6 +104,7 @@ Na versão web os arquivos são abertos e baixados pelo navegador (vários arqui
 | Ctrl+F | Localizar (Enter = próximo, Shift+Enter = anterior) |
 | Ctrl+H | Localizar e substituir no documento inteiro |
 | Ctrl+K | Buscar um comando pelo nome (tarjar, dividir, senha...) |
+| Botão direito na página | Com texto selecionado: copiar, destacar, sublinhar, tachar, localizar e substituir; em qualquer ponto: nota ou texto ali, editar, girar a página, imprimir e zoom |
 | Botão direito (em Editar texto e imagens) | Menu do objeto: copiar, colar, duplicar, girar, organizar, excluir |
 | Ctrl+D | Propriedades do documento |
 | Ctrl + / Ctrl − | Zoom |
@@ -154,6 +155,7 @@ src/tabs.js              abas (um visualizador do PDF.js por documento), desfaze
 src/tools.js             ferramentas na página: comentar, formas, carimbos, assinar, editar texto e imagens
 src/objectsel.js         objetos na ferramenta Editar: selecionar vários, arrastar, girar, duplicar, copiar, recortar e colar
 src/pinch.js             zoom com dois dedos na tela de toque
+src/contextmenu.js       menu do botão direito na página (fora da ferramenta de editar)
 src/palette.js           busca de comandos (Ctrl+K), a partir dos botões da barra
 src/drafts.js            rascunhos: cópia das alterações não salvas, para recuperar ao abrir de novo
 src/snap.js              alinhamento automático ao arrastar (gruda nas bordas e no meio dos outros itens e mostra a guia)

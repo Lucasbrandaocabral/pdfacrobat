@@ -22,6 +22,7 @@ import { redact } from "./features/redact.js";
 import { repair, repairAndOpen } from "./features/repair.js";
 import { setupUpdates } from "./updates.js";
 import { setupPinchZoom } from "./pinch.js";
+import { setupContextMenu } from "./contextmenu.js";
 import { setupPalette } from "./palette.js";
 import { showNews } from "./novidades.js";
 import { setupAndroid } from "./android.js";
@@ -568,6 +569,14 @@ function setupToolbar() {
     { passive: false },
   );
   setupPinchZoom($("#viewer-area"), () => manager.active);
+  setupContextMenu(app, {
+    run: (name) => runAction(name),
+    find: (text) => {
+      $("#find-input").value = text;
+      find(false, "");
+    },
+    setCategory,
+  });
   window.addEventListener("resize", debounce(() => manager.active?.refreshLayout(), 150));
 }
 
