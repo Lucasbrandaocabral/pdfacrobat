@@ -1,10 +1,10 @@
 // Processo principal do Electron: janela, menus, diálogos de arquivo e
 // integração com o sistema operacional (abrir PDFs com duplo clique).
-const { app, BrowserWindow, Menu, dialog, ipcMain, nativeTheme, net, protocol, session, shell } = require("electron");
+const { app, BrowserWindow, Menu, clipboard, dialog, ipcMain, nativeTheme, net, protocol, session, shell } = require("electron");
 const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
-const { pathToFileURL } = require("node:url");
+const { fileURLToPath, pathToFileURL } = require("node:url");
 
 // Ao instalar uma atualização do AppImage, o atualizador executa a versão
 // nova só para concluir a instalação: ela deve sair sem abrir a janela.
@@ -484,6 +484,71 @@ ipcMain.handle("write-files", async (event, { dir, files }) => {
     written.push(target);
   }
   return written;
+});
+
+// Colar imagem: a imagem copiada (navegador, print da tela) ou um arquivo de
+// imagem copiado no Explorador de Arquivos ou no Finder. Só lê arquivos de
+// imagem, e só porque a pessoa os copiou e mandou colar. (No Electron 44 a
+// área de transferência é lida como no navegador: itens com tipos MIME, e os
+// formatos próprios do sistema por "electron application/osclipboard".)
+const CLIPBOARD_IMAGE = /\.(png|jpe?g|gif|webp|bmp)$/i;
+const CLIPBOARD_MAX = 50 * 1024 * 1024;
+const RAW_FILE = {
+  win32: 'electron application/osclipboard;format="FileNameW"',
+  darwin: 'electron application/osclipboard;format="public.file-url"',
+};
+async function textOf(item, type) {
+  try {
+    const value = await item.getType(type);
+    if (typeof value === "string") return value;
+    if (type === RAW_FILE.win32) return Buffer.from(await value.arrayBuffer()).toString("utf16le");
+    return await value.text();
+  } catch {
+    return "";
+  }
+}
+async function copiedFile(items) {
+  for (const item of items) {
+    const raw = RAW_FILE[process.platform];
+    const text = (raw && (await textOf(item, raw))) || (item.types.includes("text/uri-list") ? await textOf(item, "text/uri-list") : "");
+    const first = text.replace(/\0[\s\S]*$/, "").split(/\r?\n/)[0].trim();
+    if (!first) continue;
+    try {
+      return first.startsWith("file:") ? fileURLToPath(first) : path.isAbsolute(first) ? first : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+ipcMain.handle("clipboard-image", async (event) => {
+  if (!fromApp(event)) return null;
+  let items = [];
+  try {
+    items = await clipboard.read();
+  } catch {
+    return null;
+  }
+  const file = await copiedFile(items);
+  if (file && CLIPBOARD_IMAGE.test(file)) {
+    try {
+      const info = await fs.stat(file);
+      if (info.isFile() && info.size <= CLIPBOARD_MAX) {
+        const ext = path.extname(file).slice(1).toLowerCase();
+        return { name: path.basename(file), type: `image/${ext === "jpg" ? "jpeg" : ext}`, data: new Uint8Array(await fs.readFile(file)) };
+      }
+    } catch {
+      // Arquivo que sumiu ou sem permissão: tenta a imagem em si.
+    }
+  }
+  for (const item of items) {
+    const type = item.types.find((t) => /^image\//.test(t));
+    if (!type) continue;
+    const blob = await item.getType(type);
+    if (blob.size > CLIPBOARD_MAX) return null;
+    return { name: `imagem.${type.split("/")[1] || "png"}`, type, data: new Uint8Array(await blob.arrayBuffer()) };
+  }
+  return null;
 });
 
 ipcMain.handle("read-path", async (event, filePath) => {

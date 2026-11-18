@@ -23,6 +23,7 @@ import { repair, repairAndOpen } from "./features/repair.js";
 import { setupUpdates } from "./updates.js";
 import { setupPinchZoom } from "./pinch.js";
 import { setupContextMenu } from "./contextmenu.js";
+import { noImage, prepareImage, readClipboardImage, setupImagePaste } from "./pasteimage.js";
 import { setupPalette } from "./palette.js";
 import { showNews } from "./novidades.js";
 import { setupAndroid } from "./android.js";
@@ -121,6 +122,39 @@ async function recoverDrafts() {
     }
   }
   await drafts.discard(pending.map((draft) => draft.id));
+}
+
+/**
+ * Cola a imagem `image` ({ name, type, data }): no documento aberto, na página
+ * `pageNumber` (a que está sob o mouse, se não vier) e no ponto `at`; sem
+ * documento aberto, vira um PDF novo.
+ */
+async function pasteImage(image, { pageNumber = null, at = null } = {}) {
+  let picture;
+  try {
+    picture = await prepareImage(image);
+  } catch (err) {
+    toast(err.message, { kind: "error" });
+    return;
+  }
+  const tab = manager.active;
+  if (!tab?.doc) return openFiles([{ name: picture.name, path: null, data: picture.data }]);
+  setCategory("edit");
+  await app.tools.select("edit");
+  if (app.tools.tool !== "edit") return;
+  await app.tools.insertImage(tab, picture, { pageNumber: pageNumber ?? app.tools.objects.targetPage(tab), at });
+}
+
+/** "Colar imagem aqui" (botão direito): lê a imagem copiada e cola no ponto `hit`. */
+async function pasteImageAt(hit) {
+  let image = null;
+  try {
+    image = await readClipboardImage();
+  } catch {
+    image = null;
+  }
+  if (!image) return noImage();
+  await pasteImage(image, { pageNumber: hit.pageNumber, at: hit.pdf });
 }
 
 async function chooseAndOpen() {
@@ -569,8 +603,11 @@ function setupToolbar() {
     { passive: false },
   );
   setupPinchZoom($("#viewer-area"), () => manager.active);
+  setupImagePaste((image) => pasteImage(image));
+  app.tools.pasteImageAt = pasteImageAt;
   setupContextMenu(app, {
     run: (name) => runAction(name),
+    pasteImageAt,
     find: (text) => {
       $("#find-input").value = text;
       find(false, "");

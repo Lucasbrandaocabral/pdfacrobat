@@ -240,6 +240,9 @@ export async function getInitialFile() {
   return api ? api.getInitialFile() : null;
 }
 
+/** No programa de computador: a imagem copiada no sistema ({ name, type, data } ou null). */
+export const clipboardImage = api?.clipboardImage ? () => api.clipboardImage() : null;
+
 export function addRecentDocument(path) {
   api?.addRecent(path);
 }
