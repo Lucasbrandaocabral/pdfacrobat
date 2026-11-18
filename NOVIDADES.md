@@ -14,9 +14,12 @@ ele vira um cartão com a animação e o botão Experimentar; na página do GitH
 o comentário não aparece. Correções ficam sem animação.
 -->
 
-## 1.14.1
+## 1.14.2
 
 - **Botão direito no documento**: no programa de computador o botão direito não fazia nada fora do modo Editar. Agora ele abre um menu: com um texto selecionado, **Copiar**, **Destacar**, **Sublinhar**, **Tachar**, **Localizar** e **Substituir**; em qualquer ponto da página, **Adicionar nota aqui**, **Adicionar texto aqui**, **Editar texto e imagens**, **Girar esta página**, **Imprimir** e o zoom. Nos campos de texto (busca, nomes), o botão direito traz **Recortar**, **Copiar**, **Colar** e **Selecionar tudo**.
+
+## 1.14.1
+
 - **Ver novidades travava em "Instalando a atualização…"**: depois de atualizar, se o programa terminasse de procurar atualizações em segundo plano enquanto o aviso "Atualizado para a versão…" estava na tela, o botão **Ver novidades** mostrava "Instalando a atualização…" e o programa ficava parado. Agora ele abre as novidades.
 
 ## 1.14.0
