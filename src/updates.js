@@ -60,6 +60,8 @@ export function setupUpdates({ closeDocuments, showNews }) {
   const bar = $("#update-bar");
   const action = $(".update-action", bar);
   const progress = $(".update-progress", bar);
+  // O aviso que está na tela (o botão age sobre ele). As verificações em
+  // segundo plano que não mostram nada não o trocam.
   let current = null;
   let dismissed = null;
 
@@ -81,11 +83,11 @@ export function setupUpdates({ closeDocuments, showNews }) {
     action.hidden = !view.action;
     action.textContent = view.action || "";
     bar.hidden = false;
+    current = status;
   }
 
   function render(status) {
     if (!status) return;
-    current = status;
     if (status.state === "error") setBusy(false);
     if (VIEWS[status.state]) {
       if (dismissed !== keyOf(status) && (status.manual || NOTICES.has(status.state))) show(status);
@@ -94,21 +96,26 @@ export function setupUpdates({ closeDocuments, showNews }) {
     // Fim de uma verificação: latest, unsupported ou error.
     if (!status.manual) return;
     bar.hidden = true;
+    current = null;
     if (status.state === "latest") toast(`Você já está usando a versão mais recente (${status.version}).`);
     else toast(status.message, { duration: 7000 });
   }
 
   action.addEventListener("click", async () => {
     if (current?.state === "updated") {
+      const { since } = current;
       bar.hidden = true;
       dismissed = keyOf(current);
-      showNews({ since: current.since });
+      current = null;
+      showNews({ since });
       return;
     }
     if (current?.state === "available") {
       updates.download();
       return;
     }
+    // Instalar só quando a atualização está pronta (ou o instalador do Mac aberto).
+    if (current?.state !== "ready" && current?.state !== "opened") return;
     if (!(await closeDocuments())) return;
     if (isAndroid) {
       // O instalador do Android abre por cima; a confirmação é lá.
@@ -126,6 +133,7 @@ export function setupUpdates({ closeDocuments, showNews }) {
   $(".update-close", bar).addEventListener("click", () => {
     bar.hidden = true;
     if (current) dismissed = keyOf(current);
+    current = null;
   });
 
   const since = updatedFrom();
