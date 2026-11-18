@@ -9,9 +9,10 @@ import { Perm } from "./pdf/security.js";
 
 /**
  * `app`: o app (manager, tools, guard). `actions`: { run(name) (ações da barra),
- * find(text) (localizar no documento), setCategory(name) }.
+ * find(text) (localizar no documento), setCategory(name), pasteImageAt(hit)
+ * (cola a imagem copiada no ponto) }.
  */
-export function setupContextMenu(app, { run, find, setCategory }) {
+export function setupContextMenu(app, { run, find, setCategory, pasteImageAt }) {
   const area = $("#viewer-area");
   area.addEventListener("contextmenu", (e) => {
     const tab = app.manager.active;
@@ -50,6 +51,7 @@ export function setupContextMenu(app, { run, find, setCategory }) {
       );
     }
     items.push(
+      item("image", "Colar imagem aqui", () => pasteImageAt(hit), "Ctrl+V"),
       item("note", "Adicionar nota aqui", async () => {
         if (!(await app.guard(tab, Perm.ANNOTATE, "comentar"))) return;
         await tools.addNote(hit);

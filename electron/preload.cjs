@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld("pdfApi", {
   pickDirectory: (options) => ipcRenderer.invoke("pick-directory", options),
   writeFiles: (options) => ipcRenderer.invoke("write-files", options),
   readPath: (filePath) => ipcRenderer.invoke("read-path", filePath),
+  clipboardImage: () => ipcRenderer.invoke("clipboard-image"),
   getInitialFile: () => ipcRenderer.invoke("get-initial-file"),
   getUserName: () => ipcRenderer.invoke("get-user-name"),
   listPrinters: () => ipcRenderer.invoke("list-printers"),
