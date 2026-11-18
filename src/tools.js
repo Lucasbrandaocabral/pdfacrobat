@@ -599,9 +599,11 @@ export class ToolController {
     }
     if (!pages.size) return;
     selection.removeAllRanges();
-    const color = hexToRgb($("#opt-color").value);
+    // O destaque usa a cor de destaque; sublinhar e tachar, a cor das formas.
+    const color = hexToRgb($(kind === "Highlight" ? "#opt-highlight" : "#opt-color").value);
     const author = await this.author();
-    await this.run(kind === "Underline" ? "Sublinhando…" : "Tachando…", () =>
+    const label = { Highlight: "Destacando…", Underline: "Sublinhando…" }[kind] || "Tachando…";
+    await this.run(label, () =>
       tab.edit((doc) => {
         for (const [pageIndex, { rotation, quads }] of pages) {
           annotations.addTextMarkup(doc, pageIndex, { kind, quads: mergeQuads(quads, rotation), color, author, rotation });

@@ -204,6 +204,19 @@ function createWindow() {
     return { action: "deny" };
   });
   mainWindow.webContents.on("will-navigate", (event) => event.preventDefault());
+  // Botão direito nos campos de texto (busca, nome, caixa de texto): o menu de
+  // sempre. Na página do documento, quem mostra o menu é a própria interface.
+  mainWindow.webContents.on("context-menu", (_event, params) => {
+    if (!params.isEditable) return;
+    const { canCut, canCopy, canPaste, canSelectAll } = params.editFlags;
+    Menu.buildFromTemplate([
+      { label: "Recortar", role: "cut", enabled: canCut },
+      { label: "Copiar", role: "copy", enabled: canCopy },
+      { label: "Colar", role: "paste", enabled: canPaste },
+      { type: "separator" },
+      { label: "Selecionar tudo", role: "selectAll", enabled: canSelectAll },
+    ]).popup({ window: mainWindow });
+  });
 
   // Com documentos alterados, quem pergunta se quer salvar é a interface do app
   // (Salvar / Não salvar / Cancelar); ela fecha a janela pelo "close-window".
