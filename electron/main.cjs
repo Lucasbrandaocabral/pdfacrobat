@@ -669,6 +669,9 @@ function printOptions(o) {
     duplexMode: ["simplex", "shortEdge", "longEdge"].includes(o.duplexMode) ? o.duplexMode : "simplex",
   };
   if (typeof o.deviceName === "string" && o.deviceName) options.deviceName = o.deviceName;
+  // Alta definição: a resolução pedida à impressora (que usa a mais próxima que tiver).
+  const dpi = Math.round(Number(o.dpi));
+  if (dpi >= 150 && dpi <= 2400) options.dpi = { horizontal: dpi, vertical: dpi };
   // Papel com nome conhecido ou medidas em mícrons.
   if (PAGE_SIZES.has(o.pageSize)) options.pageSize = o.pageSize;
   else if (o.pageSize?.width > 0 && o.pageSize?.height > 0) options.pageSize = { width: Math.round(o.pageSize.width), height: Math.round(o.pageSize.height) };

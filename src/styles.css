@@ -4048,6 +4048,11 @@ button.page-card:focus-visible {
   filter: grayscale(1);
 }
 
+/* Prévia do preto puro: sem cinza, como sai na impressora térmica. */
+.print-sheet.pure {
+  filter: grayscale(1) contrast(2.5);
+}
+
 .print-sheet-area.loading .print-sheet {
   opacity: 0.55;
 }

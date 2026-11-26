@@ -16,6 +16,7 @@ o comentário não aparece. Correções ficam sem animação.
 
 ## 1.14.3
 
+- **Imprimir letras pequenas e etiquetas**: na janela de impressão, **Alta definição (600 DPI)** deixa as letras pequenas mais nítidas, e **Preto puro** tira o contorno cinza das letras e dos códigos de barras, que nas impressoras térmicas de etiqueta sai borrado ou pontilhado. As duas opções ficam lembradas para a próxima impressão.
 - **Colar imagens**: copie uma imagem no navegador (botão direito → **Copiar imagem**), tire um print da tela ou copie um arquivo de imagem no Explorador de Arquivos e cole no documento com **Ctrl+V**, ou pelo botão direito → **Colar imagem aqui**, que põe a imagem no ponto clicado. Ela entra no tamanho natural (até metade da página) e já abre na caixa de imagem, para mover e mudar o tamanho. Sem documento aberto, a imagem colada vira um PDF novo.
 
 ## 1.14.2
