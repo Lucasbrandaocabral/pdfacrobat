@@ -16,6 +16,8 @@ const STORAGE_KEY = "impressao";
 const REMEMBERED = [
   "printer",
   "grayscale",
+  "hd",
+  "pureBlack",
   "collate",
   "duplex",
   "mode",
@@ -135,8 +137,10 @@ function createSession(tab) {
   // formulários. PDF que o pdf-lib não consegue montar: as folhas usam a
   // imagem de cada página (s.raster).
   s.source = (annotations) => {
-    const key = s.raster ? "raster" : annotations;
-    if (s.cache?.key !== key) s.cache = { key, doc: s.raster ? rasterSource(tab.doc) : s.bytes.then((bytes) => printSource(bytes, annotations)) };
+    // Na imagem das páginas, a alta definição muda a resolução.
+    const hd = Boolean(s.values?.hd);
+    const key = s.raster ? `raster ${hd}` : annotations;
+    if (s.cache?.key !== key) s.cache = { key, doc: s.raster ? rasterSource(tab.doc, hd) : s.bytes.then((bytes) => printSource(bytes, annotations)) };
     return s.cache.doc;
   };
   s.info = s
@@ -169,19 +173,22 @@ async function sheetsPdf(s, plan, indices) {
   }
 }
 
-async function rasterSource(pdf) {
+async function rasterSource(pdf, hd = false) {
   const doc = await PDFDocument.create();
   for (let n = 1; n <= pdf.numPages; n++) {
     const page = await pdf.getPage(n);
     const size = page.getViewport({ scale: 1 });
-    const viewport = page.getViewport({ scale: 150 / 72 });
+    // Em alta definição, 600 DPI e sem a compressão do JPEG (que borra as letras pequenas).
+    const viewport = page.getViewport({ scale: (hd ? 600 : 150) / 72 });
     const canvas = el("canvas", { width: Math.ceil(viewport.width), height: Math.ceil(viewport.height) });
     const ctx = canvas.getContext("2d");
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     await page.render({ canvasContext: ctx, viewport, intent: "print", annotationMode: pdfjsLib.AnnotationMode.ENABLE_STORAGE }).promise;
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
-    const image = await doc.embedJpg(new Uint8Array(await blob.arrayBuffer()));
+    const blob = await new Promise((resolve) => (hd ? canvas.toBlob(resolve, "image/png") : canvas.toBlob(resolve, "image/jpeg", 0.92)));
+    const data = new Uint8Array(await blob.arrayBuffer());
+    canvas.width = canvas.height = 0;
+    const image = hd ? await doc.embedPng(data) : await doc.embedJpg(data);
     // O pdf-lib só grava a imagem ao salvar, e este documento não é salvo.
     await image.embed();
     doc.addPage([size.width, size.height]).drawImage(image, { x: 0, y: 0, width: size.width, height: size.height });
@@ -238,8 +245,9 @@ function onInput(event) {
   if (name === "scale") form.elements.sizing.value = "custom";
   if (name === "bookletSides") suggestDuplex();
   if (name === "grayscale") $(".print-sheet", dialog).classList.toggle("gray", form.elements.grayscale.checked);
-  // Impressora, cópias e frente e verso não mudam as folhas.
-  if (["printer", "copies", "collate", "duplex", "grayscale"].includes(name)) return;
+  if (name === "pureBlack") $(".print-sheet", dialog).classList.toggle("pure", form.elements.pureBlack.checked);
+  // Impressora, cópias, frente e verso e a qualidade não mudam as folhas.
+  if (["printer", "copies", "collate", "duplex", "grayscale", "hd", "pureBlack"].includes(name)) return;
   refreshControls();
   scheduleUpdate();
 }
@@ -399,6 +407,7 @@ async function drawPreview() {
       canvas.style.width = `${Math.round(sheet.width * room)}px`;
       canvas.style.height = `${Math.round(sheet.height * room)}px`;
       canvas.classList.toggle("gray", form.elements.grayscale.checked);
+      canvas.classList.toggle("pure", form.elements.pureBlack.checked);
       $(".print-sheet", area).replaceWith(canvas);
       previewMessage(null);
     } finally {
@@ -431,12 +440,56 @@ async function saveSheets(s) {
 }
 
 async function printSheets(s) {
-  const { plan, bytes } = await buildSheets(s);
+  const built = await buildSheets(s);
+  const { plan } = built;
+  let { bytes } = built;
   const first = plan.sheets[0];
   const landscape = first.width > first.height;
+  const { hd, pureBlack, grayscale } = s.values;
+  if (PLATFORM === "web") return printInBrowser(plan, bytes, { grayscale, pureBlack, dpi: hd ? highDpi() : rasterDpi(plan.sheets.length) });
+  // Preto puro: as folhas vão como imagem só de preto e branco, na resolução escolhida.
+  if (pureBlack) bytes = await blackAndWhite(bytes, hd ? highDpi() : 300);
   if (PLATFORM === "desktop") return printOnDesktop(s, plan, bytes, landscape);
-  if (PLATFORM === "android") return platform.printPdf(bytes, s.tab.name, { paper: s.values.layout.paper, landscape });
-  return printInBrowser(plan, bytes, s.values.grayscale);
+  return platform.printPdf(bytes, s.tab.name, { paper: s.values.layout.paper, landscape });
+}
+
+/** Resolução da alta definição: 600 DPI (no celular, 400, para caber na memória). */
+function highDpi() {
+  return matchMedia("(pointer: coarse)").matches ? 400 : 600;
+}
+
+/** Folha `page` (do PDF.js) desenhada num canvas a `dpi`, com cinza ou preto puro. */
+async function sheetCanvas(page, dpi, { grayscale = false, pureBlack = false, rotation = 0 } = {}) {
+  const viewport = page.getViewport({ scale: dpi / 72, rotation });
+  const canvas = el("canvas", { width: Math.round(viewport.width), height: Math.round(viewport.height) });
+  const ctx = canvas.getContext("2d", { willReadFrequently: grayscale || pureBlack });
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  await page.render({ canvasContext: ctx, viewport, intent: "print" }).promise;
+  if (pureBlack) toPureBlack(ctx, canvas.width, canvas.height);
+  else if (grayscale) toGrayscale(ctx, canvas.width, canvas.height);
+  return canvas;
+}
+
+/** PDF das folhas `bytes` refeito como imagens só de preto e branco, a `dpi`. */
+async function blackAndWhite(bytes, dpi) {
+  const pdf = await pdfjsLib.getDocument({ ...LOAD_OPTIONS, data: bytes.slice() }).promise;
+  const doc = await PDFDocument.create();
+  try {
+    for (let n = 1; n <= pdf.numPages; n++) {
+      setBusy(`Preparando impressão… ${n}/${pdf.numPages}`);
+      const page = await pdf.getPage(n);
+      const size = page.getViewport({ scale: 1 });
+      const canvas = await sheetCanvas(page, dpi, { pureBlack: true });
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+      canvas.width = canvas.height = 0;
+      const image = await doc.embedPng(new Uint8Array(await blob.arrayBuffer()));
+      doc.addPage([size.width, size.height]).drawImage(image, { x: 0, y: 0, width: size.width, height: size.height });
+    }
+  } finally {
+    pdf.destroy();
+  }
+  return doc.save();
 }
 
 const FAILURES = {
@@ -456,8 +509,10 @@ async function printOnDesktop(s, plan, bytes, landscape) {
     copies: values.copies,
     collate: values.collate,
     duplexMode: values.duplex,
-    color: !values.grayscale,
+    color: !values.grayscale && !values.pureBlack,
     landscape,
+    // Alta definição: pede à impressora a resolução de 600 DPI.
+    dpi: values.hd ? 600 : null,
     pageSize: paper.named || { width: microns(paper.width), height: microns(paper.height) },
   });
   if (!result?.ok) {
@@ -486,6 +541,20 @@ function rasterDpi(count) {
   return matchMedia("(pointer: coarse)").matches ? Math.min(dpi, 200) : dpi;
 }
 
+/**
+ * Só preto e branco, sem cinza: o contorno suave das letras vira preto ou
+ * branco (um pouco a favor do preto, para os traços finos não sumirem).
+ */
+function toPureBlack(ctx, width, height) {
+  const image = ctx.getImageData(0, 0, width, height);
+  const d = image.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const ink = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2] < 170 ? 0 : 255;
+    d[i] = d[i + 1] = d[i + 2] = ink;
+  }
+  ctx.putImageData(image, 0, 0);
+}
+
 function toGrayscale(ctx, width, height) {
   const image = ctx.getImageData(0, 0, width, height);
   const d = image.data;
@@ -493,11 +562,10 @@ function toGrayscale(ctx, width, height) {
   ctx.putImageData(image, 0, 0);
 }
 
-async function printInBrowser(plan, bytes, grayscale) {
+async function printInBrowser(plan, bytes, { grayscale = false, pureBlack = false, dpi = rasterDpi(plan.sheets.length) } = {}) {
   clearBrowserPrint();
   const container = $("#print-container");
   const [width, height] = [plan.sheets[0].width, plan.sheets[0].height];
-  const dpi = rasterDpi(plan.sheets.length);
   const urls = [];
   const pdf = await pdfjsLib.getDocument({ ...LOAD_OPTIONS, data: bytes }).promise;
   try {
@@ -507,13 +575,7 @@ async function printInBrowser(plan, bytes, grayscale) {
       // A folha na outra orientação gira para caber no papel da impressão.
       const sheet = plan.sheets[k];
       const turn = sheet.width > sheet.height !== width > height;
-      const viewport = page.getViewport({ scale: dpi / 72, rotation: turn ? 90 : 0 });
-      const canvas = el("canvas", { width: Math.round(viewport.width), height: Math.round(viewport.height) });
-      const ctx = canvas.getContext("2d", { willReadFrequently: grayscale });
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      await page.render({ canvasContext: ctx, viewport, intent: "print" }).promise;
-      if (grayscale) toGrayscale(ctx, canvas.width, canvas.height);
+      const canvas = await sheetCanvas(page, dpi, { grayscale, pureBlack, rotation: turn ? 90 : 0 });
       const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
       canvas.width = canvas.height = 0;
       const url = URL.createObjectURL(blob);
