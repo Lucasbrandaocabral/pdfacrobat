@@ -2360,6 +2360,59 @@ export class ToolController {
   }
 
   /** Um "hit" da página `pageNumber` (sem ponto), para as camadas por cima dela. */
+  /**
+   * Põe a imagem `picture` (de prepareImage, em pasteimage.js) na página
+   * `pageNumber`: com o meio no ponto `at` (do PDF) ou no meio da parte da
+   * página que aparece na tela, no tamanho natural (até metade da página).
+   * Depois ela abre na caixa de imagem, para mover e mudar o tamanho.
+   */
+  async insertImage(tab, picture, { pageNumber, at = null }) {
+    if (!(await this.guard(tab, Perm.MODIFY, "editar o conteúdo"))) return;
+    await this.settled();
+    const hit = this.pageHitFor(tab, pageNumber);
+    if (!hit) return;
+    const vp = hit.pageView.viewport;
+    const page = hit.rect;
+    // Tamanho natural (96 pixels por polegada), sem passar de metade da página.
+    let w = picture.width * 0.75 * vp.scale;
+    let h = picture.height * 0.75 * vp.scale;
+    const fit = Math.min(1, (0.5 * page.width) / w, (0.5 * page.height) / h);
+    w *= fit;
+    h *= fit;
+    let center;
+    if (at) center = vp.convertToViewportPoint(...at);
+    else {
+      const view = tab.container.getBoundingClientRect();
+      const left = Math.max(page.left, view.left);
+      const right = Math.min(page.right, view.right);
+      const top = Math.max(page.top, view.top);
+      const bottom = Math.min(page.bottom, view.bottom);
+      center = right > left && bottom > top ? [(left + right) / 2 - page.left, (top + bottom) / 2 - page.top] : [page.width / 2, page.height / 2];
+    }
+    const left = Math.max(0, Math.min(page.width - w, center[0] - w / 2));
+    const top = Math.max(0, Math.min(page.height - h, center[1] - h / 2));
+    const a = vp.convertToPdfPoint(left, top + h);
+    const b = vp.convertToPdfPoint(left + w, top);
+    const rect = [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])];
+    await this.run("Colando imagem…", () =>
+      tab.edit(async (doc) => {
+        const pdfPage = doc.getPage(pageNumber - 1);
+        isolatePage(doc, pdfPage);
+        const embedded = picture.png ? await doc.embedPng(picture.data) : await doc.embedJpg(picture.data);
+        // Em pé na tela: a página pode estar girada e a foto, deitada no arquivo (EXIF).
+        drawImageInBox(pdfPage, embedded, rect, pdfPage.getRotation().angle - picture.rotation);
+      }),
+    );
+    // A imagem nova abre na caixa: a que mais cobre o lugar onde ela foi posta.
+    await tab.loaded;
+    if (this.tool !== "edit" || this.manager.active !== tab || this.editing) return;
+    const data = await this.pageData(tab, pageNumber);
+    const overlap = (r) => Math.max(0, Math.min(r[2], rect[2]) - Math.max(r[0], rect[0])) * Math.max(0, Math.min(r[3], rect[3]) - Math.max(r[1], rect[1]));
+    const image = [...(data.images || [])].sort((p, q) => overlap(q.rect) - overlap(p.rect) || q.index - p.index)[0];
+    const target = this.pageHitFor(tab, pageNumber);
+    if (image && overlap(image.rect) > 0 && target && !this.editing) this.startImageEdit(target, image);
+  }
+
   pageHitFor(tab, pageNumber) {
     const div = tab.pageView(pageNumber)?.div;
     if (!div) return null;

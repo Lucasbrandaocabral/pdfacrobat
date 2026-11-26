@@ -14,6 +14,10 @@ ele vira um cartão com a animação e o botão Experimentar; na página do GitH
 o comentário não aparece. Correções ficam sem animação.
 -->
 
+## 1.14.3
+
+- **Colar imagens**: copie uma imagem no navegador (botão direito → **Copiar imagem**), tire um print da tela ou copie um arquivo de imagem no Explorador de Arquivos e cole no documento com **Ctrl+V**, ou pelo botão direito → **Colar imagem aqui**, que põe a imagem no ponto clicado. Ela entra no tamanho natural (até metade da página) e já abre na caixa de imagem, para mover e mudar o tamanho. Sem documento aberto, a imagem colada vira um PDF novo.
+
 ## 1.14.2
 
 - **Botão direito no documento**: no programa de computador o botão direito não fazia nada fora do modo Editar. Agora ele abre um menu: com um texto selecionado, **Copiar**, **Destacar**, **Sublinhar**, **Tachar**, **Localizar** e **Substituir**; em qualquer ponto da página, **Adicionar nota aqui**, **Adicionar texto aqui**, **Editar texto e imagens**, **Girar esta página**, **Imprimir** e o zoom. Nos campos de texto (busca, nomes), o botão direito traz **Recortar**, **Copiar**, **Colar** e **Selecionar tudo**.

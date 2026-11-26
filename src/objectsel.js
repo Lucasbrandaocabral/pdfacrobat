@@ -881,6 +881,7 @@ export class ObjectSelection {
           item("copy", "Copiar", "Ctrl+C", () => this.copy({ cut: false })),
           item("cut", "Recortar", "Ctrl+X", () => this.copy({ cut: true })),
           pasteItem,
+          item("image", "Colar imagem aqui", "", () => tools.pasteImageAt?.(hit)),
           item("duplicate", "Duplicar", "", () => this.duplicate()),
           "-",
           item("rotateCcw", "Girar 90° para a esquerda", "", () => this.rotateBy(-Math.PI / 2)),
@@ -890,7 +891,7 @@ export class ObjectSelection {
           "-",
           item("trash", "Excluir", "Delete", () => this.remove()),
         ]
-      : [pasteItem, item("selectAll", "Selecionar tudo", "Ctrl+A", () => this.selectAll(hit.pageNumber))];
+      : [pasteItem, item("image", "Colar imagem aqui", "", () => tools.pasteImageAt?.(hit)), item("selectAll", "Selecionar tudo", "Ctrl+A", () => this.selectAll(hit.pageNumber))];
     popupMenu(items, { x: e.clientX, y: e.clientY });
   }
 
