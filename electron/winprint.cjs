@@ -18,6 +18,8 @@ $ErrorActionPreference = 'Stop'
 $PSF = 'http://schemas.microsoft.com/windows/2003/08/printing/printschemaframework'
 $PSK = 'http://schemas.microsoft.com/windows/2003/08/printing/printschemakeywords'
 $FEATURES = [ordered]@{ media = 'PageMediaType'; quality = 'PageOutputQuality'; resolution = 'PageResolution' }
+# Só para o teste: mais um recurso do Print Schema (a impressora do teste tem uma opção só de cada um acima).
+if ($env:PDFA_EXTRA) { $FEATURES['extra'] = $env:PDFA_EXTRA }
 
 function Get-Queue([string]$name) {
   if (-not $name) { return (New-Object System.Printing.LocalPrintServer).DefaultPrintQueue }
