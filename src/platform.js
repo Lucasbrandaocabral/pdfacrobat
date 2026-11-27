@@ -229,6 +229,15 @@ export async function listPrinters() {
 }
 
 /**
+ * Tipo de papel, qualidade e resolução que o driver da impressora `name`
+ * oferece (app desktop no Windows), ou null.
+ */
+export async function printerOptions(name) {
+  if (!api?.printerOptions) return null;
+  return api.printerOptions(name || "").catch(() => null);
+}
+
+/**
  * App desktop: manda o PDF direto para a impressora, sem a janela de
  * impressão do sistema. Retorna { ok, reason }.
  */
