@@ -11,6 +11,7 @@ const { fileURLToPath, pathToFileURL } = require("node:url");
 if (process.env.APPIMAGE_EXIT_AFTER_INSTALL === "true") process.exit(0);
 
 const updater = require("./updater.cjs");
+const winprint = require("./winprint.cjs");
 
 const APP_NAME = "PDF Acrobat";
 const PDF_FILTER = { name: "Documentos PDF", extensions: ["pdf"] };
@@ -629,6 +630,9 @@ ipcMain.handle("list-printers", async () => {
   }));
 });
 
+// Tipo de papel, qualidade e resolução que o driver da impressora oferece (só no Windows).
+ipcMain.handle("printer-options", (_e, name) => winprint.capabilities(typeof name === "string" ? name : ""));
+
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Antes de o visualizador terminar de abrir o documento, a impressão sai em branco.
@@ -669,9 +673,11 @@ function printOptions(o) {
     duplexMode: ["simplex", "shortEdge", "longEdge"].includes(o.duplexMode) ? o.duplexMode : "simplex",
   };
   if (typeof o.deviceName === "string" && o.deviceName) options.deviceName = o.deviceName;
-  // Alta definição: a resolução pedida à impressora (que usa a mais próxima que tiver).
-  const dpi = Math.round(Number(o.dpi));
-  if (dpi >= 150 && dpi <= 2400) options.dpi = { horizontal: dpi, vertical: dpi };
+  // Resolução pedida à impressora (que usa a mais próxima que tiver): um número ou { horizontal, vertical }.
+  const dpi = (value) => Math.round(Number(value));
+  const [horizontal, vertical] = typeof o.dpi === "object" && o.dpi ? [dpi(o.dpi.horizontal), dpi(o.dpi.vertical)] : [dpi(o.dpi), dpi(o.dpi)];
+  const valid = (n) => n >= 72 && n <= 9600;
+  if (valid(horizontal) && valid(vertical)) options.dpi = { horizontal, vertical };
   // Papel com nome conhecido ou medidas em mícrons.
   if (PAGE_SIZES.has(o.pageSize)) options.pageSize = o.pageSize;
   else if (o.pageSize?.width > 0 && o.pageSize?.height > 0) options.pageSize = { width: Math.round(o.pageSize.width), height: Math.round(o.pageSize.height) };
@@ -684,7 +690,31 @@ function jobFileName(name) {
   return /\.pdf$/i.test(clean) ? clean : `${clean}.pdf`;
 }
 
-ipcMain.handle("print-pdf", async (_e, request) => {
+// Uma impressão de cada vez: as preferências da impressora valem só para a sua.
+let printing = Promise.resolve();
+ipcMain.handle("print-pdf", (_e, request) => {
+  const job = printing.then(() => printPdf(request));
+  printing = job.catch(() => {});
+  return job;
+});
+
+async function printPdf(request) {
+  // Tipo de papel e qualidade: gravados nas preferências da impressora só durante esta impressão.
+  let applied = null;
+  let warning = "";
+  try {
+    applied = await winprint.apply(request.deviceName, request.ticket);
+  } catch (err) {
+    warning = err.message;
+  }
+  try {
+    return { ...(await sendToPrinter(request)), warning };
+  } finally {
+    await winprint.restore(applied).catch(() => {});
+  }
+}
+
+async function sendToPrinter(request) {
   const dir = await fs.mkdtemp(path.join(app.getPath("temp"), "pdfacrobat-impressao-"));
   const file = path.join(dir, jobFileName(request.name));
   await fs.writeFile(file, Buffer.from(request.data));
@@ -706,7 +736,7 @@ ipcMain.handle("print-pdf", async (_e, request) => {
     win.destroy();
     fs.rm(dir, { recursive: true, force: true }).catch(() => {});
   }
-});
+}
 
 ipcMain.handle("update-status", () => updater.getStatus());
 ipcMain.on("update-check", () => updater.check({ manual: true }));
@@ -735,6 +765,7 @@ if (!app.requestSingleInstanceLock()) {
     app.setName(APP_NAME);
     loadLastDir();
     loadChosen();
+    winprint.init(app.getPath("userData")).catch(() => {});
     // O app não usa câmera, microfone, localização nem notificações: nenhuma página pode pedir.
     session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
     registerAppProtocol();

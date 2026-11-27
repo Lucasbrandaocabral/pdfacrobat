@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld("pdfApi", {
   getUserName: () => ipcRenderer.invoke("get-user-name"),
   listPrinters: () => ipcRenderer.invoke("list-printers"),
   printPdf: (options) => ipcRenderer.invoke("print-pdf", options),
+  printerOptions: (name) => ipcRenderer.invoke("printer-options", name),
   addRecent: (filePath) => ipcRenderer.send("add-recent", filePath),
   // O caminho vem do próprio Electron, só para arquivos de verdade (arrastados ou
   // escolhidos); o processo principal passa a permitir ler e gravar esse arquivo.

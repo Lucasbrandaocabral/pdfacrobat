@@ -14,6 +14,11 @@ ele vira um cartão com a animação e o botão Experimentar; na página do GitH
 o comentário não aparece. Correções ficam sem animação.
 -->
 
+## 1.14.4
+
+- **Papel fotográfico pelo próprio app**: no Windows, a janela de impressão mostra o **Tipo de papel** (papel comum, fotográfico brilhante, fosco...), a **Qualidade da impressora** e as resoluções que a sua impressora tem, como 5760 × 1440 DPI, sem precisar abrir as preferências da impressora. A escolha vale só para aquela impressão: depois, a impressora volta ao que estava.
+- **Resolução até 2400 DPI**: a **Alta definição** virou a lista **Resolução**, que no programa de computador vai até 2400 DPI (a impressora usa a mais próxima que tiver).
+
 ## 1.14.3
 
 - **Imprimir letras pequenas e etiquetas**: na janela de impressão, **Alta definição (600 DPI)** deixa as letras pequenas mais nítidas, e **Preto puro** tira o contorno cinza das letras e dos códigos de barras, que nas impressoras térmicas de etiqueta sai borrado ou pontilhado. As duas opções ficam lembradas para a próxima impressão.

@@ -49,6 +49,16 @@ let dialog = null;
 let form = null;
 let session = null;
 let browserPrint = null;
+// Opções do driver da impressora escolhida (tipo de papel, qualidade, resolução), no Windows.
+let driver = null;
+let driverToken = 0;
+
+// Resoluções quando o driver não diz as suas (o app pede e a impressora usa a mais próxima).
+const RESOLUTIONS = {
+  web: [["", "Normal"], ["600", "Alta definição (600 DPI)"]],
+  desktop: [["", "Normal (a da impressora)"], ["600", "Alta (600 DPI)"], ["1200", "Muito alta (1200 DPI)"], ["2400", "Máxima (2400 DPI)"]],
+  android: [["", "Normal"]],
+};
 
 function loadSaved() {
   try {
@@ -115,10 +125,13 @@ export async function print(app) {
   if (!(await app.guard(tab, Perm.PRINT, "imprimir"))) return;
   setup();
   const saved = loadSaved();
+  // Antes a alta definição era sim ou não.
+  if (typeof saved.hd === "boolean") saved.hd = saved.hd ? "600" : "";
+  fillResolutions(null, saved.hd);
   restore({ ...saved, ...FRESH });
   session = createSession(tab);
   setMode(form.elements.mode.value);
-  listPrinters(saved.printer);
+  listPrinters(saved.printer).then(() => loadDriverOptions(saved.hd));
   const confirmed = await openDialog(dialog, { focus: 'button[value="ok"]' });
   const s = session;
   session = null;
@@ -208,6 +221,58 @@ async function listPrinters(saved) {
   if (printers.some((p) => p.name === saved)) select.value = saved;
 }
 
+/** Opções do driver da impressora escolhida: tipo de papel, qualidade e resolução. */
+async function loadDriverOptions(wanted = form.elements.hd.value) {
+  if (PLATFORM !== "desktop") return;
+  const token = ++driverToken;
+  const options = await platform.printerOptions(form.elements.printer.value);
+  if (token !== driverToken) return;
+  driver = options;
+  const fill = (select, list, current) => {
+    const standard = list.find((o) => o.key === current);
+    select.replaceChildren(
+      el("option", { value: "", text: standard ? `Padrão da impressora (${standard.label})` : "Padrão da impressora" }),
+      ...list.map((o) => el("option", { value: o.key, text: o.label })),
+    );
+    select.closest("label").hidden = list.length < 2;
+  };
+  fill(form.elements.mediaType, driver?.media || [], driver?.current?.media);
+  fill(form.elements.outputQuality, driver?.quality || [], driver?.current?.quality);
+  fillResolutions(driver, wanted);
+  $("p[data-driver]", dialog).hidden = !(driver?.media?.length > 1 || driver?.quality?.length > 1);
+}
+
+const dpiLabel = (o) => (!o.x ? o.label : o.x === o.y || !o.y ? `${o.x} DPI` : `${o.x} × ${o.y} DPI`);
+
+/** Resoluções: as do driver, se ele disser quais tem; senão, as do app. */
+function fillResolutions(options, wanted) {
+  const select = form.elements.hd;
+  const list = (options?.resolution || []).filter((o) => o.x > 0);
+  if (list.length > 1) {
+    const standard = list.find((o) => o.key === options.current?.resolution);
+    select.replaceChildren(
+      el("option", { value: "", text: standard ? `Padrão da impressora (${dpiLabel(standard)})` : "Padrão da impressora" }),
+      ...[...list].sort((a, b) => b.x * b.y - a.x * a.y).map((o) => el("option", { value: o.key, text: dpiLabel(o) })),
+    );
+  } else {
+    select.replaceChildren(...RESOLUTIONS[PLATFORM].map(([value, text]) => el("option", { value, text })));
+  }
+  if ([...select.options].some((o) => o.value === String(wanted ?? ""))) select.value = String(wanted ?? "");
+  else if (/^\d+$/.test(String(wanted)) && select.options.length > 1) select.selectedIndex = 1;
+  else select.value = "";
+}
+
+/**
+ * A resolução escolhida: { x, y, key } (key: a do driver, se foi uma dele),
+ * ou null na padrão da impressora (aí quem decide é a qualidade escolhida).
+ */
+function chosenResolution(values) {
+  const hd = String(values.hd ?? "");
+  if (/^\d+$/.test(hd)) return { x: Number(hd), y: Number(hd), key: "" };
+  const pick = hd && (driver?.resolution || []).find((o) => o.key === hd);
+  return pick?.x ? { x: pick.x, y: pick.y || pick.x, key: pick.key } : null;
+}
+
 // ---- Opções ----
 
 function setMode(mode) {
@@ -246,8 +311,9 @@ function onInput(event) {
   if (name === "bookletSides") suggestDuplex();
   if (name === "grayscale") $(".print-sheet", dialog).classList.toggle("gray", form.elements.grayscale.checked);
   if (name === "pureBlack") $(".print-sheet", dialog).classList.toggle("pure", form.elements.pureBlack.checked);
+  if (name === "printer") loadDriverOptions();
   // Impressora, cópias, frente e verso e a qualidade não mudam as folhas.
-  if (["printer", "copies", "collate", "duplex", "grayscale", "hd", "pureBlack"].includes(name)) return;
+  if (["printer", "copies", "collate", "duplex", "grayscale", "hd", "pureBlack", "mediaType", "outputQuality"].includes(name)) return;
   refreshControls();
   scheduleUpdate();
 }
@@ -447,8 +513,10 @@ async function printSheets(s) {
   const landscape = first.width > first.height;
   const { hd, pureBlack, grayscale } = s.values;
   if (PLATFORM === "web") return printInBrowser(plan, bytes, { grayscale, pureBlack, dpi: hd ? highDpi() : rasterDpi(plan.sheets.length) });
-  // Preto puro: as folhas vão como imagem só de preto e branco, na resolução escolhida.
-  if (pureBlack) bytes = await blackAndWhite(bytes, hd ? highDpi() : 300);
+  // Preto puro: as folhas vão como imagem só de preto e branco, na resolução
+  // escolhida (até 600 DPI, para caber na memória; a de uma térmica é 203 ou 300).
+  const resolution = chosenResolution(s.values);
+  if (pureBlack) bytes = await blackAndWhite(bytes, resolution ? Math.min(600, Math.max(200, resolution.x, resolution.y)) : hd ? highDpi() : 300);
   if (PLATFORM === "desktop") return printOnDesktop(s, plan, bytes, landscape);
   return platform.printPdf(bytes, s.tab.name, { paper: s.values.layout.paper, landscape });
 }
@@ -500,6 +568,7 @@ const FAILURES = {
 
 async function printOnDesktop(s, plan, bytes, landscape) {
   const { values } = s;
+  const resolution = chosenResolution(values);
   const paper = PAPERS[values.layout.paper];
   const microns = (pt) => Math.round((pt / 72) * 25400);
   const result = await platform.printDirect({
@@ -511,8 +580,10 @@ async function printOnDesktop(s, plan, bytes, landscape) {
     duplexMode: values.duplex,
     color: !values.grayscale && !values.pureBlack,
     landscape,
-    // Alta definição: pede à impressora a resolução de 600 DPI.
-    dpi: values.hd ? 600 : null,
+    // A resolução escolhida, pedida à impressora.
+    dpi: resolution ? { horizontal: resolution.x, vertical: resolution.y } : null,
+    // Tipo de papel, qualidade e resolução do driver (Windows), só nesta impressão.
+    ticket: { media: values.mediaType || "", quality: values.outputQuality || "", resolution: resolution?.key || "" },
     pageSize: paper.named || { width: microns(paper.width), height: microns(paper.height) },
   });
   if (!result?.ok) {
@@ -522,7 +593,9 @@ async function printOnDesktop(s, plan, bytes, landscape) {
   }
   const printer = values.printer ? form.elements.printer.selectedOptions[0]?.textContent || values.printer : "a impressora padrão";
   const pages = plan.sheets.length * values.copies;
-  toast(`Enviado para ${printer}: ${pages} ${pages === 1 ? "página" : "páginas"}.`);
+  const sent = `Enviado para ${printer}: ${pages} ${pages === 1 ? "página" : "páginas"}.`;
+  if (result.warning) toast(`${sent} O tipo de papel e a qualidade escolhidos não foram aplicados (${result.warning}); saiu com os da impressora.`, { duration: 9000 });
+  else toast(sent);
 }
 
 // ---- Navegador: as folhas viram imagens na página e o navegador imprime ----
