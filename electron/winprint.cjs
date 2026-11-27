@@ -275,4 +275,5 @@ async function init(dir) {
   if (pending) await restore({ printer: String(pending.printer || "") }).catch(() => {});
 }
 
-module.exports = { supported, capabilities, apply, restore, init };
+// _run: para o teste (scripts/impressora-windows.cjs).
+module.exports = { supported, capabilities, apply, restore, init, _run: run };

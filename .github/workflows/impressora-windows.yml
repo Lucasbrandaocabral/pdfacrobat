@@ -1,0 +1,27 @@
+name: Testar a impressora no Windows
+
+# As preferências da impressora (tipo de papel, qualidade e resolução) que o
+# app grava só durante a impressão (electron/winprint.cjs), com a impressora
+# "Microsoft Print to PDF" do Windows (scripts/impressora-windows.cjs).
+on:
+  workflow_dispatch:
+  push:
+    branches: ["**"]
+    paths:
+      - "electron/winprint.cjs"
+      - "scripts/impressora-windows.cjs"
+      - ".github/workflows/impressora-windows.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  preferencias:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/impressora-windows.cjs
