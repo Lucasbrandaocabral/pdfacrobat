@@ -158,6 +158,8 @@ try {
     $feature = $delta.CreateElement('psf', 'Feature', $PSF)
     $feature.SetAttribute('name', 'psk:' + $FEATURES[$k])
     $node = $delta.ImportNode($opt.node, $true)
+    # No tíquete, a opção só pode ter o nome (a lista do driver traz outros, como constrained).
+    foreach ($a in @($node.Attributes)) { if ($a.Name -ne 'name' -and $a.Prefix -ne 'xmlns' -and $a.Name -ne 'xmlns') { [void]$node.Attributes.Remove($a) } }
     foreach ($c in @($node.ChildNodes)) { if ($c.LocalName -eq 'Property') { [void]$node.RemoveChild($c) } }
     [void]$feature.AppendChild($node)
     [void]$root.AppendChild($feature)
